@@ -1,0 +1,1831 @@
+import { useEffect, useMemo, useState } from 'react';
+import Swal from 'sweetalert2';
+import {
+  Boxes,
+  Search,
+  RefreshCw,
+  Plus,
+  ArrowDownCircle,
+  ArrowUpCircle,
+  AlertTriangle,
+  History,
+  X,
+  Save,
+  Package,
+  Warehouse,
+} from 'lucide-react';
+import api from '../../api/axios';
+import { useAuth } from '../../context/AuthContext';
+import {
+  esSuperAdmin,
+  obtenerSucursalInicial,
+  filtrarSucursalesPorRol,
+} from '../../utils/sucursalPermisos';
+
+const formAsignarInicial = {
+  id_sucursal: '',
+  id_producto: '',
+  stock_inicial: '',
+  stock_minimo: '',
+  ubicacion: '',
+  lote: '',
+  fecha_caducidad: '',
+  precio_compra: '',
+  observaciones: '',
+};
+
+const formMovimientoInicial = {
+  id_sucursal: '',
+  id_producto: '',
+  id_lote: '',
+  tipo_movimiento: 'ENTRADA',
+  cantidad: '',
+  stock_minimo: '',
+  ubicacion: '',
+  lote: '',
+  fecha_caducidad: '',
+  precio_compra: '',
+  referencia: '',
+  observaciones: '',
+};
+
+const tiposMovimiento = [
+  { value: 'ENTRADA', label: 'Entrada', tipo: 'entrada' },
+  { value: 'SALIDA', label: 'Salida', tipo: 'salida' },
+  { value: 'AJUSTE_POSITIVO', label: 'Ajuste positivo', tipo: 'entrada' },
+  { value: 'AJUSTE_NEGATIVO', label: 'Ajuste negativo', tipo: 'salida' },
+  { value: 'MERMA', label: 'Merma', tipo: 'salida' },
+  { value: 'CADUCIDAD', label: 'Caducidad', tipo: 'salida' },
+  { value: 'DEVOLUCION_CLIENTE', label: 'Devolución cliente', tipo: 'entrada' },
+  { value: 'DEVOLUCION_PROVEEDOR', label: 'Devolución proveedor', tipo: 'salida' },
+];
+
+const movimientosEntrada = tiposMovimiento
+  .filter((tipo) => tipo.tipo === 'entrada')
+  .map((tipo) => tipo.value);
+
+const movimientosSalida = tiposMovimiento
+  .filter((tipo) => tipo.tipo === 'salida')
+  .map((tipo) => tipo.value);
+
+export default function Inventario() {
+  const { usuario } = useAuth();
+
+  const puedeCambiarSucursal = esSuperAdmin(usuario);
+
+  const [sucursales, setSucursales] = useState([]);
+  const [productos, setProductos] = useState([]);
+  const [inventario, setInventario] = useState([]);
+  const [movimientos, setMovimientos] = useState([]);
+  const [bajoStock, setBajoStock] = useState([]);
+
+  const [lotes, setLotes] = useState([]);
+  const [caducidadProxima, setCaducidadProxima] = useState([]);
+  const [productoLotes, setProductoLotes] = useState(null);
+
+  const [idSucursal, setIdSucursal] = useState('');
+  const [buscar, setBuscar] = useState('');
+
+  const [cargando, setCargando] = useState(false);
+  const [cargandoMovimientos, setCargandoMovimientos] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+
+  const [modalAsignar, setModalAsignar] = useState(false);
+  const [modalMovimiento, setModalMovimiento] = useState(false);
+  const [modalMovimientos, setModalMovimientos] = useState(false);
+  const [modalBajoStock, setModalBajoStock] = useState(false);
+
+  const [modalLotes, setModalLotes] = useState(false);
+  const [modalCaducidad, setModalCaducidad] = useState(false);
+
+  const [formAsignar, setFormAsignar] = useState(formAsignarInicial);
+  const [formMovimiento, setFormMovimiento] = useState(formMovimientoInicial);
+
+  const sucursalActual = useMemo(() => {
+    return sucursales.find((s) => Number(s.id_sucursal) === Number(idSucursal));
+  }, [sucursales, idSucursal]);
+
+  const productosSinInventario = useMemo(() => {
+    const productosInventario = new Set(
+      inventario.map((item) => Number(item.id_producto))
+    );
+
+    return productos.filter(
+      (producto) =>
+        producto.activo &&
+        !productosInventario.has(Number(producto.id_producto))
+    );
+  }, [productos, inventario]);
+
+  const resumen = useMemo(() => {
+    const totalProductos = inventario.length;
+
+    const productosBajoStock = inventario.filter(
+      (item) => item.bajo_stock
+    ).length;
+
+    const valorInventario = inventario.reduce((acc, item) => {
+      return acc + Number(item.stock_actual || 0) * Number(item.precio_compra || 0);
+    }, 0);
+
+    const valorVentaEstimado = inventario.reduce((acc, item) => {
+      return acc + Number(item.stock_actual || 0) * Number(item.precio_venta || 0);
+    }, 0);
+
+    return {
+      totalProductos,
+      productosBajoStock,
+      valorInventario,
+      valorVentaEstimado,
+    };
+  }, [inventario]);
+
+  const cargarSucursales = async () => {
+    try {
+      const { data } = await api.get('/sucursales');
+
+      if (data.ok) {
+        const activas = (data.sucursales || []).filter((s) => s.activo);
+        const sucursalesPermitidas = filtrarSucursalesPorRol(usuario, activas);
+
+        setSucursales(sucursalesPermitidas);
+
+        if (!idSucursal) {
+          setIdSucursal(obtenerSucursalInicial(usuario, sucursalesPermitidas));
+        }
+      }
+    } catch (error) {
+      console.error(error);
+
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'No se pudieron cargar las sucursales.',
+      });
+    }
+  };
+
+  const cargarProductos = async () => {
+    try {
+      const { data } = await api.get('/productos?activos=true');
+
+      if (data.ok) {
+        setProductos(data.productos || []);
+      }
+    } catch (error) {
+      console.error(error);
+
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'No se pudieron cargar los productos.',
+      });
+    }
+  };
+
+  const cargarInventario = async () => {
+    if (!idSucursal) return;
+
+    try {
+      setCargando(true);
+
+      const params = new URLSearchParams();
+      params.append('sucursal', idSucursal);
+
+      if (buscar.trim()) {
+        params.append('buscar', buscar.trim());
+      }
+
+      const { data } = await api.get(`/inventario?${params.toString()}`);
+
+      if (data.ok) {
+        setInventario(data.inventario || []);
+      }
+    } catch (error) {
+      console.error(error);
+
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text:
+          error.response?.data?.mensaje ||
+          'No se pudo cargar el inventario.',
+      });
+    } finally {
+      setCargando(false);
+    }
+  };
+
+  const cargarBajoStock = async () => {
+    if (!idSucursal) return;
+
+    try {
+      const { data } = await api.get(
+        `/inventario/bajo-stock?sucursal=${idSucursal}`
+      );
+
+      if (data.ok) {
+        setBajoStock(data.productos_bajo_stock || []);
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const cargarMovimientos = async () => {
+    if (!idSucursal) return;
+
+    try {
+      setCargandoMovimientos(true);
+
+      const { data } = await api.get(
+        `/inventario/movimientos?sucursal=${idSucursal}`
+      );
+
+      if (data.ok) {
+        setMovimientos(data.movimientos || []);
+      }
+    } catch (error) {
+      console.error(error);
+
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'No se pudieron cargar los movimientos de inventario.',
+      });
+    } finally {
+      setCargandoMovimientos(false);
+    }
+  };
+
+  const cargarLotesProducto = async (idProducto = null) => {
+    if (!idSucursal) return [];
+
+    try {
+      const params = new URLSearchParams();
+      params.append('sucursal', idSucursal);
+
+      if (idProducto) {
+        params.append('producto', idProducto);
+      }
+
+      const { data } = await api.get(`/inventario/lotes?${params.toString()}`);
+
+      if (data.ok) {
+        setLotes(data.lotes || []);
+        return data.lotes || [];
+      }
+
+      return [];
+    } catch (error) {
+      console.error(error);
+
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'No se pudieron cargar los lotes.',
+      });
+
+      return [];
+    }
+  };
+
+  const cargarCaducidadProxima = async () => {
+    if (!idSucursal) return;
+
+    try {
+      const { data } = await api.get(
+        `/inventario/caducidad-proxima?sucursal=${idSucursal}&dias=90`
+      );
+
+      if (data.ok) {
+        setCaducidadProxima(data.productos_caducidad || []);
+      }
+    } catch (error) {
+      console.error(error);
+
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'No se pudo cargar la caducidad próxima.',
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (usuario) {
+      cargarSucursales();
+      cargarProductos();
+    }
+  }, [usuario]);
+
+  useEffect(() => {
+    if (idSucursal) {
+      cargarInventario();
+      cargarBajoStock();
+    }
+  }, [idSucursal]);
+
+  useEffect(() => {
+    const cargarLotesParaSalida = async () => {
+      if (
+        modalMovimiento &&
+        formMovimiento.id_producto &&
+        movimientosSalida.includes(formMovimiento.tipo_movimiento)
+      ) {
+        await cargarLotesProducto(formMovimiento.id_producto);
+      }
+    };
+
+    cargarLotesParaSalida();
+  }, [modalMovimiento, formMovimiento.id_producto, formMovimiento.tipo_movimiento]);
+
+  const abrirAsignar = () => {
+    if (!idSucursal) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Selecciona una sucursal',
+        text: 'Primero selecciona la sucursal donde asignarás inventario.',
+      });
+      return;
+    }
+
+    setFormAsignar({
+      ...formAsignarInicial,
+      id_sucursal: idSucursal,
+    });
+
+    setModalAsignar(true);
+  };
+
+  const abrirMovimiento = async (item = null, tipo = 'ENTRADA') => {
+    if (!idSucursal) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Selecciona una sucursal',
+        text: 'Primero selecciona una sucursal.',
+      });
+      return;
+    }
+
+    const nuevoForm = {
+      ...formMovimientoInicial,
+      id_sucursal: idSucursal,
+      id_producto: item?.id_producto || '',
+      tipo_movimiento: tipo,
+      stock_minimo: item?.stock_minimo || '',
+      ubicacion: item?.ubicacion || '',
+    };
+
+    setFormMovimiento(nuevoForm);
+
+    if (item?.id_producto && movimientosSalida.includes(tipo)) {
+      await cargarLotesProducto(item.id_producto);
+    } else {
+      setLotes([]);
+    }
+
+    setModalMovimiento(true);
+  };
+
+  const abrirLotes = async (item) => {
+    setProductoLotes(item);
+    await cargarLotesProducto(item.id_producto);
+    setModalLotes(true);
+  };
+
+  const abrirCaducidad = async () => {
+    await cargarCaducidadProxima();
+    setModalCaducidad(true);
+  };
+
+  const abrirBajoStock = async () => {
+    await cargarBajoStock();
+    setModalBajoStock(true);
+  };
+
+  const abrirMovimientos = async () => {
+    await cargarMovimientos();
+    setModalMovimientos(true);
+  };
+
+  const cerrarModalAsignar = () => {
+    setModalAsignar(false);
+    setFormAsignar(formAsignarInicial);
+  };
+
+  const cerrarModalMovimiento = () => {
+    setModalMovimiento(false);
+    setFormMovimiento(formMovimientoInicial);
+    setLotes([]);
+  };
+
+  const handleAsignarChange = (e) => {
+    const { name, value } = e.target;
+
+    setFormAsignar({
+      ...formAsignar,
+      [name]: value,
+    });
+  };
+
+  const handleMovimientoChange = (e) => {
+    const { name, value } = e.target;
+
+    setFormMovimiento((prev) => ({
+      ...prev,
+      [name]: value,
+      ...(name === 'id_producto' ? { id_lote: '' } : {}),
+    }));
+  };
+
+  const asignarInventario = async (e) => {
+    e.preventDefault();
+
+    if (!formAsignar.id_producto) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Producto obligatorio',
+        text: 'Selecciona un producto.',
+      });
+      return;
+    }
+
+    if (
+      formAsignar.stock_inicial === '' ||
+      Number(formAsignar.stock_inicial) < 0
+    ) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Stock inválido',
+        text: 'El stock inicial no puede ser negativo.',
+      });
+      return;
+    }
+
+    try {
+      setGuardando(true);
+
+      const payload = {
+        id_sucursal: Number(formAsignar.id_sucursal),
+        id_producto: Number(formAsignar.id_producto),
+        stock_inicial: Number(formAsignar.stock_inicial || 0),
+        stock_minimo: Number(formAsignar.stock_minimo || 0),
+        ubicacion: formAsignar.ubicacion || null,
+        lote: formAsignar.lote || null,
+        fecha_caducidad: formAsignar.fecha_caducidad || null,
+        precio_compra: formAsignar.precio_compra
+          ? Number(formAsignar.precio_compra)
+          : 0,
+        observaciones: formAsignar.observaciones || null,
+      };
+
+      const { data } = await api.post('/inventario/asignar', payload);
+
+      if (data.ok) {
+        Swal.fire({
+          icon: 'success',
+          title: 'Inventario asignado',
+          text: data.mensaje,
+          timer: 1400,
+          showConfirmButton: false,
+        });
+
+        cerrarModalAsignar();
+        cargarInventario();
+        cargarBajoStock();
+      }
+    } catch (error) {
+      console.error(error);
+
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text:
+          error.response?.data?.mensaje ||
+          'No se pudo asignar el inventario.',
+      });
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  const guardarMovimiento = async (e) => {
+    e.preventDefault();
+
+    if (!formMovimiento.id_producto) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Producto obligatorio',
+        text: 'Selecciona un producto.',
+      });
+      return;
+    }
+
+    if (
+      formMovimiento.cantidad === '' ||
+      Number(formMovimiento.cantidad) <= 0
+    ) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Cantidad inválida',
+        text: 'La cantidad debe ser mayor a cero.',
+      });
+      return;
+    }
+
+    try {
+      setGuardando(true);
+
+      const payload = {
+        id_sucursal: Number(formMovimiento.id_sucursal),
+        id_producto: Number(formMovimiento.id_producto),
+        id_lote: formMovimiento.id_lote
+          ? Number(formMovimiento.id_lote)
+          : undefined,
+        tipo_movimiento: formMovimiento.tipo_movimiento,
+        cantidad: Number(formMovimiento.cantidad),
+        stock_minimo:
+          formMovimiento.stock_minimo === ''
+            ? undefined
+            : Number(formMovimiento.stock_minimo),
+        ubicacion: formMovimiento.ubicacion || undefined,
+        lote: formMovimiento.lote || null,
+        fecha_caducidad: formMovimiento.fecha_caducidad || null,
+        precio_compra: formMovimiento.precio_compra
+          ? Number(formMovimiento.precio_compra)
+          : undefined,
+        referencia: formMovimiento.referencia || null,
+        observaciones: formMovimiento.observaciones || null,
+      };
+
+      const { data } = await api.post('/inventario/ajustar', payload);
+
+      if (data.ok) {
+        Swal.fire({
+          icon: 'success',
+          title: 'Inventario actualizado',
+          text: data.mensaje,
+          timer: 1400,
+          showConfirmButton: false,
+        });
+
+        cerrarModalMovimiento();
+        cargarInventario();
+        cargarBajoStock();
+      }
+    } catch (error) {
+      console.error(error);
+
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text:
+          error.response?.data?.mensaje ||
+          'No se pudo actualizar el inventario.',
+      });
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  const darBajaCaducidad = async (item) => {
+    const confirmacion = await Swal.fire({
+      icon: 'warning',
+      title: '¿Dar de baja este lote?',
+      html: `
+        <div style="text-align:left">
+          <p><b>Producto:</b> ${item.producto}</p>
+          <p><b>Lote:</b> ${item.lote}</p>
+          <p><b>Caducidad:</b> ${
+            item.fecha_caducidad
+              ? new Date(item.fecha_caducidad).toLocaleDateString('es-MX')
+              : 'Sin fecha'
+          }</p>
+          <p><b>Stock a dar de baja:</b> ${formatoNumero(item.stock_actual)}</p>
+        </div>
+      `,
+      input: 'textarea',
+      inputLabel: 'Observaciones',
+      inputPlaceholder: 'Ej. Producto caducado retirado del anaquel',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, dar de baja',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#dc2626',
+    });
+
+    if (!confirmacion.isConfirmed) return;
+
+    try {
+      const { data } = await api.post('/inventario/baja-caducidad', {
+        id_sucursal: Number(item.id_sucursal),
+        id_producto: Number(item.id_producto),
+        id_lote: Number(item.id_lote),
+        observaciones:
+          confirmacion.value ||
+          'Baja por caducidad desde módulo de inventario',
+      });
+
+      if (data.ok) {
+        Swal.fire({
+          icon: 'success',
+          title: 'Lote dado de baja',
+          text: data.mensaje,
+          timer: 1500,
+          showConfirmButton: false,
+        });
+
+        await cargarInventario();
+        await cargarBajoStock();
+        await cargarCaducidadProxima();
+      }
+    } catch (error) {
+      console.error(error);
+
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text:
+          error.response?.data?.mensaje ||
+          'No se pudo dar de baja el lote.',
+      });
+    }
+  };
+
+  const formatoMoneda = (valor) => {
+    return Number(valor || 0).toLocaleString('es-MX', {
+      style: 'currency',
+      currency: 'MXN',
+    });
+  };
+
+  const formatoNumero = (valor) => {
+    return Number(valor || 0).toLocaleString('es-MX', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    });
+  };
+
+  const formatoFecha = (fecha) => {
+    if (!fecha) return '—';
+
+    return new Date(fecha).toLocaleString('es-MX', {
+      dateStyle: 'short',
+      timeStyle: 'short',
+    });
+  };
+
+  const getProductoNombre = (idProducto) => {
+    const producto = productos.find(
+      (p) => Number(p.id_producto) === Number(idProducto)
+    );
+
+    return producto?.nombre || '';
+  };
+
+  return (
+    <div className="space-y-6">
+      <section className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+              <Boxes size={25} />
+            </div>
+
+            <div>
+              <h1 className="text-2xl font-bold text-slate-800">
+                Inventario
+              </h1>
+              <p className="text-slate-500">
+                Control de stock por sucursal, entradas, salidas y ajustes.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-3">
+            <button
+              onClick={abrirBajoStock}
+              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-amber-100 hover:bg-amber-200 text-amber-800 font-bold transition"
+            >
+              <AlertTriangle size={19} />
+              Bajo stock
+            </button>
+
+            <button
+              onClick={abrirCaducidad}
+              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-red-100 hover:bg-red-200 text-red-800 font-bold transition"
+            >
+              <AlertTriangle size={19} />
+              Caducidad
+            </button>
+
+            <button
+              onClick={abrirMovimientos}
+              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-blue-100 hover:bg-blue-200 text-blue-800 font-bold transition"
+            >
+              <History size={19} />
+              Movimientos
+            </button>
+
+            <button
+              onClick={abrirAsignar}
+              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold shadow-lg shadow-emerald-900/20 transition"
+            >
+              <Plus size={20} />
+              Asignar stock
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-6 grid md:grid-cols-4 gap-4">
+          <div>
+            <label className="block text-sm font-bold text-slate-700 mb-2">
+              Sucursal
+            </label>
+
+            {puedeCambiarSucursal ? (
+              <select
+                value={idSucursal}
+                onChange={(e) => setIdSucursal(e.target.value)}
+                className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              >
+                <option value="">Selecciona sucursal</option>
+                {sucursales.map((sucursal) => (
+                  <option
+                    key={sucursal.id_sucursal}
+                    value={sucursal.id_sucursal}
+                  >
+                    {sucursal.nombre}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 text-slate-700 font-semibold">
+                {sucursalActual?.nombre ||
+                  sucursales[0]?.nombre ||
+                  'Sucursal asignada'}
+              </div>
+            )}
+          </div>
+
+          <div className="md:col-span-3">
+            <label className="block text-sm font-bold text-slate-700 mb-2">
+              Buscar
+            </label>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1">
+                <Search
+                  className="absolute left-4 top-3.5 text-slate-400"
+                  size={20}
+                />
+                <input
+                  value={buscar}
+                  onChange={(e) => setBuscar(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') cargarInventario();
+                  }}
+                  className="w-full pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  placeholder="Buscar por producto, código, laboratorio o presentación..."
+                />
+              </div>
+
+              <button
+                onClick={cargarInventario}
+                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition"
+              >
+                <RefreshCw size={19} className={cargando ? 'animate-spin' : ''} />
+                Buscar
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid sm:grid-cols-2 xl:grid-cols-4 gap-5">
+        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+            <Package size={24} />
+          </div>
+          <p className="text-sm text-slate-500 mt-5">
+            Productos en inventario
+          </p>
+          <h3 className="text-3xl font-bold text-slate-800 mt-1">
+            {resumen.totalProductos}
+          </h3>
+          <p className="text-sm text-slate-400 mt-2">
+            {sucursalActual?.nombre || 'Sin sucursal'}
+          </p>
+        </div>
+
+        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+          <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center">
+            <AlertTriangle size={24} />
+          </div>
+          <p className="text-sm text-slate-500 mt-5">Bajo stock</p>
+          <h3 className="text-3xl font-bold text-slate-800 mt-1">
+            {resumen.productosBajoStock}
+          </h3>
+          <p className="text-sm text-slate-400 mt-2">
+            Requieren revisión
+          </p>
+        </div>
+
+        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+          <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-700 flex items-center justify-center">
+            <Warehouse size={24} />
+          </div>
+          <p className="text-sm text-slate-500 mt-5">Valor de compra</p>
+          <h3 className="text-3xl font-bold text-slate-800 mt-1">
+            {formatoMoneda(resumen.valorInventario)}
+          </h3>
+          <p className="text-sm text-slate-400 mt-2">
+            Estimado por stock actual
+          </p>
+        </div>
+
+        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+          <div className="w-12 h-12 rounded-2xl bg-violet-50 text-violet-700 flex items-center justify-center">
+            <Boxes size={24} />
+          </div>
+          <p className="text-sm text-slate-500 mt-5">Valor de venta</p>
+          <h3 className="text-3xl font-bold text-slate-800 mt-1">
+            {formatoMoneda(resumen.valorVentaEstimado)}
+          </h3>
+          <p className="text-sm text-slate-400 mt-2">
+            Estimado por precio venta
+          </p>
+        </div>
+      </section>
+
+      <section className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[1250px]">
+            <thead className="bg-slate-50 border-b border-slate-100">
+              <tr>
+                <th className="px-5 py-4 text-left text-xs font-bold text-slate-500 uppercase">
+                  Producto
+                </th>
+                <th className="px-5 py-4 text-left text-xs font-bold text-slate-500 uppercase">
+                  Código
+                </th>
+                <th className="px-5 py-4 text-left text-xs font-bold text-slate-500 uppercase">
+                  Categoría
+                </th>
+                <th className="px-5 py-4 text-left text-xs font-bold text-slate-500 uppercase">
+                  Ubicación
+                </th>
+                <th className="px-5 py-4 text-left text-xs font-bold text-slate-500 uppercase">
+                  Próxima caducidad
+                </th>
+                <th className="px-5 py-4 text-right text-xs font-bold text-slate-500 uppercase">
+                  Stock
+                </th>
+                <th className="px-5 py-4 text-right text-xs font-bold text-slate-500 uppercase">
+                  Mínimo
+                </th>
+                <th className="px-5 py-4 text-right text-xs font-bold text-slate-500 uppercase">
+                  Precio venta
+                </th>
+                <th className="px-5 py-4 text-center text-xs font-bold text-slate-500 uppercase">
+                  Estado
+                </th>
+                <th className="px-5 py-4 text-center text-xs font-bold text-slate-500 uppercase">
+                  Acciones
+                </th>
+              </tr>
+            </thead>
+
+            <tbody className="divide-y divide-slate-100">
+              {cargando ? (
+                <tr>
+                  <td colSpan="10" className="px-5 py-10 text-center text-slate-500">
+                    Cargando inventario...
+                  </td>
+                </tr>
+              ) : inventario.length === 0 ? (
+                <tr>
+                  <td colSpan="10" className="px-5 py-10 text-center text-slate-500">
+                    No hay productos con inventario asignado en esta sucursal.
+                  </td>
+                </tr>
+              ) : (
+                inventario.map((item) => (
+                  <tr
+                    key={item.id_inventario}
+                    className={
+                      item.bajo_stock
+                        ? 'bg-amber-50/50 hover:bg-amber-50'
+                        : 'hover:bg-slate-50'
+                    }
+                  >
+                    <td className="px-5 py-4">
+                      <p className="font-bold text-slate-800">
+                        {item.producto}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-1">
+                        {item.laboratorio || 'Sin laboratorio'} ·{' '}
+                        {item.presentacion || 'Sin presentación'}
+                      </p>
+                    </td>
+
+                    <td className="px-5 py-4 text-sm text-slate-600">
+                      {item.codigo_barras || '—'}
+                    </td>
+
+                    <td className="px-5 py-4 text-sm text-slate-600">
+                      {item.categoria || 'Sin categoría'}
+                    </td>
+
+                    <td className="px-5 py-4 text-sm text-slate-600">
+                      {item.ubicacion || '—'}
+                    </td>
+
+                    <td className="px-5 py-4 text-sm">
+                      {item.proxima_caducidad ? (
+                        <span
+                          className={`font-bold ${
+                            item.caducidad_proxima
+                              ? 'text-red-700'
+                              : 'text-slate-700'
+                          }`}
+                        >
+                          {new Date(item.proxima_caducidad).toLocaleDateString(
+                            'es-MX'
+                          )}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
+                    </td>
+
+                    <td className="px-5 py-4 text-right">
+                      <span className="text-lg font-bold text-slate-800">
+                        {formatoNumero(item.stock_actual)}
+                      </span>
+                    </td>
+
+                    <td className="px-5 py-4 text-right font-semibold text-slate-600">
+                      {formatoNumero(item.stock_minimo)}
+                    </td>
+
+                    <td className="px-5 py-4 text-right font-bold text-emerald-700">
+                      {formatoMoneda(item.precio_venta)}
+                    </td>
+
+                    <td className="px-5 py-4 text-center">
+                      {item.bajo_stock ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-bold px-3 py-1 rounded-full bg-amber-100 text-amber-800">
+                          <AlertTriangle size={13} />
+                          Bajo stock
+                        </span>
+                      ) : (
+                        <span className="text-xs font-bold px-3 py-1 rounded-full bg-emerald-100 text-emerald-700">
+                          Correcto
+                        </span>
+                      )}
+                    </td>
+
+                    <td className="px-5 py-4">
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => abrirMovimiento(item, 'ENTRADA')}
+                          className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 flex items-center justify-center transition"
+                          title="Entrada"
+                        >
+                          <ArrowDownCircle size={18} />
+                        </button>
+
+                        <button
+                          onClick={() => abrirMovimiento(item, 'SALIDA')}
+                          className="w-9 h-9 rounded-xl bg-red-50 text-red-700 hover:bg-red-100 flex items-center justify-center transition"
+                          title="Salida"
+                        >
+                          <ArrowUpCircle size={18} />
+                        </button>
+
+                        <button
+                          onClick={() => abrirMovimiento(item, 'AJUSTE_POSITIVO')}
+                          className="w-9 h-9 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 flex items-center justify-center transition"
+                          title="Ajuste"
+                        >
+                          <RefreshCw size={17} />
+                        </button>
+
+                        <button
+                          onClick={() => abrirLotes(item)}
+                          className="w-9 h-9 rounded-xl bg-violet-50 text-violet-700 hover:bg-violet-100 flex items-center justify-center transition"
+                          title="Ver lotes"
+                        >
+                          <Package size={17} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {modalAsignar && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-slate-800">
+                  Asignar stock inicial
+                </h2>
+                <p className="text-sm text-slate-500">
+                  Sucursal: {sucursalActual?.nombre || 'Sin sucursal'}
+                </p>
+              </div>
+
+              <button
+                onClick={cerrarModalAsignar}
+                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={asignarInventario} className="p-6">
+              <div className="grid md:grid-cols-2 gap-5">
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Producto *
+                  </label>
+                  <select
+                    name="id_producto"
+                    value={formAsignar.id_producto}
+                    onChange={handleAsignarChange}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="">Selecciona producto</option>
+                    {productosSinInventario.map((producto) => (
+                      <option key={producto.id_producto} value={producto.id_producto}>
+                        {producto.nombre}{' '}
+                        {producto.codigo_barras ? `· ${producto.codigo_barras}` : ''}
+                      </option>
+                    ))}
+                  </select>
+
+                  {productosSinInventario.length === 0 && (
+                    <p className="text-sm text-amber-700 mt-2">
+                      Todos los productos activos ya tienen inventario asignado en
+                      esta sucursal.
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Stock inicial *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    name="stock_inicial"
+                    value={formAsignar.stock_inicial}
+                    onChange={handleAsignarChange}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="0"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Stock mínimo
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    name="stock_minimo"
+                    value={formAsignar.stock_minimo}
+                    onChange={handleAsignarChange}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="0"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Ubicación
+                  </label>
+                  <input
+                    name="ubicacion"
+                    value={formAsignar.ubicacion}
+                    onChange={handleAsignarChange}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="Anaquel A1"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Lote
+                  </label>
+                  <input
+                    name="lote"
+                    value={formAsignar.lote}
+                    onChange={handleAsignarChange}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="Ej. PAR-2026-A"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Fecha de caducidad
+                  </label>
+                  <input
+                    type="date"
+                    name="fecha_caducidad"
+                    value={formAsignar.fecha_caducidad}
+                    onChange={handleAsignarChange}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Precio compra lote
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    name="precio_compra"
+                    value={formAsignar.precio_compra}
+                    onChange={handleAsignarChange}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="0.00"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Observaciones
+                  </label>
+                  <input
+                    name="observaciones"
+                    value={formAsignar.observaciones}
+                    onChange={handleAsignarChange}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="Carga inicial"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-6 flex justify-end gap-3 border-t border-slate-100 pt-5">
+                <button
+                  type="button"
+                  onClick={cerrarModalAsignar}
+                  className="px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition"
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={guardando}
+                  className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold transition disabled:opacity-60"
+                >
+                  <Save size={19} />
+                  {guardando ? 'Guardando...' : 'Guardar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {modalMovimiento && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-slate-800">
+                  Movimiento de inventario
+                </h2>
+                <p className="text-sm text-slate-500">
+                  {getProductoNombre(formMovimiento.id_producto) ||
+                    'Selecciona un producto'}
+                </p>
+              </div>
+
+              <button
+                onClick={cerrarModalMovimiento}
+                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={guardarMovimiento} className="p-6">
+              <div className="grid md:grid-cols-2 gap-5">
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Producto *
+                  </label>
+                  <select
+                    name="id_producto"
+                    value={formMovimiento.id_producto}
+                    onChange={handleMovimientoChange}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="">Selecciona producto</option>
+                    {inventario.map((item) => (
+                      <option key={item.id_producto} value={item.id_producto}>
+                        {item.producto} · Stock: {formatoNumero(item.stock_actual)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Tipo de movimiento *
+                  </label>
+                  <select
+                    name="tipo_movimiento"
+                    value={formMovimiento.tipo_movimiento}
+                    onChange={handleMovimientoChange}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    {tiposMovimiento.map((tipo) => (
+                      <option key={tipo.value} value={tipo.value}>
+                        {tipo.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {movimientosSalida.includes(formMovimiento.tipo_movimiento) && (
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 mb-2">
+                      Lote de salida
+                    </label>
+                    <select
+                      name="id_lote"
+                      value={formMovimiento.id_lote}
+                      onChange={handleMovimientoChange}
+                      className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    >
+                      <option value="">Automático FEFO</option>
+                      {lotes
+                        .filter(
+                          (l) =>
+                            Number(l.id_producto) ===
+                            Number(formMovimiento.id_producto)
+                        )
+                        .filter((l) => Number(l.stock_actual) > 0)
+                        .map((loteItem) => (
+                          <option key={loteItem.id_lote} value={loteItem.id_lote}>
+                            {loteItem.lote} · Stock:{' '}
+                            {formatoNumero(loteItem.stock_actual)} · Cad:{' '}
+                            {loteItem.fecha_caducidad
+                              ? new Date(loteItem.fecha_caducidad).toLocaleDateString(
+                                  'es-MX'
+                                )
+                              : 'Sin fecha'}
+                          </option>
+                        ))}
+                    </select>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Si no seleccionas lote, el sistema descontará primero el lote
+                      que caduca antes.
+                    </p>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Cantidad *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    name="cantidad"
+                    value={formMovimiento.cantidad}
+                    onChange={handleMovimientoChange}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="0"
+                  />
+                </div>
+
+                {movimientosEntrada.includes(formMovimiento.tipo_movimiento) && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-bold text-slate-700 mb-2">
+                        Lote
+                      </label>
+                      <input
+                        name="lote"
+                        value={formMovimiento.lote}
+                        onChange={handleMovimientoChange}
+                        className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        placeholder="Ej. PAR-2026-B"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-bold text-slate-700 mb-2">
+                        Fecha de caducidad
+                      </label>
+                      <input
+                        type="date"
+                        name="fecha_caducidad"
+                        value={formMovimiento.fecha_caducidad}
+                        onChange={handleMovimientoChange}
+                        className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-bold text-slate-700 mb-2">
+                        Precio compra lote
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        name="precio_compra"
+                        value={formMovimiento.precio_compra}
+                        onChange={handleMovimientoChange}
+                        className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        placeholder="0.00"
+                      />
+                    </div>
+                  </>
+                )}
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Stock mínimo
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    name="stock_minimo"
+                    value={formMovimiento.stock_minimo}
+                    onChange={handleMovimientoChange}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="Opcional"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Ubicación
+                  </label>
+                  <input
+                    name="ubicacion"
+                    value={formMovimiento.ubicacion}
+                    onChange={handleMovimientoChange}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="Anaquel A1"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Referencia
+                  </label>
+                  <input
+                    name="referencia"
+                    value={formMovimiento.referencia}
+                    onChange={handleMovimientoChange}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="COMPRA-001, AJUSTE-001..."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Observaciones
+                  </label>
+                  <input
+                    name="observaciones"
+                    value={formMovimiento.observaciones}
+                    onChange={handleMovimientoChange}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="Motivo del movimiento"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-6 flex justify-end gap-3 border-t border-slate-100 pt-5">
+                <button
+                  type="button"
+                  onClick={cerrarModalMovimiento}
+                  className="px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition"
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={guardando}
+                  className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold transition disabled:opacity-60"
+                >
+                  <Save size={19} />
+                  {guardando ? 'Guardando...' : 'Guardar movimiento'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {modalLotes && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-slate-800">
+                  Lotes del producto
+                </h2>
+                <p className="text-sm text-slate-500">
+                  {productoLotes?.producto || 'Producto'}
+                </p>
+              </div>
+
+              <button
+                onClick={() => setModalLotes(false)}
+                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto max-h-[75vh]">
+              {lotes.length === 0 ? (
+                <div className="text-center py-10 text-slate-500">
+                  No hay lotes registrados para este producto.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[900px]">
+                    <thead className="bg-slate-50 border-b border-slate-100">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+                          Lote
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+                          Caducidad
+                        </th>
+                        <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">
+                          Stock
+                        </th>
+                        <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">
+                          Precio compra
+                        </th>
+                        <th className="px-4 py-3 text-center text-xs font-bold text-slate-500 uppercase">
+                          Estado
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+                          Entrada
+                        </th>
+                      </tr>
+                    </thead>
+
+                    <tbody className="divide-y divide-slate-100">
+                      {lotes.map((loteItem) => (
+                        <tr key={loteItem.id_lote}>
+                          <td className="px-4 py-3 font-bold text-slate-800">
+                            {loteItem.lote}
+                          </td>
+
+                          <td className="px-4 py-3 text-slate-600">
+                            {loteItem.fecha_caducidad
+                              ? new Date(loteItem.fecha_caducidad).toLocaleDateString(
+                                  'es-MX'
+                                )
+                              : 'Sin fecha'}
+                          </td>
+
+                          <td className="px-4 py-3 text-right font-bold text-slate-800">
+                            {formatoNumero(loteItem.stock_actual)}
+                          </td>
+
+                          <td className="px-4 py-3 text-right text-slate-600">
+                            {formatoMoneda(loteItem.precio_compra)}
+                          </td>
+
+                          <td className="px-4 py-3 text-center">
+                            {loteItem.caducado ? (
+                              <span className="text-xs font-bold px-3 py-1 rounded-full bg-red-100 text-red-700">
+                                Caducado
+                              </span>
+                            ) : loteItem.caducidad_proxima ? (
+                              <span className="text-xs font-bold px-3 py-1 rounded-full bg-amber-100 text-amber-700">
+                                Por caducar
+                              </span>
+                            ) : (
+                              <span className="text-xs font-bold px-3 py-1 rounded-full bg-emerald-100 text-emerald-700">
+                                Vigente
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="px-4 py-3 text-slate-600">
+                            {formatoFecha(loteItem.fecha_entrada)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalCaducidad && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-slate-800">
+                  Caducidad próxima
+                </h2>
+                <p className="text-sm text-slate-500">
+                  Productos caducados o próximos a caducar en 90 días.
+                </p>
+              </div>
+
+              <button
+                onClick={() => setModalCaducidad(false)}
+                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto max-h-[75vh]">
+              {caducidadProxima.length === 0 ? (
+                <div className="text-center py-10 text-slate-500">
+                  No hay productos próximos a caducar.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[900px]">
+                    <thead className="bg-slate-50 border-b border-slate-100">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+                          Producto
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+                          Lote
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+                          Caducidad
+                        </th>
+                        <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">
+                          Stock
+                        </th>
+                        <th className="px-4 py-3 text-center text-xs font-bold text-slate-500 uppercase">
+                          Estado
+                        </th>
+                        <th className="px-4 py-3 text-center text-xs font-bold text-slate-500 uppercase">
+                          Acción
+                        </th>
+                      </tr>
+                    </thead>
+
+                    <tbody className="divide-y divide-slate-100">
+                      {caducidadProxima.map((item) => (
+                        <tr key={item.id_lote}>
+                          <td className="px-4 py-3 font-bold text-slate-800">
+                            {item.producto}
+                          </td>
+
+                          <td className="px-4 py-3 text-slate-600">
+                            {item.lote}
+                          </td>
+
+                          <td className="px-4 py-3 font-bold text-red-700">
+                            {item.fecha_caducidad
+                              ? new Date(item.fecha_caducidad).toLocaleDateString(
+                                  'es-MX'
+                                )
+                              : 'Sin fecha'}
+                          </td>
+
+                          <td className="px-4 py-3 text-right font-bold text-slate-800">
+                            {formatoNumero(item.stock_actual)}
+                          </td>
+
+                          <td className="px-4 py-3 text-center">
+                            {item.estado_caducidad === 'CADUCADO' ? (
+                              <span className="text-xs font-bold px-3 py-1 rounded-full bg-red-100 text-red-700">
+                                Caducado
+                              </span>
+                            ) : (
+                              <span className="text-xs font-bold px-3 py-1 rounded-full bg-amber-100 text-amber-700">
+                                Por caducar
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="px-4 py-3 text-center">
+                            <button
+                              onClick={() => darBajaCaducidad(item)}
+                              className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-red-50 text-red-700 hover:bg-red-100 font-bold transition"
+                            >
+                              Dar de baja
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalBajoStock && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-slate-800">
+                  Productos con bajo stock
+                </h2>
+                <p className="text-sm text-slate-500">
+                  Productos cuyo stock actual es menor o igual al mínimo.
+                </p>
+              </div>
+
+              <button
+                onClick={() => setModalBajoStock(false)}
+                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto max-h-[75vh]">
+              {bajoStock.length === 0 ? (
+                <div className="text-center py-10 text-slate-500">
+                  No hay productos con bajo stock.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[800px]">
+                    <thead className="bg-slate-50 border-b border-slate-100">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+                          Producto
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+                          Categoría
+                        </th>
+                        <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">
+                          Stock
+                        </th>
+                        <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">
+                          Mínimo
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+                          Ubicación
+                        </th>
+                      </tr>
+                    </thead>
+
+                    <tbody className="divide-y divide-slate-100">
+                      {bajoStock.map((item) => (
+                        <tr key={item.id_inventario}>
+                          <td className="px-4 py-3 font-bold text-slate-800">
+                            {item.producto}
+                          </td>
+                          <td className="px-4 py-3 text-slate-600">
+                            {item.categoria || '—'}
+                          </td>
+                          <td className="px-4 py-3 text-right font-bold text-red-700">
+                            {formatoNumero(item.stock_actual)}
+                          </td>
+                          <td className="px-4 py-3 text-right text-slate-600">
+                            {formatoNumero(item.stock_minimo)}
+                          </td>
+                          <td className="px-4 py-3 text-slate-600">
+                            {item.ubicacion || '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalMovimientos && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-slate-800">
+                  Movimientos de inventario
+                </h2>
+                <p className="text-sm text-slate-500">
+                  Historial de entradas, salidas, ajustes y ventas.
+                </p>
+              </div>
+
+              <button
+                onClick={() => setModalMovimientos(false)}
+                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto max-h-[75vh]">
+              {cargandoMovimientos ? (
+                <div className="text-center py-10 text-slate-500">
+                  Cargando movimientos...
+                </div>
+              ) : movimientos.length === 0 ? (
+                <div className="text-center py-10 text-slate-500">
+                  No hay movimientos registrados.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[1000px]">
+                    <thead className="bg-slate-50 border-b border-slate-100">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+                          Fecha
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+                          Producto
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+                          Tipo
+                        </th>
+                        <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">
+                          Cantidad
+                        </th>
+                        <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">
+                          Anterior
+                        </th>
+                        <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">
+                          Nuevo
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+                          Referencia
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+                          Usuario
+                        </th>
+                      </tr>
+                    </thead>
+
+                    <tbody className="divide-y divide-slate-100">
+                      {movimientos.map((mov) => (
+                        <tr key={mov.id_movimiento}>
+                          <td className="px-4 py-3 text-sm text-slate-600">
+                            {formatoFecha(mov.fecha_movimiento)}
+                          </td>
+                          <td className="px-4 py-3 font-semibold text-slate-800">
+                            {mov.producto}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-xs font-bold px-3 py-1 rounded-full bg-slate-100 text-slate-700">
+                              {mov.tipo_movimiento}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right font-bold text-slate-800">
+                            {formatoNumero(mov.cantidad)}
+                          </td>
+                          <td className="px-4 py-3 text-right text-slate-600">
+                            {formatoNumero(mov.stock_anterior)}
+                          </td>
+                          <td className="px-4 py-3 text-right text-emerald-700 font-bold">
+                            {formatoNumero(mov.stock_nuevo)}
+                          </td>
+                          <td className="px-4 py-3 text-slate-600">
+                            {mov.referencia || '—'}
+                          </td>
+                          <td className="px-4 py-3 text-slate-600">
+                            {mov.usuario || '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
