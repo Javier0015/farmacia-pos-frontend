@@ -20,6 +20,7 @@ import {
   Printer,
   BadgePercent,
 } from 'lucide-react';
+import BarcodeScannerModal from '../../components/BarcodeScannerModal';
 import api from '../../api/axios';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -43,6 +44,9 @@ export default function POS() {
 
   const [buscar, setBuscar] = useState('');
   const [carrito, setCarrito] = useState([]);
+
+  const [scannerAbierto, setScannerAbierto] = useState(false);
+  const [scannerTipo, setScannerTipo] = useState(null);
 
   const [codigoTarjeta, setCodigoTarjeta] = useState('');
   const [tarjetaPuntos, setTarjetaPuntos] = useState(null);
@@ -294,7 +298,7 @@ export default function POS() {
     }
   };
 
-  const cargarInventario = async () => {
+  const cargarInventario = async (busquedaManual = null) => {
     if (!idSucursal) return;
 
     try {
@@ -303,8 +307,10 @@ export default function POS() {
       const params = new URLSearchParams();
       params.append('sucursal', idSucursal);
 
-      if (buscar.trim()) {
-        params.append('buscar', buscar.trim());
+      const terminoBusqueda = String(busquedaManual ?? buscar ?? '').trim();
+
+      if (terminoBusqueda) {
+        params.append('buscar', terminoBusqueda);
       }
 
       const { data } = await api.get(`/inventario?${params.toString()}`);
@@ -329,8 +335,8 @@ export default function POS() {
     }
   };
 
-  const buscarTarjetaPuntos = async () => {
-    const codigo = codigoTarjeta.trim();
+  const buscarTarjetaPuntos = async (codigoManual = null) => {
+    const codigo = String(codigoManual || codigoTarjeta || '').trim();
 
     if (!codigo) {
       Swal.fire({
@@ -1295,6 +1301,55 @@ export default function POS() {
     ventana.document.close();
   };
 
+
+  const abrirEscanerProducto = () => {
+    setScannerTipo('PRODUCTO');
+    setScannerAbierto(true);
+  };
+
+  const abrirEscanerTarjeta = () => {
+    setScannerTipo('TARJETA');
+    setScannerAbierto(true);
+  };
+
+  const cerrarEscaner = () => {
+    setScannerAbierto(false);
+    setScannerTipo(null);
+  };
+
+  const alDetectarCodigo = (codigoDetectado) => {
+    const codigo = String(codigoDetectado || '').trim();
+
+    if (!codigo) {
+      cerrarEscaner();
+      return;
+    }
+
+    if (scannerTipo === 'PRODUCTO') {
+      setBuscar(codigo);
+      cerrarEscaner();
+
+      setTimeout(() => {
+        cargarInventario(codigo);
+      }, 150);
+
+      return;
+    }
+
+    if (scannerTipo === 'TARJETA') {
+      setCodigoTarjeta(codigo);
+      cerrarEscaner();
+
+      setTimeout(() => {
+        buscarTarjetaPuntos(codigo);
+      }, 150);
+
+      return;
+    }
+
+    cerrarEscaner();
+  };
+
   return (
     <div className="w-full max-w-full overflow-hidden space-y-5 sm:space-y-6 pb-8">
       <section className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-sm border border-slate-100 overflow-hidden">
@@ -1421,7 +1476,17 @@ export default function POS() {
               </div>
 
               <button
-                onClick={cargarInventario}
+                type="button"
+                onClick={abrirEscanerProducto}
+                className="w-full md:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition"
+              >
+                <Barcode size={19} />
+                Escanear
+              </button>
+
+              <button
+                type="button"
+                onClick={() => cargarInventario()}
                 className="w-full md:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold transition"
               >
                 <Search size={19} />
@@ -1712,7 +1777,17 @@ export default function POS() {
                 </div>
 
                 <button
-                  onClick={buscarTarjetaPuntos}
+                  type="button"
+                  onClick={abrirEscanerTarjeta}
+                  className="w-full sm:w-auto px-4 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition flex items-center justify-center"
+                  title="Escanear tarjeta"
+                >
+                  <Barcode size={19} />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => buscarTarjetaPuntos()}
                   disabled={buscandoTarjeta}
                   className="w-full sm:w-auto px-4 py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold transition disabled:opacity-60 flex items-center justify-center"
                 >
@@ -2250,6 +2325,22 @@ export default function POS() {
           </div>
         </section>
       )}
+
+      <BarcodeScannerModal
+        abierto={scannerAbierto}
+        titulo={
+          scannerTipo === 'TARJETA'
+            ? 'Escanear tarjeta de puntos'
+            : 'Escanear producto'
+        }
+        descripcion={
+          scannerTipo === 'TARJETA'
+            ? 'Apunta la cámara al código de la tarjeta del cliente.'
+            : 'Apunta la cámara al código de barras del producto.'
+        }
+        onClose={cerrarEscaner}
+        onDetected={alDetectarCodigo}
+      />
     </div>
   );
 }
