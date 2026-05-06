@@ -17,8 +17,8 @@ export default defineConfig({
       ],
 
       manifest: {
-        name: 'Farmacia Shaddai POS',
-        short_name: 'Shaddai POS',
+        name: 'Farmacia Shaddai',
+        short_name: 'Farmacias Shaddai',
         description: 'Sistema punto de venta para Farmacia Shaddai',
         theme_color: '#0284c7',
         background_color: '#f1f5f9',
