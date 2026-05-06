@@ -301,7 +301,7 @@ export default function Productos() {
         <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5">
           <div>
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+              <div className="w-12 h-12 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center">
                 <Package size={24} />
               </div>
 
@@ -318,7 +318,7 @@ export default function Productos() {
 
           <button
             onClick={abrirNuevo}
-            className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold shadow-lg shadow-emerald-900/20 transition"
+            className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold shadow-lg shadow-sky-900/20 transition"
           >
             <Plus size={20} />
             Nuevo producto
@@ -337,7 +337,7 @@ export default function Productos() {
               onKeyDown={(e) => {
                 if (e.key === 'Enter') cargarProductos();
               }}
-              className="w-full pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="w-full pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
               placeholder="Buscar por nombre, código, laboratorio o presentación..."
             />
           </div>
@@ -446,7 +446,7 @@ export default function Productos() {
                       {formatoMoneda(producto.precio_compra)}
                     </td>
 
-                    <td className="px-5 py-4 text-right font-bold text-emerald-700">
+                    <td className="px-5 py-4 text-right font-bold text-sky-700">
                       {formatoMoneda(producto.precio_venta)}
                     </td>
 
@@ -461,7 +461,7 @@ export default function Productos() {
                       <span
                         className={`text-xs font-bold px-3 py-1 rounded-full ${
                           producto.activo
-                            ? 'bg-emerald-100 text-emerald-700'
+                            ? 'bg-sky-100 text-sky-700'
                             : 'bg-slate-200 text-slate-600'
                         }`}
                       >
@@ -528,7 +528,7 @@ export default function Productos() {
                     name="nombre"
                     value={form.nombre}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
                     placeholder="Ej. Paracetamol 500mg"
                   />
                 </div>
@@ -541,7 +541,7 @@ export default function Productos() {
                     name="codigo_barras"
                     value={form.codigo_barras}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
                     placeholder="750..."
                   />
                 </div>
@@ -554,7 +554,7 @@ export default function Productos() {
                     name="id_categoria"
                     value={form.id_categoria}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
                   >
                     <option value="">Sin categoría</option>
                     {categorias.map((cat) => (
@@ -573,7 +573,7 @@ export default function Productos() {
                     name="laboratorio"
                     value={form.laboratorio}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
                     placeholder="Ej. Genérico"
                   />
                 </div>
@@ -586,7 +586,7 @@ export default function Productos() {
                     name="presentacion"
                     value={form.presentacion}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
                     placeholder="Caja 10 tabletas"
                   />
                 </div>
@@ -601,7 +601,7 @@ export default function Productos() {
                     name="precio_compra"
                     value={form.precio_compra}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
                     placeholder="0.00"
                   />
                 </div>
@@ -616,7 +616,7 @@ export default function Productos() {
                     name="precio_venta"
                     value={form.precio_venta}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
                     placeholder="0.00"
                   />
                 </div>
@@ -636,7 +636,7 @@ export default function Productos() {
                       name="puntos_por_unidad"
                       value={form.puntos_por_unidad}
                       onChange={handleChange}
-                      className="w-full pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
                       placeholder="Ej. 1, 3, 5"
                     />
                   </div>
@@ -654,7 +654,7 @@ export default function Productos() {
                     value={form.descripcion}
                     onChange={handleChange}
                     rows="3"
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 resize-none"
                     placeholder="Descripción opcional del producto"
                   />
                 </div>
@@ -666,7 +666,7 @@ export default function Productos() {
                       name="requiere_receta"
                       checked={form.requiere_receta}
                       onChange={handleChange}
-                      className="w-5 h-5 accent-emerald-700"
+                      className="w-5 h-5 accent-sky-700"
                     />
                     <span className="font-semibold text-slate-700">
                       Requiere receta
@@ -693,7 +693,7 @@ export default function Productos() {
                         name="activo"
                         checked={form.activo}
                         onChange={handleChange}
-                        className="w-5 h-5 accent-emerald-700"
+                        className="w-5 h-5 accent-sky-700"
                       />
                       <span className="font-semibold text-slate-700">
                         Activo
@@ -715,7 +715,7 @@ export default function Productos() {
                 <button
                   type="submit"
                   disabled={guardando}
-                  className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold transition disabled:opacity-60"
+                  className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold transition disabled:opacity-60"
                 >
                   <Save size={19} />
                   {guardando ? 'Guardando...' : 'Guardar'}

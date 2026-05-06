@@ -48,6 +48,15 @@ export default function Cajas() {
     };
   }, [cajas]);
 
+  const formatoFecha = (fecha) => {
+    if (!fecha) return '—';
+
+    return new Date(fecha).toLocaleString('es-MX', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    });
+  };
+
   const cargarSucursales = async () => {
     try {
       const { data } = await api.get('/sucursales');
@@ -268,29 +277,20 @@ export default function Cajas() {
     }
   };
 
-  const formatoFecha = (fecha) => {
-    if (!fecha) return '—';
-
-    return new Date(fecha).toLocaleString('es-MX', {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    });
-  };
-
   return (
-    <div className="space-y-6">
-      <section className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+    <div className="w-full max-w-full overflow-hidden space-y-5 sm:space-y-6 pb-8">
+      <section className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-sm border border-slate-100 overflow-hidden">
         <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+          <div className="flex items-start sm:items-center gap-3 min-w-0">
+            <div className="w-12 h-12 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
               <Wallet size={25} />
             </div>
 
-            <div>
-              <h1 className="text-2xl font-bold text-slate-800">
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-800 break-words">
                 Administración de cajas
               </h1>
-              <p className="text-slate-500">
+              <p className="text-sm sm:text-base text-slate-500 leading-relaxed">
                 Crea y administra las cajas disponibles por sucursal.
               </p>
             </div>
@@ -298,23 +298,27 @@ export default function Cajas() {
 
           <button
             onClick={abrirNuevo}
-            className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold shadow-lg shadow-emerald-900/20 transition"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold shadow-lg shadow-sky-900/20 transition"
           >
             <Plus size={20} />
             Nueva caja
           </button>
         </div>
 
-        <div className="mt-6 grid md:grid-cols-3 gap-4">
-          <div>
+        <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="min-w-0">
             <label className="block text-sm font-bold text-slate-700 mb-2">
               Sucursal
             </label>
             <select
               value={idSucursalFiltro}
               onChange={(e) => setIdSucursalFiltro(e.target.value)}
-              className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
             >
+              {sucursales.length === 0 && (
+                <option value="">Sin sucursales activas</option>
+              )}
+
               {sucursales.map((sucursal) => (
                 <option key={sucursal.id_sucursal} value={sucursal.id_sucursal}>
                   {sucursal.nombre}
@@ -323,12 +327,12 @@ export default function Cajas() {
             </select>
           </div>
 
-          <div className="md:col-span-2">
+          <div className="md:col-span-2 min-w-0">
             <label className="block text-sm font-bold text-slate-700 mb-2">
               Buscar
             </label>
             <div className="flex flex-col sm:flex-row gap-3">
-              <div className="relative flex-1">
+              <div className="relative flex-1 min-w-0">
                 <Search
                   className="absolute left-4 top-3.5 text-slate-400"
                   size={20}
@@ -339,14 +343,14 @@ export default function Cajas() {
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') cargarCajas();
                   }}
-                  className="w-full pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="w-full min-w-0 pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
                   placeholder="Buscar por caja, descripción o sucursal..."
                 />
               </div>
 
               <button
                 onClick={cargarCajas}
-                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition"
               >
                 <RefreshCw size={19} className={cargando ? 'animate-spin' : ''} />
                 Buscar
@@ -356,9 +360,9 @@ export default function Cajas() {
         </div>
       </section>
 
-      <section className="grid sm:grid-cols-3 gap-5">
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+      <section className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-5">
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0">
+          <div className="w-12 h-12 rounded-2xl bg-sky-50 text-sky-700 flex items-center justify-center">
             <Wallet size={24} />
           </div>
           <p className="text-sm text-slate-500 mt-5">Total cajas</p>
@@ -367,17 +371,17 @@ export default function Cajas() {
           </h3>
         </div>
 
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0">
           <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-700 flex items-center justify-center">
             <CheckCircle size={24} />
           </div>
           <p className="text-sm text-slate-500 mt-5">Activas</p>
-          <h3 className="text-3xl font-bold text-emerald-700 mt-1">
+          <h3 className="text-3xl font-bold text-sky-700 mt-1">
             {resumen.activas}
           </h3>
         </div>
 
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0">
           <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center">
             <X size={24} />
           </div>
@@ -388,8 +392,107 @@ export default function Cajas() {
         </div>
       </section>
 
-      <section className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-        <div className="overflow-x-auto">
+      <section className="bg-white rounded-2xl sm:rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+        <div className="px-4 sm:px-6 py-5 border-b border-slate-100">
+          <h2 className="text-lg sm:text-xl font-bold text-slate-800">
+            Listado de cajas
+          </h2>
+          <p className="text-sm text-slate-500">
+            Consulta, edita o desactiva cajas por sucursal.
+          </p>
+        </div>
+
+        <div className="md:hidden p-4 space-y-3">
+          {cargando ? (
+            <div className="rounded-2xl bg-slate-50 p-6 text-center text-slate-500 font-semibold">
+              Cargando cajas...
+            </div>
+          ) : cajas.length === 0 ? (
+            <div className="rounded-2xl bg-slate-50 p-6 text-center text-slate-500 font-semibold">
+              No hay cajas registradas para esta sucursal.
+            </div>
+          ) : (
+            cajas.map((caja) => (
+              <article
+                key={caja.id_caja}
+                className="rounded-2xl border border-slate-100 p-4 shadow-sm bg-white"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-bold text-slate-800 break-words">
+                      {caja.nombre}
+                    </p>
+                    <p className="text-xs text-slate-400 mt-1">
+                      ID #{caja.id_caja}
+                    </p>
+                  </div>
+
+                  <span
+                    className={`text-xs font-bold px-3 py-1 rounded-full shrink-0 ${
+                      caja.activo
+                        ? 'bg-sky-100 text-sky-700'
+                        : 'bg-slate-200 text-slate-600'
+                    }`}
+                  >
+                    {caja.activo ? 'Activa' : 'Inactiva'}
+                  </span>
+                </div>
+
+                <div className="mt-4 rounded-2xl bg-slate-50 p-3">
+                  <p className="text-xs text-slate-500 flex items-center gap-1">
+                    <Store size={15} />
+                    Sucursal
+                  </p>
+                  <p className="font-bold text-slate-800 mt-1 break-words">
+                    {caja.sucursal}
+                  </p>
+                  <p className="text-xs text-slate-500 break-words">
+                    {caja.clave_sucursal || 'Sin clave'}
+                  </p>
+                </div>
+
+                <div className="mt-3 grid grid-cols-1 gap-3 text-sm">
+                  <div className="rounded-2xl bg-slate-50 p-3">
+                    <p className="text-xs text-slate-500">Descripción</p>
+                    <p className="font-semibold text-slate-700 break-words">
+                      {caja.descripcion || '—'}
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl bg-slate-50 p-3">
+                    <p className="text-xs text-slate-500">Fecha alta</p>
+                    <p className="font-semibold text-slate-700">
+                      {formatoFecha(caja.fecha_creacion)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => abrirEditar(caja)}
+                    className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold transition"
+                    title="Editar"
+                  >
+                    <Pencil size={18} />
+                    Editar
+                  </button>
+
+                  <button
+                    onClick={() => desactivarCaja(caja)}
+                    disabled={!caja.activo}
+                    className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-red-50 text-red-700 hover:bg-red-100 font-bold transition disabled:opacity-40"
+                    title="Desactivar"
+                  >
+                    <Trash2 size={18} />
+                    Desactivar
+                  </button>
+                </div>
+              </article>
+            ))
+          )}
+        </div>
+
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full min-w-[1000px]">
             <thead className="bg-slate-50 border-b border-slate-100">
               <tr>
@@ -408,7 +511,7 @@ export default function Cajas() {
                 <th className="px-5 py-4 text-left text-xs font-bold text-slate-500 uppercase">
                   Fecha alta
                 </th>
-                <th className="px-5 py-4 text-center text-xs font-bold text-slate-500 uppercase">
+                <th className="px-5 py-4 text-center text-xs font-bold text-slate-500 uppercase sticky right-0 bg-slate-50 shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.45)] z-10">
                   Acciones
                 </th>
               </tr>
@@ -441,8 +544,8 @@ export default function Cajas() {
 
                     <td className="px-5 py-4">
                       <div className="flex items-start gap-2">
-                        <Store size={17} className="text-slate-400 mt-0.5" />
-                        <div>
+                        <Store size={17} className="text-slate-400 mt-0.5 shrink-0" />
+                        <div className="min-w-0">
                           <p className="font-semibold text-slate-800">
                             {caja.sucursal}
                           </p>
@@ -461,7 +564,7 @@ export default function Cajas() {
                       <span
                         className={`text-xs font-bold px-3 py-1 rounded-full ${
                           caja.activo
-                            ? 'bg-emerald-100 text-emerald-700'
+                            ? 'bg-sky-100 text-sky-700'
                             : 'bg-slate-200 text-slate-600'
                         }`}
                       >
@@ -473,7 +576,7 @@ export default function Cajas() {
                       {formatoFecha(caja.fecha_creacion)}
                     </td>
 
-                    <td className="px-5 py-4">
+                    <td className="px-5 py-4 sticky right-0 bg-white shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.45)]">
                       <div className="flex items-center justify-center gap-2">
                         <button
                           onClick={() => abrirEditar(caja)}
@@ -485,7 +588,8 @@ export default function Cajas() {
 
                         <button
                           onClick={() => desactivarCaja(caja)}
-                          className="w-9 h-9 rounded-xl bg-red-50 text-red-700 hover:bg-red-100 flex items-center justify-center transition"
+                          disabled={!caja.activo}
+                          className="w-9 h-9 rounded-xl bg-red-50 text-red-700 hover:bg-red-100 flex items-center justify-center transition disabled:opacity-40"
                           title="Desactivar"
                         >
                           <Trash2 size={17} />
@@ -501,11 +605,16 @@ export default function Cajas() {
       </section>
 
       {modalAbierto && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden">
-            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-bold text-slate-800">
+        <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center px-3 sm:px-4 py-4 sm:py-8 overflow-y-auto">
+          <div
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm"
+            onClick={cerrarModal}
+          />
+
+          <div className="relative bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden my-auto">
+            <div className="px-4 sm:px-6 py-5 border-b border-slate-100 flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h2 className="text-lg sm:text-xl font-bold text-slate-800">
                   {modoEdicion ? 'Editar caja' : 'Nueva caja'}
                 </h2>
                 <p className="text-sm text-slate-500">
@@ -515,79 +624,81 @@ export default function Cajas() {
 
               <button
                 onClick={cerrarModal}
-                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center"
+                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center shrink-0"
               >
                 <X size={20} />
               </button>
             </div>
 
-            <form onSubmit={guardarCaja} className="p-6 space-y-5">
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">
-                  Sucursal *
-                </label>
-                <select
-                  name="id_sucursal"
-                  value={form.id_sucursal}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                >
-                  <option value="">Selecciona sucursal</option>
-                  {sucursales.map((sucursal) => (
-                    <option key={sucursal.id_sucursal} value={sucursal.id_sucursal}>
-                      {sucursal.nombre}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">
-                  Nombre de caja *
-                </label>
-                <input
-                  name="nombre"
-                  value={form.nombre}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  placeholder="Ej. Caja 1, Caja Mostrador, Caja Turno A"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">
-                  Descripción
-                </label>
-                <textarea
-                  name="descripcion"
-                  value={form.descripcion}
-                  onChange={handleChange}
-                  rows="3"
-                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
-                  placeholder="Ej. Caja principal del mostrador"
-                />
-              </div>
-
-              {modoEdicion && (
-                <label className="flex items-center gap-3 rounded-2xl border border-slate-200 p-4 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    name="activo"
-                    checked={form.activo}
+            <form onSubmit={guardarCaja}>
+              <div className="p-4 sm:p-6 space-y-5 max-h-[70vh] overflow-y-auto">
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Sucursal *
+                  </label>
+                  <select
+                    name="id_sucursal"
+                    value={form.id_sucursal}
                     onChange={handleChange}
-                    className="w-5 h-5 accent-emerald-700"
-                  />
-                  <span className="font-semibold text-slate-700">
-                    Caja activa
-                  </span>
-                </label>
-              )}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
+                  >
+                    <option value="">Selecciona sucursal</option>
+                    {sucursales.map((sucursal) => (
+                      <option key={sucursal.id_sucursal} value={sucursal.id_sucursal}>
+                        {sucursal.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-              <div className="flex justify-end gap-3 border-t border-slate-100 pt-5">
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Nombre de caja *
+                  </label>
+                  <input
+                    name="nombre"
+                    value={form.nombre}
+                    onChange={handleChange}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    placeholder="Ej. Caja 1, Caja Mostrador, Caja Turno A"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Descripción
+                  </label>
+                  <textarea
+                    name="descripcion"
+                    value={form.descripcion}
+                    onChange={handleChange}
+                    rows="3"
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 resize-none"
+                    placeholder="Ej. Caja principal del mostrador"
+                  />
+                </div>
+
+                {modoEdicion && (
+                  <label className="flex items-center gap-3 rounded-2xl border border-slate-200 p-4 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      name="activo"
+                      checked={form.activo}
+                      onChange={handleChange}
+                      className="w-5 h-5 accent-sky-700 shrink-0"
+                    />
+                    <span className="font-semibold text-slate-700">
+                      Caja activa
+                    </span>
+                  </label>
+                )}
+              </div>
+
+              <div className="px-4 sm:px-6 py-5 flex flex-col sm:flex-row justify-end gap-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={cerrarModal}
-                  className="px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition"
+                  className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition"
                 >
                   Cancelar
                 </button>
@@ -595,14 +706,14 @@ export default function Cajas() {
                 <button
                   type="submit"
                   disabled={guardando}
-                  className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold transition disabled:opacity-60"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold transition disabled:opacity-60"
                 >
                   <Save size={19} />
                   {guardando
                     ? 'Guardando...'
                     : modoEdicion
-                    ? 'Actualizar caja'
-                    : 'Guardar caja'}
+                      ? 'Actualizar caja'
+                      : 'Guardar caja'}
                 </button>
               </div>
             </form>

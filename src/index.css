@@ -64,3 +64,32 @@ body {
   font-size: 14px;
   font-weight: bold;
 }
+
+/* Scroll bonito para sidebar */
+.sidebar-scroll {
+  scrollbar-width: thin;              /* Firefox */
+  scrollbar-color: rgba(148, 163, 184, 0.45) transparent;
+}
+
+/* Chrome, Edge, Brave */
+.sidebar-scroll::-webkit-scrollbar {
+  width: 7px;
+}
+
+.sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.35);
+  border-radius: 999px;
+}
+
+.sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(56, 189, 248, 0.7);
+}
+
+/* Opcional: evita que se vea tosco en esquinas */
+.sidebar-scroll::-webkit-scrollbar-corner {
+  background: transparent;
+}

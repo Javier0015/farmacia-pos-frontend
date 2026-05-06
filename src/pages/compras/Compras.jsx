@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Swal from 'sweetalert2';
 import {
   ClipboardList,
   Plus,
   Search,
-  RefreshCw,
   Eye,
   X,
   Save,
@@ -15,6 +14,9 @@ import {
   Wallet,
   FileText,
   Calendar,
+  Camera,
+  Upload,
+  Image as ImageIcon,
 } from 'lucide-react';
 import api from '../../api/axios';
 import { useAuth } from '../../context/AuthContext';
@@ -43,6 +45,7 @@ const compraInicial = {
   impuesto: '',
   descuento: '',
   observaciones: '',
+  total_manual: '',
 };
 
 export default function Compras() {
@@ -58,6 +61,16 @@ export default function Compras() {
 
   const [formCompra, setFormCompra] = useState(compraInicial);
   const [items, setItems] = useState([]);
+
+  const [ticketFile, setTicketFile] = useState(null);
+  const [ticketPreview, setTicketPreview] = useState('');
+
+  const [modalCamara, setModalCamara] = useState(false);
+  const [camaraActiva, setCamaraActiva] = useState(false);
+  const [errorCamara, setErrorCamara] = useState('');
+
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
 
   const [idSucursalFiltro, setIdSucursalFiltro] = useState('');
   const [idProveedorFiltro, setIdProveedorFiltro] = useState('');
@@ -98,7 +111,13 @@ export default function Compras() {
 
     const descuento = Number(formCompra.descuento || 0);
     const impuesto = Number(formCompra.impuesto || 0);
-    const total = Math.max(subtotal - descuento + impuesto, 0);
+    const totalManual = Number(formCompra.total_manual || 0);
+
+    const total =
+      items.length === 0
+        ? Math.max(totalManual - descuento + impuesto, 0)
+        : Math.max(subtotal - descuento + impuesto, 0);
+
     const montoPagado = Number(formCompra.monto_pagado || 0);
     const saldo = Math.max(total - montoPagado, 0);
 
@@ -110,7 +129,13 @@ export default function Compras() {
       montoPagado,
       saldo,
     };
-  }, [items, formCompra.descuento, formCompra.impuesto, formCompra.monto_pagado]);
+  }, [
+    items,
+    formCompra.descuento,
+    formCompra.impuesto,
+    formCompra.monto_pagado,
+    formCompra.total_manual,
+  ]);
 
   const resumenGeneral = useMemo(() => {
     const totalCompras = compras.length;
@@ -137,6 +162,35 @@ export default function Compras() {
       pendientes,
     };
   }, [compras]);
+
+  const formatoMoneda = (valor) => {
+    return Number(valor || 0).toLocaleString('es-MX', {
+      style: 'currency',
+      currency: 'MXN',
+    });
+  };
+
+  const formatoNumero = (valor) => {
+    return Number(valor || 0).toLocaleString('es-MX', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    });
+  };
+
+  const formatoFecha = (fecha) => {
+    if (!fecha) return '—';
+
+    return new Date(fecha).toLocaleString('es-MX', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    });
+  };
+
+  const claseEstadoCompra = (estado) => {
+    if (estado === 'PAGADA') return 'bg-sky-100 text-sky-700';
+    if (estado === 'PARCIAL') return 'bg-blue-100 text-blue-700';
+    return 'bg-amber-100 text-amber-700';
+  };
 
   const cargarSucursales = async () => {
     try {
@@ -292,6 +346,35 @@ export default function Compras() {
     }
   }, [idSucursalFiltro]);
 
+  useEffect(() => {
+    return () => {
+      detenerCamara();
+    };
+  }, []);
+
+  const detenerCamara = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+
+    setCamaraActiva(false);
+  };
+
+  const cerrarCamara = (cerrarModal = true) => {
+    detenerCamara();
+
+    if (cerrarModal) {
+      setModalCamara(false);
+    }
+
+    setErrorCamara('');
+  };
+
   const abrirNuevaCompra = async () => {
     const sucursalInicial = obtenerSucursalInicial(usuario, sucursales);
 
@@ -300,20 +383,26 @@ export default function Compras() {
       id_sucursal: sucursalInicial,
     });
 
-    setItems([
-      {
-        ...productoInicial,
-      },
-    ]);
+    setItems([]);
+    setTicketFile(null);
+    setTicketPreview('');
+    cerrarCamara(false);
 
     await cargarCajasYSesion(sucursalInicial);
     setModalCompra(true);
   };
 
   const cerrarModalCompra = () => {
+    cerrarCamara(false);
+
     setModalCompra(false);
     setFormCompra(compraInicial);
     setItems([]);
+    setTicketFile(null);
+    setTicketPreview('');
+    setModalCamara(false);
+    setCamaraActiva(false);
+    setErrorCamara('');
   };
 
   const handleCompraChange = async (e) => {
@@ -384,6 +473,133 @@ export default function Compras() {
     );
   };
 
+  const seleccionarTicket = (e) => {
+    const file = e.target.files?.[0];
+
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Archivo no válido',
+        text: 'Selecciona una imagen del ticket.',
+      });
+      return;
+    }
+
+    setTicketFile(file);
+    setTicketPreview(URL.createObjectURL(file));
+  };
+
+  const abrirCamara = async () => {
+    try {
+      setErrorCamara('');
+      setCamaraActiva(false);
+      setModalCamara(true);
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setErrorCamara('Este navegador no permite activar la cámara desde la página.');
+        return;
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'environment',
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
+      });
+
+      streamRef.current = stream;
+
+      setTimeout(async () => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+
+          try {
+            await videoRef.current.play();
+          } catch (error) {
+            console.error(error);
+          }
+        }
+
+        setCamaraActiva(true);
+      }, 100);
+    } catch (error) {
+      console.error(error);
+
+      let mensaje =
+        'No se pudo acceder a la cámara. Revisa permisos del navegador o que la cámara no esté siendo usada por otra aplicación.';
+
+      if (error.name === 'NotAllowedError') {
+        mensaje = 'Permiso de cámara denegado. Permite el acceso a la cámara en el navegador.';
+      }
+
+      if (error.name === 'NotFoundError') {
+        mensaje = 'No se encontró una cámara disponible en este equipo.';
+      }
+
+      if (error.name === 'NotReadableError') {
+        mensaje = 'La cámara está siendo usada por otra aplicación o no se puede iniciar.';
+      }
+
+      setErrorCamara(mensaje);
+      setCamaraActiva(false);
+    }
+  };
+
+  const capturarFoto = () => {
+    if (!videoRef.current) return;
+
+    const video = videoRef.current;
+
+    if (!video.videoWidth || !video.videoHeight) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Cámara no lista',
+        text: 'Espera un momento a que cargue la imagen de la cámara.',
+      });
+      return;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) {
+          Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'No se pudo capturar la foto.',
+          });
+          return;
+        }
+
+        const file = new File([blob], `ticket-proveedor-${Date.now()}.jpg`, {
+          type: 'image/jpeg',
+        });
+
+        setTicketFile(file);
+        setTicketPreview(URL.createObjectURL(file));
+
+        cerrarCamara(true);
+      },
+      'image/jpeg',
+      0.9
+    );
+  };
+
+  const quitarTicket = () => {
+    setTicketFile(null);
+    setTicketPreview('');
+  };
+
   const validarCompra = () => {
     if (!formCompra.id_sucursal) {
       Swal.fire({
@@ -403,16 +619,20 @@ export default function Compras() {
       return false;
     }
 
-    if (items.length === 0) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Sin productos',
-        text: 'Agrega al menos un producto a la compra.',
-      });
-      return false;
-    }
-
     for (const [index, item] of items.entries()) {
+      const filaVacia =
+        !item.id_producto &&
+        !item.cantidad &&
+        !item.precio_compra &&
+        !item.descuento &&
+        !item.lote &&
+        !item.fecha_caducidad &&
+        !item.observaciones;
+
+      if (filaVacia) {
+        continue;
+      }
+
       if (!item.id_producto) {
         Swal.fire({
           icon: 'warning',
@@ -474,6 +694,10 @@ export default function Compras() {
     try {
       setGuardando(true);
 
+      const productosValidos = items.filter((item) => {
+        return item.id_producto && Number(item.cantidad || 0) > 0;
+      });
+
       const payload = {
         id_sucursal: Number(formCompra.id_sucursal),
         id_proveedor: Number(formCompra.id_proveedor),
@@ -483,10 +707,11 @@ export default function Compras() {
         impuesto: Number(formCompra.impuesto || 0),
         descuento: Number(formCompra.descuento || 0),
         observaciones: formCompra.observaciones || null,
-        productos: items.map((item) => ({
+        total_manual: Number(formCompra.total_manual || 0),
+        productos: productosValidos.map((item) => ({
           id_producto: Number(item.id_producto),
           cantidad: Number(item.cantidad),
-          precio_compra: Number(item.precio_compra),
+          precio_compra: Number(item.precio_compra || 0),
           descuento: Number(item.descuento || 0),
           lote: item.lote || null,
           fecha_caducidad: item.fecha_caducidad || null,
@@ -494,7 +719,19 @@ export default function Compras() {
         })),
       };
 
-      const { data } = await api.post('/compras', payload);
+      const formData = new FormData();
+
+      formData.append('data', JSON.stringify(payload));
+
+      if (ticketFile) {
+        formData.append('ticket', ticketFile);
+      }
+
+      const { data } = await api.post('/compras', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
 
       if (data.ok) {
         Swal.fire({
@@ -553,59 +790,36 @@ export default function Compras() {
     setDetallePagos([]);
   };
 
-  const formatoMoneda = (valor) => {
-    return Number(valor || 0).toLocaleString('es-MX', {
-      style: 'currency',
-      currency: 'MXN',
-    });
-  };
-
-  const formatoNumero = (valor) => {
-    return Number(valor || 0).toLocaleString('es-MX', {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
-    });
-  };
-
-  const formatoFecha = (fecha) => {
-    if (!fecha) return '—';
-
-    return new Date(fecha).toLocaleString('es-MX', {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    });
-  };
-
   return (
-    <div className="space-y-6">
-      <section className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+    <div className="w-full max-w-full overflow-hidden space-y-5 sm:space-y-6 pb-8">
+      <section className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-sm border border-slate-100 overflow-hidden">
         <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+          <div className="flex items-start sm:items-center gap-3 min-w-0">
+            <div className="w-12 h-12 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
               <ClipboardList size={25} />
             </div>
 
-            <div>
-              <h1 className="text-2xl font-bold text-slate-800">
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-800 break-words">
                 Compras
               </h1>
-              <p className="text-slate-500">
-                Registra compras a proveedores y alimenta inventario por lote.
+              <p className="text-sm sm:text-base text-slate-500 leading-relaxed">
+                Registra compras a proveedores, evidencia del ticket y entradas opcionales a inventario.
               </p>
             </div>
           </div>
 
           <button
             onClick={abrirNuevaCompra}
-            className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold shadow-lg shadow-emerald-900/20 transition"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold shadow-lg shadow-sky-900/20 transition"
           >
             <Plus size={20} />
             Nueva compra
           </button>
         </div>
 
-        <div className="mt-6 grid md:grid-cols-5 gap-4">
-          <div>
+        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4">
+          <div className="min-w-0">
             <label className="block text-sm font-bold text-slate-700 mb-2">
               Sucursal
             </label>
@@ -614,7 +828,7 @@ export default function Compras() {
               <select
                 value={idSucursalFiltro}
                 onChange={(e) => setIdSucursalFiltro(e.target.value)}
-                className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
               >
                 {sucursales.map((sucursal) => (
                   <option
@@ -626,7 +840,7 @@ export default function Compras() {
                 ))}
               </select>
             ) : (
-              <div className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 text-slate-700 font-semibold">
+              <div className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 text-slate-700 font-semibold truncate">
                 {sucursalFiltroActual?.nombre ||
                   sucursales[0]?.nombre ||
                   'Sucursal asignada'}
@@ -634,14 +848,14 @@ export default function Compras() {
             )}
           </div>
 
-          <div>
+          <div className="min-w-0">
             <label className="block text-sm font-bold text-slate-700 mb-2">
               Proveedor
             </label>
             <select
               value={idProveedorFiltro}
               onChange={(e) => setIdProveedorFiltro(e.target.value)}
-              className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
             >
               <option value="">Todos</option>
               {proveedores.map((proveedor) => (
@@ -655,14 +869,14 @@ export default function Compras() {
             </select>
           </div>
 
-          <div>
+          <div className="min-w-0">
             <label className="block text-sm font-bold text-slate-700 mb-2">
               Estado
             </label>
             <select
               value={estadoFiltro}
               onChange={(e) => setEstadoFiltro(e.target.value)}
-              className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
             >
               <option value="">Todos</option>
               <option value="PENDIENTE">Pendiente</option>
@@ -671,7 +885,7 @@ export default function Compras() {
             </select>
           </div>
 
-          <div>
+          <div className="min-w-0">
             <label className="block text-sm font-bold text-slate-700 mb-2">
               Fecha inicio
             </label>
@@ -679,7 +893,19 @@ export default function Compras() {
               type="date"
               value={fechaInicio}
               onChange={(e) => setFechaInicio(e.target.value)}
-              className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+            />
+          </div>
+
+          <div className="min-w-0">
+            <label className="block text-sm font-bold text-slate-700 mb-2">
+              Fecha fin
+            </label>
+            <input
+              type="date"
+              value={fechaFin}
+              onChange={(e) => setFechaFin(e.target.value)}
+              className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
             />
           </div>
 
@@ -695,9 +921,9 @@ export default function Compras() {
         </div>
       </section>
 
-      <section className="grid sm:grid-cols-2 xl:grid-cols-5 gap-5">
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+      <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4 sm:gap-5">
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0">
+          <div className="w-12 h-12 rounded-2xl bg-sky-50 text-sky-700 flex items-center justify-center">
             <ClipboardList size={24} />
           </div>
           <p className="text-sm text-slate-500 mt-5">Compras</p>
@@ -706,37 +932,37 @@ export default function Compras() {
           </h3>
         </div>
 
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0">
           <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-700 flex items-center justify-center">
             <Wallet size={24} />
           </div>
           <p className="text-sm text-slate-500 mt-5">Total compras</p>
-          <h3 className="text-2xl font-bold text-slate-800 mt-1">
+          <h3 className="text-2xl font-bold text-slate-800 mt-1 break-words">
             {formatoMoneda(resumenGeneral.totalImporte)}
           </h3>
         </div>
 
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0">
+          <div className="w-12 h-12 rounded-2xl bg-sky-50 text-sky-700 flex items-center justify-center">
             <Wallet size={24} />
           </div>
           <p className="text-sm text-slate-500 mt-5">Pagado</p>
-          <h3 className="text-2xl font-bold text-emerald-700 mt-1">
+          <h3 className="text-2xl font-bold text-sky-700 mt-1 break-words">
             {formatoMoneda(resumenGeneral.totalPagado)}
           </h3>
         </div>
 
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0">
           <div className="w-12 h-12 rounded-2xl bg-red-50 text-red-700 flex items-center justify-center">
             <FileText size={24} />
           </div>
           <p className="text-sm text-slate-500 mt-5">Saldo</p>
-          <h3 className="text-2xl font-bold text-red-700 mt-1">
+          <h3 className="text-2xl font-bold text-red-700 mt-1 break-words">
             {formatoMoneda(resumenGeneral.totalSaldo)}
           </h3>
         </div>
 
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0">
           <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center">
             <Calendar size={24} />
           </div>
@@ -747,8 +973,122 @@ export default function Compras() {
         </div>
       </section>
 
-      <section className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-        <div className="overflow-x-auto">
+      <section className="bg-white rounded-2xl sm:rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+        <div className="px-4 sm:px-6 py-5 border-b border-slate-100">
+          <h2 className="text-lg sm:text-xl font-bold text-slate-800">
+            Listado de compras
+          </h2>
+          <p className="text-sm text-slate-500">
+            Consulta compras, pagos, ticket y productos registrados.
+          </p>
+        </div>
+
+        <div className="md:hidden p-4 space-y-3">
+          {cargando ? (
+            <div className="rounded-2xl bg-slate-50 p-6 text-center text-slate-500 font-semibold">
+              Cargando compras...
+            </div>
+          ) : compras.length === 0 ? (
+            <div className="rounded-2xl bg-slate-50 p-6 text-center text-slate-500 font-semibold">
+              No hay compras registradas.
+            </div>
+          ) : (
+            compras.map((compra) => (
+              <article
+                key={compra.id_compra}
+                className="rounded-2xl border border-slate-100 p-4 shadow-sm bg-white"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-bold text-slate-800 break-words">
+                      {compra.folio}
+                    </p>
+                    <p className="text-xs text-slate-400 mt-1">
+                      ID #{compra.id_compra}
+                    </p>
+                  </div>
+
+                  <span
+                    className={`text-xs font-bold px-3 py-1 rounded-full shrink-0 ${claseEstadoCompra(
+                      compra.estado
+                    )}`}
+                  >
+                    {compra.estado}
+                  </span>
+                </div>
+
+                <div className="mt-4 rounded-2xl bg-slate-50 p-3">
+                  <p className="text-xs text-slate-500">Fecha</p>
+                  <p className="font-semibold text-slate-700">
+                    {formatoFecha(compra.fecha_compra)}
+                  </p>
+                </div>
+
+                <div className="mt-3 grid grid-cols-1 gap-3">
+                  <div className="rounded-2xl bg-slate-50 p-3">
+                    <p className="text-xs text-slate-500 flex items-center gap-1">
+                      <Truck size={15} />
+                      Proveedor
+                    </p>
+                    <p className="font-bold text-slate-800 mt-1 break-words">
+                      {compra.proveedor}
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl bg-slate-50 p-3">
+                    <p className="text-xs text-slate-500 flex items-center gap-1">
+                      <Store size={15} />
+                      Sucursal
+                    </p>
+                    <p className="font-semibold text-slate-700 break-words">
+                      {compra.sucursal}
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl bg-slate-50 p-3">
+                    <p className="text-xs text-slate-500">Usuario</p>
+                    <p className="font-semibold text-slate-700 break-words">
+                      {compra.usuario || '—'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-xl bg-slate-50 p-3">
+                    <p className="text-xs text-slate-500">Total</p>
+                    <p className="font-bold text-slate-800">
+                      {formatoMoneda(compra.total)}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl bg-sky-50 p-3">
+                    <p className="text-xs text-sky-700">Pagado</p>
+                    <p className="font-bold text-sky-800">
+                      {formatoMoneda(compra.monto_pagado)}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl bg-red-50 p-3">
+                    <p className="text-xs text-red-700">Saldo</p>
+                    <p className="font-bold text-red-700">
+                      {formatoMoneda(compra.saldo)}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => verDetalleCompra(compra.id_compra)}
+                  className="mt-4 w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold transition"
+                >
+                  <Eye size={18} />
+                  Ver detalle
+                </button>
+              </article>
+            ))
+          )}
+        </div>
+
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full min-w-[1150px]">
             <thead className="bg-slate-50 border-b border-slate-100">
               <tr>
@@ -779,7 +1119,7 @@ export default function Compras() {
                 <th className="px-5 py-4 text-center text-xs font-bold text-slate-500 uppercase">
                   Estado
                 </th>
-                <th className="px-5 py-4 text-center text-xs font-bold text-slate-500 uppercase">
+                <th className="px-5 py-4 text-center text-xs font-bold text-slate-500 uppercase sticky right-0 bg-slate-50 shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.45)] z-10">
                   Acción
                 </th>
               </tr>
@@ -816,7 +1156,7 @@ export default function Compras() {
 
                     <td className="px-5 py-4">
                       <div className="flex items-start gap-2">
-                        <Truck size={17} className="text-slate-400 mt-0.5" />
+                        <Truck size={17} className="text-slate-400 mt-0.5 shrink-0" />
                         <span className="font-semibold text-slate-800">
                           {compra.proveedor}
                         </span>
@@ -825,7 +1165,7 @@ export default function Compras() {
 
                     <td className="px-5 py-4">
                       <div className="flex items-start gap-2">
-                        <Store size={17} className="text-slate-400 mt-0.5" />
+                        <Store size={17} className="text-slate-400 mt-0.5 shrink-0" />
                         <span className="text-slate-600">
                           {compra.sucursal}
                         </span>
@@ -840,7 +1180,7 @@ export default function Compras() {
                       {formatoMoneda(compra.total)}
                     </td>
 
-                    <td className="px-5 py-4 text-right font-bold text-emerald-700">
+                    <td className="px-5 py-4 text-right font-bold text-sky-700">
                       {formatoMoneda(compra.monto_pagado)}
                     </td>
 
@@ -850,19 +1190,15 @@ export default function Compras() {
 
                     <td className="px-5 py-4 text-center">
                       <span
-                        className={`text-xs font-bold px-3 py-1 rounded-full ${
-                          compra.estado === 'PAGADA'
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : compra.estado === 'PARCIAL'
-                            ? 'bg-blue-100 text-blue-700'
-                            : 'bg-amber-100 text-amber-700'
-                        }`}
+                        className={`text-xs font-bold px-3 py-1 rounded-full ${claseEstadoCompra(
+                          compra.estado
+                        )}`}
                       >
                         {compra.estado}
                       </span>
                     </td>
 
-                    <td className="px-5 py-4 text-center">
+                    <td className="px-5 py-4 text-center sticky right-0 bg-white shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.45)]">
                       <button
                         onClick={() => verDetalleCompra(compra.id_compra)}
                         className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold transition"
@@ -880,404 +1216,519 @@ export default function Compras() {
       </section>
 
       {modalCompra && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-7xl max-h-[94vh] overflow-hidden">
-            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-bold text-slate-800">
+        <div className="fixed inset-0 z-50 flex items-start justify-center px-3 sm:px-4 py-4 sm:py-8 overflow-y-auto">
+          <div
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm"
+            onClick={cerrarModalCompra}
+          />
+
+          <div className="relative bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-7xl max-h-[94vh] overflow-hidden my-auto flex flex-col">
+            <div className="px-4 sm:px-6 py-5 border-b border-slate-100 flex items-start justify-between gap-4 shrink-0">
+              <div className="min-w-0">
+                <h2 className="text-lg sm:text-xl font-bold text-slate-800">
                   Nueva compra
                 </h2>
-                <p className="text-sm text-slate-500">
-                  Captura productos, lote y caducidad para entrada automática a inventario.
+                <p className="text-sm text-slate-500 leading-relaxed">
+                  Puedes registrar la compra con ticket y capturar productos solo si deseas alimentar inventario.
                 </p>
               </div>
 
               <button
+                type="button"
                 onClick={cerrarModalCompra}
-                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center"
+                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center shrink-0"
               >
                 <X size={20} />
               </button>
             </div>
 
-            <form onSubmit={guardarCompra} className="p-6 overflow-y-auto max-h-[82vh]">
-              <section className="grid md:grid-cols-4 gap-5">
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-2">
-                    Sucursal *
-                  </label>
+            <form onSubmit={guardarCompra} className="flex flex-col flex-1 min-h-0">
+              <div className="p-4 sm:p-6 overflow-y-auto space-y-7">
+                <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
+                  <div className="min-w-0">
+                    <label className="block text-sm font-bold text-slate-700 mb-2">
+                      Sucursal *
+                    </label>
 
-                  {puedeCambiarSucursal ? (
+                    {puedeCambiarSucursal ? (
+                      <select
+                        name="id_sucursal"
+                        value={formCompra.id_sucursal}
+                        onChange={handleCompraChange}
+                        className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
+                      >
+                        <option value="">Selecciona sucursal</option>
+                        {sucursales.map((sucursal) => (
+                          <option
+                            key={sucursal.id_sucursal}
+                            value={sucursal.id_sucursal}
+                          >
+                            {sucursal.nombre}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 text-slate-700 font-semibold truncate">
+                        {sucursalActual?.nombre ||
+                          sucursales[0]?.nombre ||
+                          'Sucursal asignada'}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="min-w-0">
+                    <label className="block text-sm font-bold text-slate-700 mb-2">
+                      Proveedor *
+                    </label>
                     <select
-                      name="id_sucursal"
-                      value={formCompra.id_sucursal}
+                      name="id_proveedor"
+                      value={formCompra.id_proveedor}
                       onChange={handleCompraChange}
-                      className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
                     >
-                      <option value="">Selecciona sucursal</option>
-                      {sucursales.map((sucursal) => (
+                      <option value="">Selecciona proveedor</option>
+                      {proveedores.map((proveedor) => (
                         <option
-                          key={sucursal.id_sucursal}
-                          value={sucursal.id_sucursal}
+                          key={proveedor.id_proveedor}
+                          value={proveedor.id_proveedor}
                         >
-                          {sucursal.nombre}
+                          {proveedor.nombre}
                         </option>
                       ))}
                     </select>
-                  ) : (
-                    <div className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 text-slate-700 font-semibold">
-                      {sucursalActual?.nombre ||
-                        sucursales[0]?.nombre ||
-                        'Sucursal asignada'}
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-2">
-                    Proveedor *
-                  </label>
-                  <select
-                    name="id_proveedor"
-                    value={formCompra.id_proveedor}
-                    onChange={handleCompraChange}
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  >
-                    <option value="">Selecciona proveedor</option>
-                    {proveedores.map((proveedor) => (
-                      <option
-                        key={proveedor.id_proveedor}
-                        value={proveedor.id_proveedor}
-                      >
-                        {proveedor.nombre}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-2">
-                    Método de pago
-                  </label>
-                  <select
-                    name="metodo_pago"
-                    value={formCompra.metodo_pago}
-                    onChange={handleCompraChange}
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  >
-                    <option value="PENDIENTE">Pendiente</option>
-                    <option value="EFECTIVO">Efectivo</option>
-                    <option value="TARJETA">Tarjeta</option>
-                    <option value="TRANSFERENCIA">Transferencia</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-2">
-                    Monto pagado
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    name="monto_pagado"
-                    value={formCompra.monto_pagado}
-                    onChange={handleCompraChange}
-                    disabled={formCompra.metodo_pago === 'PENDIENTE'}
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:bg-slate-100"
-                    placeholder="0.00"
-                  />
-                </div>
-
-                {formCompra.metodo_pago === 'EFECTIVO' &&
-                  Number(formCompra.monto_pagado || 0) > 0 && (
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-bold text-slate-700 mb-2">
-                        Caja abierta para pago *
-                      </label>
-                      <select
-                        name="id_sesion"
-                        value={formCompra.id_sesion}
-                        onChange={handleCompraChange}
-                        className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                      >
-                        <option value="">Selecciona sesión de caja</option>
-                        {cajas
-                          .filter((c) => c.sesion_abierta)
-                          .map((caja) => (
-                            <option
-                              key={caja.sesion_abierta.id_sesion}
-                              value={caja.sesion_abierta.id_sesion}
-                            >
-                              {caja.nombre} · Sesión #{caja.sesion_abierta.id_sesion}
-                            </option>
-                          ))}
-                      </select>
-                    </div>
-                  )}
-
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-2">
-                    Descuento general
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    name="descuento"
-                    value={formCompra.descuento}
-                    onChange={handleCompraChange}
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    placeholder="0.00"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-2">
-                    Impuesto
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    name="impuesto"
-                    value={formCompra.impuesto}
-                    onChange={handleCompraChange}
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    placeholder="0.00"
-                  />
-                </div>
-
-                <div className="md:col-span-4">
-                  <label className="block text-sm font-bold text-slate-700 mb-2">
-                    Observaciones
-                  </label>
-                  <textarea
-                    name="observaciones"
-                    value={formCompra.observaciones}
-                    onChange={handleCompraChange}
-                    rows="2"
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
-                    placeholder="Observaciones generales de la compra"
-                  />
-                </div>
-              </section>
-
-              <section className="mt-7">
-                <div className="flex items-center justify-between gap-4 mb-4">
-                  <div>
-                    <h3 className="text-lg font-bold text-slate-800">
-                      Productos de la compra
-                    </h3>
-                    <p className="text-sm text-slate-500">
-                      Cada producto puede tener lote y fecha de caducidad.
-                    </p>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={agregarProducto}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-100 text-emerald-800 hover:bg-emerald-200 font-bold transition"
-                  >
-                    <Plus size={17} />
-                    Producto
-                  </button>
-                </div>
+                  <div className="min-w-0">
+                    <label className="block text-sm font-bold text-slate-700 mb-2">
+                      Método de pago
+                    </label>
+                    <select
+                      name="metodo_pago"
+                      value={formCompra.metodo_pago}
+                      onChange={handleCompraChange}
+                      className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
+                    >
+                      <option value="PENDIENTE">Pendiente</option>
+                      <option value="EFECTIVO">Efectivo</option>
+                      <option value="TARJETA">Tarjeta</option>
+                      <option value="TRANSFERENCIA">Transferencia</option>
+                    </select>
+                  </div>
 
-                <div className="space-y-4">
-                  {items.map((item, index) => {
-                    const subtotalItem = Math.max(
-                      Number(item.cantidad || 0) *
-                        Number(item.precio_compra || 0) -
-                        Number(item.descuento || 0),
-                      0
-                    );
+                  <div className="min-w-0">
+                    <label className="block text-sm font-bold text-slate-700 mb-2">
+                      Monto pagado
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      name="monto_pagado"
+                      value={formCompra.monto_pagado}
+                      onChange={handleCompraChange}
+                      disabled={formCompra.metodo_pago === 'PENDIENTE'}
+                      className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 disabled:bg-slate-100"
+                      placeholder="0.00"
+                    />
+                  </div>
 
-                    return (
-                      <div
-                        key={index}
-                        className="rounded-3xl border border-slate-100 bg-slate-50 p-5"
+                  <div className="min-w-0">
+                    <label className="block text-sm font-bold text-slate-700 mb-2">
+                      Total del ticket
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      name="total_manual"
+                      value={formCompra.total_manual}
+                      onChange={handleCompraChange}
+                      className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                      placeholder="0.00"
+                    />
+                  </div>
+
+                  {formCompra.metodo_pago === 'EFECTIVO' &&
+                    Number(formCompra.monto_pagado || 0) > 0 && (
+                      <div className="md:col-span-2 min-w-0">
+                        <label className="block text-sm font-bold text-slate-700 mb-2">
+                          Caja abierta para pago *
+                        </label>
+                        <select
+                          name="id_sesion"
+                          value={formCompra.id_sesion}
+                          onChange={handleCompraChange}
+                          className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
+                        >
+                          <option value="">Selecciona sesión de caja</option>
+                          {cajas
+                            .filter((c) => c.sesion_abierta)
+                            .map((caja) => (
+                              <option
+                                key={caja.sesion_abierta.id_sesion}
+                                value={caja.sesion_abierta.id_sesion}
+                              >
+                                {caja.nombre} · Sesión #{caja.sesion_abierta.id_sesion}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                    )}
+
+                  <div className="min-w-0">
+                    <label className="block text-sm font-bold text-slate-700 mb-2">
+                      Descuento general
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      name="descuento"
+                      value={formCompra.descuento}
+                      onChange={handleCompraChange}
+                      className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                      placeholder="0.00"
+                    />
+                  </div>
+
+                  <div className="min-w-0">
+                    <label className="block text-sm font-bold text-slate-700 mb-2">
+                      Impuesto
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      name="impuesto"
+                      value={formCompra.impuesto}
+                      onChange={handleCompraChange}
+                      className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                      placeholder="0.00"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2 xl:col-span-4 min-w-0">
+                    <label className="block text-sm font-bold text-slate-700 mb-2">
+                      Observaciones
+                    </label>
+                    <textarea
+                      name="observaciones"
+                      value={formCompra.observaciones}
+                      onChange={handleCompraChange}
+                      rows="2"
+                      className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 resize-none"
+                      placeholder="Observaciones generales de la compra"
+                    />
+                  </div>
+                </section>
+
+                <section className="rounded-2xl sm:rounded-3xl border border-slate-100 bg-slate-50 p-4 sm:p-5">
+                  <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div className="w-11 h-11 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
+                        <ImageIcon size={22} />
+                      </div>
+
+                      <div className="min-w-0">
+                        <h3 className="text-lg font-bold text-slate-800">
+                          Ticket / comprobante de compra
+                        </h3>
+                        <p className="text-sm text-slate-500 leading-relaxed">
+                          Puedes subir una foto del ticket o tomarla con la cámara de la computadora.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
+                      <label className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 font-bold cursor-pointer transition">
+                        <Upload size={18} />
+                        Subir imagen
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={seleccionarTicket}
+                          className="hidden"
+                        />
+                      </label>
+
+                      <button
+                        type="button"
+                        onClick={abrirCamara}
+                        className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-sky-700 text-white hover:bg-sky-800 font-bold cursor-pointer transition"
                       >
-                        <div className="grid md:grid-cols-12 gap-4">
-                          <div className="md:col-span-4">
-                            <label className="block text-sm font-bold text-slate-700 mb-2">
-                              Producto *
-                            </label>
-                            <select
-                              value={item.id_producto}
-                              onChange={(e) =>
-                                actualizarItem(index, 'id_producto', e.target.value)
-                              }
-                              className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
-                            >
-                              <option value="">Selecciona producto</option>
-                              {productos.map((producto) => (
-                                <option
-                                  key={producto.id_producto}
-                                  value={producto.id_producto}
-                                >
-                                  {producto.nombre}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
+                        <Camera size={18} />
+                        Tomar foto
+                      </button>
+                    </div>
+                  </div>
 
-                          <div className="md:col-span-2">
-                            <label className="block text-sm font-bold text-slate-700 mb-2">
-                              Cantidad *
-                            </label>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={item.cantidad}
-                              onChange={(e) =>
-                                actualizarItem(index, 'cantidad', e.target.value)
-                              }
-                              className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
-                              placeholder="0"
-                            />
-                          </div>
+                  {ticketPreview && (
+                    <div className="mt-5 grid grid-cols-1 md:grid-cols-[220px_minmax(0,1fr)] gap-4 items-start">
+                      <div className="rounded-2xl overflow-hidden border border-slate-200 bg-white">
+                        <img
+                          src={ticketPreview}
+                          alt="Vista previa del ticket"
+                          className="w-full h-56 object-cover"
+                        />
+                      </div>
 
-                          <div className="md:col-span-2">
-                            <label className="block text-sm font-bold text-slate-700 mb-2">
-                              Precio compra *
-                            </label>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={item.precio_compra}
-                              onChange={(e) =>
-                                actualizarItem(index, 'precio_compra', e.target.value)
-                              }
-                              className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
-                              placeholder="0.00"
-                            />
-                          </div>
+                      <div className="rounded-2xl bg-white border border-slate-200 p-4 min-w-0">
+                        <p className="text-sm text-slate-500">
+                          Archivo seleccionado
+                        </p>
+                        <p className="font-bold text-slate-800 mt-1 break-words">
+                          {ticketFile?.name}
+                        </p>
+                        <p className="text-sm text-slate-500 mt-1">
+                          {ticketFile
+                            ? `${(ticketFile.size / 1024 / 1024).toFixed(2)} MB`
+                            : ''}
+                        </p>
 
-                          <div className="md:col-span-2">
-                            <label className="block text-sm font-bold text-slate-700 mb-2">
-                              Desc.
-                            </label>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={item.descuento}
-                              onChange={(e) =>
-                                actualizarItem(index, 'descuento', e.target.value)
-                              }
-                              className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
-                              placeholder="0.00"
-                            />
-                          </div>
+                        <button
+                          type="button"
+                          onClick={quitarTicket}
+                          className="mt-4 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-red-50 text-red-700 hover:bg-red-100 font-bold transition"
+                        >
+                          <Trash2 size={17} />
+                          Quitar imagen
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </section>
 
-                          <div className="md:col-span-2">
-                            <label className="block text-sm font-bold text-slate-700 mb-2">
-                              Subtotal
-                            </label>
-                            <div className="px-4 py-3 rounded-2xl bg-white border border-slate-200 font-bold text-emerald-700 text-right">
-                              {formatoMoneda(subtotalItem)}
-                            </div>
-                          </div>
+                <section>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+                    <div className="min-w-0">
+                      <h3 className="text-lg font-bold text-slate-800">
+                        Productos de la compra
+                      </h3>
+                      <p className="text-sm text-slate-500 leading-relaxed">
+                        Opcional. Si capturas productos, se alimentará el inventario automáticamente por lote.
+                      </p>
+                    </div>
 
-                          <div className="md:col-span-3">
-                            <label className="block text-sm font-bold text-slate-700 mb-2">
-                              Lote
-                            </label>
-                            <input
-                              value={item.lote}
-                              onChange={(e) =>
-                                actualizarItem(index, 'lote', e.target.value)
-                              }
-                              className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white uppercase"
-                              placeholder="Ej. PAR-2027-A"
-                            />
-                          </div>
+                    <button
+                      type="button"
+                      onClick={agregarProducto}
+                      className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-sky-100 text-sky-800 hover:bg-sky-200 font-bold transition"
+                    >
+                      <Plus size={17} />
+                      Producto
+                    </button>
+                  </div>
 
-                          <div className="md:col-span-3">
-                            <label className="block text-sm font-bold text-slate-700 mb-2">
-                              Fecha caducidad
-                            </label>
-                            <input
-                              type="date"
-                              value={item.fecha_caducidad}
-                              onChange={(e) =>
-                                actualizarItem(
-                                  index,
-                                  'fecha_caducidad',
-                                  e.target.value
-                                )
-                              }
-                              className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
-                            />
-                          </div>
+                  <div className="space-y-4">
+                    {items.length === 0 && (
+                      <div className="rounded-2xl sm:rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
+                        <Package size={30} className="mx-auto text-slate-400" />
+                        <h4 className="font-bold text-slate-700 mt-3">
+                          Sin productos capturados
+                        </h4>
+                        <p className="text-sm text-slate-500 mt-1">
+                          Puedes guardar la compra solo con el ticket o agregar productos para actualizar inventario.
+                        </p>
+                      </div>
+                    )}
 
-                          <div className="md:col-span-5">
-                            <label className="block text-sm font-bold text-slate-700 mb-2">
-                              Observaciones
-                            </label>
-                            <input
-                              value={item.observaciones}
-                              onChange={(e) =>
-                                actualizarItem(
-                                  index,
-                                  'observaciones',
-                                  e.target.value
-                                )
-                              }
-                              className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
-                              placeholder="Opcional"
-                            />
-                          </div>
+                    {items.map((item, index) => {
+                      const subtotalItem = Math.max(
+                        Number(item.cantidad || 0) *
+                          Number(item.precio_compra || 0) -
+                          Number(item.descuento || 0),
+                        0
+                      );
 
-                          <div className="md:col-span-1 flex items-end">
+                      return (
+                        <div
+                          key={index}
+                          className="rounded-2xl sm:rounded-3xl border border-slate-100 bg-slate-50 p-4 sm:p-5"
+                        >
+                          <div className="flex items-center justify-between gap-3 mb-4">
+                            <h4 className="font-bold text-slate-800">
+                              Producto #{index + 1}
+                            </h4>
+
                             <button
                               type="button"
                               onClick={() => quitarProducto(index)}
-                              disabled={items.length === 1}
-                              className="w-full h-12 rounded-2xl bg-red-50 text-red-700 hover:bg-red-100 flex items-center justify-center transition disabled:opacity-40"
+                              className="w-10 h-10 rounded-2xl bg-red-50 text-red-700 hover:bg-red-100 flex items-center justify-center transition shrink-0"
+                              title="Quitar producto"
                             >
                               <Trash2 size={18} />
                             </button>
                           </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                            <div className="md:col-span-4 min-w-0">
+                              <label className="block text-sm font-bold text-slate-700 mb-2">
+                                Producto *
+                              </label>
+                              <select
+                                value={item.id_producto}
+                                onChange={(e) =>
+                                  actualizarItem(index, 'id_producto', e.target.value)
+                                }
+                                className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
+                              >
+                                <option value="">Selecciona producto</option>
+                                {productos.map((producto) => (
+                                  <option
+                                    key={producto.id_producto}
+                                    value={producto.id_producto}
+                                  >
+                                    {producto.nombre}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div className="md:col-span-2 min-w-0">
+                              <label className="block text-sm font-bold text-slate-700 mb-2">
+                                Cantidad *
+                              </label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={item.cantidad}
+                                onChange={(e) =>
+                                  actualizarItem(index, 'cantidad', e.target.value)
+                                }
+                                className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
+                                placeholder="0"
+                              />
+                            </div>
+
+                            <div className="md:col-span-2 min-w-0">
+                              <label className="block text-sm font-bold text-slate-700 mb-2">
+                                Precio compra *
+                              </label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={item.precio_compra}
+                                onChange={(e) =>
+                                  actualizarItem(index, 'precio_compra', e.target.value)
+                                }
+                                className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
+                                placeholder="0.00"
+                              />
+                            </div>
+
+                            <div className="md:col-span-2 min-w-0">
+                              <label className="block text-sm font-bold text-slate-700 mb-2">
+                                Desc.
+                              </label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={item.descuento}
+                                onChange={(e) =>
+                                  actualizarItem(index, 'descuento', e.target.value)
+                                }
+                                className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
+                                placeholder="0.00"
+                              />
+                            </div>
+
+                            <div className="md:col-span-2 min-w-0">
+                              <label className="block text-sm font-bold text-slate-700 mb-2">
+                                Subtotal
+                              </label>
+                              <div className="px-4 py-3 rounded-2xl bg-white border border-slate-200 font-bold text-sky-700 text-left md:text-right break-words">
+                                {formatoMoneda(subtotalItem)}
+                              </div>
+                            </div>
+
+                            <div className="md:col-span-3 min-w-0">
+                              <label className="block text-sm font-bold text-slate-700 mb-2">
+                                Lote
+                              </label>
+                              <input
+                                value={item.lote}
+                                onChange={(e) =>
+                                  actualizarItem(index, 'lote', e.target.value)
+                                }
+                                className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white uppercase"
+                                placeholder="Ej. PAR-2027-A"
+                              />
+                            </div>
+
+                            <div className="md:col-span-3 min-w-0">
+                              <label className="block text-sm font-bold text-slate-700 mb-2">
+                                Fecha caducidad
+                              </label>
+                              <input
+                                type="date"
+                                value={item.fecha_caducidad}
+                                onChange={(e) =>
+                                  actualizarItem(
+                                    index,
+                                    'fecha_caducidad',
+                                    e.target.value
+                                  )
+                                }
+                                className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
+                              />
+                            </div>
+
+                            <div className="md:col-span-6 min-w-0">
+                              <label className="block text-sm font-bold text-slate-700 mb-2">
+                                Observaciones
+                              </label>
+                              <input
+                                value={item.observaciones}
+                                onChange={(e) =>
+                                  actualizarItem(
+                                    index,
+                                    'observaciones',
+                                    e.target.value
+                                  )
+                                }
+                                className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
+                                placeholder="Opcional"
+                              />
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
+                      );
+                    })}
+                  </div>
+                </section>
 
-              <section className="mt-7 grid md:grid-cols-4 gap-4">
-                <div className="rounded-2xl bg-slate-50 p-4">
-                  <p className="text-sm text-slate-500">Subtotal</p>
-                  <p className="text-xl font-bold text-slate-800">
-                    {formatoMoneda(resumenCompra.subtotal)}
-                  </p>
-                </div>
+                <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                  <div className="rounded-2xl bg-slate-50 p-4 min-w-0">
+                    <p className="text-sm text-slate-500">Subtotal</p>
+                    <p className="text-xl font-bold text-slate-800 break-words">
+                      {formatoMoneda(resumenCompra.subtotal)}
+                    </p>
+                  </div>
 
-                <div className="rounded-2xl bg-red-50 p-4">
-                  <p className="text-sm text-red-600">Descuento</p>
-                  <p className="text-xl font-bold text-red-700">
-                    -{formatoMoneda(resumenCompra.descuento)}
-                  </p>
-                </div>
+                  <div className="rounded-2xl bg-red-50 p-4 min-w-0">
+                    <p className="text-sm text-red-600">Descuento</p>
+                    <p className="text-xl font-bold text-red-700 break-words">
+                      -{formatoMoneda(resumenCompra.descuento)}
+                    </p>
+                  </div>
 
-                <div className="rounded-2xl bg-blue-50 p-4">
-                  <p className="text-sm text-blue-600">Impuesto</p>
-                  <p className="text-xl font-bold text-blue-700">
-                    {formatoMoneda(resumenCompra.impuesto)}
-                  </p>
-                </div>
+                  <div className="rounded-2xl bg-blue-50 p-4 min-w-0">
+                    <p className="text-sm text-blue-600">Impuesto</p>
+                    <p className="text-xl font-bold text-blue-700 break-words">
+                      {formatoMoneda(resumenCompra.impuesto)}
+                    </p>
+                  </div>
 
-                <div className="rounded-2xl bg-emerald-50 p-4">
-                  <p className="text-sm text-emerald-600">Total</p>
-                  <p className="text-2xl font-bold text-emerald-700">
-                    {formatoMoneda(resumenCompra.total)}
-                  </p>
-                </div>
-              </section>
+                  <div className="rounded-2xl bg-sky-50 p-4 min-w-0">
+                    <p className="text-sm text-sky-600">Total</p>
+                    <p className="text-2xl font-bold text-sky-700 break-words">
+                      {formatoMoneda(resumenCompra.total)}
+                    </p>
+                  </div>
+                </section>
+              </div>
 
-              <section className="mt-7 flex justify-end gap-3 border-t border-slate-100 pt-5">
+              <div className="px-4 sm:px-6 py-5 flex flex-col sm:flex-row justify-end gap-3 border-t border-slate-100 bg-white shrink-0">
                 <button
                   type="button"
                   onClick={cerrarModalCompra}
-                  className="px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition"
+                  className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition"
                 >
                   Cancelar
                 </button>
@@ -1285,62 +1736,136 @@ export default function Compras() {
                 <button
                   type="submit"
                   disabled={guardando}
-                  className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold transition disabled:opacity-60"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold transition disabled:opacity-60"
                 >
                   <Save size={19} />
                   {guardando ? 'Guardando...' : 'Guardar compra'}
                 </button>
-              </section>
+              </div>
             </form>
           </div>
         </div>
       )}
 
-      {modalDetalle && detalleCompra && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-6xl max-h-[92vh] overflow-hidden">
-            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-bold text-slate-800">
-                  Detalle de compra
+      {modalCamara && (
+        <div className="fixed inset-0 z-[60] flex items-start sm:items-center justify-center px-3 sm:px-4 py-4 sm:py-8 overflow-y-auto">
+          <div
+            className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm"
+            onClick={() => cerrarCamara(true)}
+          />
+
+          <div className="relative bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden my-auto">
+            <div className="px-4 sm:px-6 py-5 border-b border-slate-100 flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h2 className="text-lg sm:text-xl font-bold text-slate-800">
+                  Tomar foto del ticket
                 </h2>
-                <p className="text-sm text-slate-500">
-                  {detalleCompra.folio}
+                <p className="text-sm text-slate-500 leading-relaxed">
+                  Alinea el ticket frente a la cámara y captura la imagen.
                 </p>
               </div>
 
               <button
-                onClick={cerrarDetalle}
-                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center"
+                type="button"
+                onClick={() => cerrarCamara(true)}
+                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center shrink-0"
               >
                 <X size={20} />
               </button>
             </div>
 
-            <div className="p-6 overflow-y-auto max-h-[80vh] space-y-6">
-              <section className="grid md:grid-cols-4 gap-4">
-                <div className="rounded-2xl bg-slate-50 p-4">
+            <div className="p-4 sm:p-6">
+              {errorCamara ? (
+                <div className="rounded-2xl bg-red-50 border border-red-100 p-5 text-red-700 font-semibold">
+                  {errorCamara}
+                </div>
+              ) : (
+                <div className="rounded-2xl sm:rounded-3xl overflow-hidden bg-slate-950 border border-slate-200">
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full max-h-[62vh] object-contain bg-black"
+                  />
+                </div>
+              )}
+
+              <div className="mt-5 flex flex-col sm:flex-row justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => cerrarCamara(true)}
+                  className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition"
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="button"
+                  onClick={capturarFoto}
+                  disabled={!camaraActiva || !!errorCamara}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold transition disabled:opacity-60"
+                >
+                  <Camera size={19} />
+                  Capturar foto
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalDetalle && detalleCompra && (
+        <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center px-3 sm:px-4 py-4 sm:py-8 overflow-y-auto">
+          <div
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm"
+            onClick={cerrarDetalle}
+          />
+
+          <div className="relative bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-6xl max-h-[92vh] overflow-hidden my-auto">
+            <div className="px-4 sm:px-6 py-5 border-b border-slate-100 flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h2 className="text-lg sm:text-xl font-bold text-slate-800">
+                  Detalle de compra
+                </h2>
+                <p className="text-sm text-slate-500 break-words">
+                  {detalleCompra.folio}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={cerrarDetalle}
+                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center shrink-0"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-4 sm:p-6 overflow-y-auto max-h-[80vh] space-y-6">
+              <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                <div className="rounded-2xl bg-slate-50 p-4 min-w-0">
                   <p className="text-sm text-slate-500">Proveedor</p>
-                  <p className="font-bold text-slate-800 mt-1">
+                  <p className="font-bold text-slate-800 mt-1 break-words">
                     {detalleCompra.proveedor}
                   </p>
                 </div>
 
-                <div className="rounded-2xl bg-slate-50 p-4">
+                <div className="rounded-2xl bg-slate-50 p-4 min-w-0">
                   <p className="text-sm text-slate-500">Sucursal</p>
-                  <p className="font-bold text-slate-800 mt-1">
+                  <p className="font-bold text-slate-800 mt-1 break-words">
                     {detalleCompra.sucursal}
                   </p>
                 </div>
 
-                <div className="rounded-2xl bg-slate-50 p-4">
+                <div className="rounded-2xl bg-slate-50 p-4 min-w-0">
                   <p className="text-sm text-slate-500">Fecha</p>
-                  <p className="font-bold text-slate-800 mt-1">
+                  <p className="font-bold text-slate-800 mt-1 break-words">
                     {formatoFecha(detalleCompra.fecha_compra)}
                   </p>
                 </div>
 
-                <div className="rounded-2xl bg-slate-50 p-4">
+                <div className="rounded-2xl bg-slate-50 p-4 min-w-0">
                   <p className="text-sm text-slate-500">Estado</p>
                   <p className="font-bold text-slate-800 mt-1">
                     {detalleCompra.estado}
@@ -1348,108 +1873,189 @@ export default function Compras() {
                 </div>
               </section>
 
-              <section className="grid md:grid-cols-4 gap-4">
-                <div className="rounded-2xl bg-emerald-50 p-4">
-                  <p className="text-sm text-emerald-600">Total</p>
-                  <p className="text-2xl font-bold text-emerald-700">
+              <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                <div className="rounded-2xl bg-sky-50 p-4 min-w-0">
+                  <p className="text-sm text-sky-600">Total</p>
+                  <p className="text-2xl font-bold text-sky-700 break-words">
                     {formatoMoneda(detalleCompra.total)}
                   </p>
                 </div>
 
-                <div className="rounded-2xl bg-blue-50 p-4">
+                <div className="rounded-2xl bg-blue-50 p-4 min-w-0">
                   <p className="text-sm text-blue-600">Pagado</p>
-                  <p className="text-2xl font-bold text-blue-700">
+                  <p className="text-2xl font-bold text-blue-700 break-words">
                     {formatoMoneda(detalleCompra.monto_pagado)}
                   </p>
                 </div>
 
-                <div className="rounded-2xl bg-red-50 p-4">
+                <div className="rounded-2xl bg-red-50 p-4 min-w-0">
                   <p className="text-sm text-red-600">Saldo</p>
-                  <p className="text-2xl font-bold text-red-700">
+                  <p className="text-2xl font-bold text-red-700 break-words">
                     {formatoMoneda(detalleCompra.saldo)}
                   </p>
                 </div>
 
-                <div className="rounded-2xl bg-slate-50 p-4">
+                <div className="rounded-2xl bg-slate-50 p-4 min-w-0">
                   <p className="text-sm text-slate-500">Método</p>
-                  <p className="font-bold text-slate-800">
+                  <p className="font-bold text-slate-800 break-words">
                     {detalleCompra.metodo_pago}
                   </p>
                 </div>
               </section>
 
+              {detalleCompra.ticket_proveedor_url && (
+                <section>
+                  <div className="flex items-center gap-2 mb-4">
+                    <ImageIcon className="text-sky-700 shrink-0" size={22} />
+                    <h3 className="text-lg font-bold text-slate-800">
+                      Ticket / comprobante
+                    </h3>
+                  </div>
+
+                  <a
+                    href={`${import.meta.env.VITE_API_URL?.replace('/api', '')}${detalleCompra.ticket_proveedor_url}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-sky-50 text-sky-700 hover:bg-sky-100 font-bold transition"
+                  >
+                    <Eye size={18} />
+                    Ver ticket
+                  </a>
+                </section>
+              )}
+
               <section>
                 <div className="flex items-center gap-2 mb-4">
-                  <Package className="text-emerald-700" size={22} />
+                  <Package className="text-sky-700 shrink-0" size={22} />
                   <h3 className="text-lg font-bold text-slate-800">
                     Productos comprados
                   </h3>
                 </div>
 
-                <div className="overflow-x-auto rounded-2xl border border-slate-100">
-                  <table className="w-full min-w-[950px]">
-                    <thead className="bg-slate-50">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
-                          Producto
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
-                          Lote
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
-                          Caducidad
-                        </th>
-                        <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">
-                          Cantidad
-                        </th>
-                        <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">
-                          Precio
-                        </th>
-                        <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">
-                          Desc.
-                        </th>
-                        <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">
-                          Subtotal
-                        </th>
-                      </tr>
-                    </thead>
-
-                    <tbody className="divide-y divide-slate-100">
+                {detalleProductos.length === 0 ? (
+                  <div className="rounded-2xl bg-slate-50 p-5 text-center text-slate-500">
+                    Esta compra no tiene productos capturados.
+                  </div>
+                ) : (
+                  <>
+                    <div className="md:hidden space-y-3">
                       {detalleProductos.map((item) => (
-                        <tr key={item.id_detalle}>
-                          <td className="px-4 py-3 font-bold text-slate-800">
+                        <div
+                          key={item.id_detalle}
+                          className="rounded-2xl border border-slate-100 p-4 bg-white"
+                        >
+                          <p className="font-bold text-slate-800 break-words">
                             {item.producto}
-                          </td>
-                          <td className="px-4 py-3 text-slate-600">
-                            {item.lote || '—'}
-                          </td>
-                          <td className="px-4 py-3 text-slate-600">
+                          </p>
+                          <p className="text-xs text-slate-500 mt-1">
+                            Lote: {item.lote || '—'}
+                          </p>
+                          <p className="text-xs text-slate-500 mt-1">
+                            Caducidad:{' '}
                             {item.fecha_caducidad
                               ? new Date(item.fecha_caducidad).toLocaleDateString('es-MX')
                               : 'Sin fecha'}
-                          </td>
-                          <td className="px-4 py-3 text-right font-bold">
-                            {formatoNumero(item.cantidad)}
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            {formatoMoneda(item.precio_compra)}
-                          </td>
-                          <td className="px-4 py-3 text-right text-red-600">
-                            -{formatoMoneda(item.descuento)}
-                          </td>
-                          <td className="px-4 py-3 text-right font-bold text-emerald-700">
-                            {formatoMoneda(item.subtotal)}
-                          </td>
-                        </tr>
+                          </p>
+
+                          <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+                            <div className="rounded-xl bg-slate-50 p-3">
+                              <p className="text-xs text-slate-500">Cantidad</p>
+                              <p className="font-bold text-slate-800">
+                                {formatoNumero(item.cantidad)}
+                              </p>
+                            </div>
+
+                            <div className="rounded-xl bg-slate-50 p-3">
+                              <p className="text-xs text-slate-500">Precio</p>
+                              <p className="font-bold text-slate-800">
+                                {formatoMoneda(item.precio_compra)}
+                              </p>
+                            </div>
+
+                            <div className="rounded-xl bg-red-50 p-3">
+                              <p className="text-xs text-red-700">Desc.</p>
+                              <p className="font-bold text-red-700">
+                                -{formatoMoneda(item.descuento)}
+                              </p>
+                            </div>
+
+                            <div className="rounded-xl bg-sky-50 p-3">
+                              <p className="text-xs text-sky-700">Subtotal</p>
+                              <p className="font-bold text-sky-800">
+                                {formatoMoneda(item.subtotal)}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
                       ))}
-                    </tbody>
-                  </table>
-                </div>
+                    </div>
+
+                    <div className="hidden md:block overflow-x-auto rounded-2xl border border-slate-100">
+                      <table className="w-full min-w-[950px]">
+                        <thead className="bg-slate-50">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+                              Producto
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+                              Lote
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+                              Caducidad
+                            </th>
+                            <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">
+                              Cantidad
+                            </th>
+                            <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">
+                              Precio
+                            </th>
+                            <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">
+                              Desc.
+                            </th>
+                            <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">
+                              Subtotal
+                            </th>
+                          </tr>
+                        </thead>
+
+                        <tbody className="divide-y divide-slate-100">
+                          {detalleProductos.map((item) => (
+                            <tr key={item.id_detalle}>
+                              <td className="px-4 py-3 font-bold text-slate-800">
+                                {item.producto}
+                              </td>
+                              <td className="px-4 py-3 text-slate-600">
+                                {item.lote || '—'}
+                              </td>
+                              <td className="px-4 py-3 text-slate-600">
+                                {item.fecha_caducidad
+                                  ? new Date(item.fecha_caducidad).toLocaleDateString('es-MX')
+                                  : 'Sin fecha'}
+                              </td>
+                              <td className="px-4 py-3 text-right font-bold">
+                                {formatoNumero(item.cantidad)}
+                              </td>
+                              <td className="px-4 py-3 text-right">
+                                {formatoMoneda(item.precio_compra)}
+                              </td>
+                              <td className="px-4 py-3 text-right text-red-600">
+                                -{formatoMoneda(item.descuento)}
+                              </td>
+                              <td className="px-4 py-3 text-right font-bold text-sky-700">
+                                {formatoMoneda(item.subtotal)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
               </section>
 
               <section>
                 <div className="flex items-center gap-2 mb-4">
-                  <Wallet className="text-blue-700" size={22} />
+                  <Wallet className="text-blue-700 shrink-0" size={22} />
                   <h3 className="text-lg font-bold text-slate-800">
                     Pagos registrados
                   </h3>
@@ -1460,51 +2066,93 @@ export default function Compras() {
                     Esta compra no tiene pagos registrados.
                   </div>
                 ) : (
-                  <div className="overflow-x-auto rounded-2xl border border-slate-100">
-                    <table className="w-full min-w-[700px]">
-                      <thead className="bg-slate-50">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
-                            Fecha
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
-                            Método
-                          </th>
-                          <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">
-                            Monto
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
-                            Usuario
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
-                            Referencia
-                          </th>
-                        </tr>
-                      </thead>
+                  <>
+                    <div className="md:hidden space-y-3">
+                      {detallePagos.map((pago) => (
+                        <div
+                          key={pago.id_pago}
+                          className="rounded-2xl border border-slate-100 p-4 bg-white"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="font-bold text-slate-800">
+                                {pago.metodo_pago}
+                              </p>
+                              <p className="text-xs text-slate-500 mt-1">
+                                {formatoFecha(pago.fecha_pago)}
+                              </p>
+                            </div>
 
-                      <tbody className="divide-y divide-slate-100">
-                        {detallePagos.map((pago) => (
-                          <tr key={pago.id_pago}>
-                            <td className="px-4 py-3 text-slate-600">
-                              {formatoFecha(pago.fecha_pago)}
-                            </td>
-                            <td className="px-4 py-3 text-slate-600">
-                              {pago.metodo_pago}
-                            </td>
-                            <td className="px-4 py-3 text-right font-bold text-blue-700">
+                            <p className="font-bold text-blue-700 text-right shrink-0">
                               {formatoMoneda(pago.monto)}
-                            </td>
-                            <td className="px-4 py-3 text-slate-600">
-                              {pago.usuario}
-                            </td>
-                            <td className="px-4 py-3 text-slate-600">
-                              {pago.referencia || '—'}
-                            </td>
+                            </p>
+                          </div>
+
+                          <div className="mt-4 grid grid-cols-1 gap-3">
+                            <div className="rounded-xl bg-slate-50 p-3">
+                              <p className="text-xs text-slate-500">Usuario</p>
+                              <p className="font-semibold text-slate-700 break-words">
+                                {pago.usuario || '—'}
+                              </p>
+                            </div>
+
+                            <div className="rounded-xl bg-slate-50 p-3">
+                              <p className="text-xs text-slate-500">Referencia</p>
+                              <p className="font-semibold text-slate-700 break-words">
+                                {pago.referencia || '—'}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="hidden md:block overflow-x-auto rounded-2xl border border-slate-100">
+                      <table className="w-full min-w-[700px]">
+                        <thead className="bg-slate-50">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+                              Fecha
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+                              Método
+                            </th>
+                            <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">
+                              Monto
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+                              Usuario
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+                              Referencia
+                            </th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                        </thead>
+
+                        <tbody className="divide-y divide-slate-100">
+                          {detallePagos.map((pago) => (
+                            <tr key={pago.id_pago}>
+                              <td className="px-4 py-3 text-slate-600">
+                                {formatoFecha(pago.fecha_pago)}
+                              </td>
+                              <td className="px-4 py-3 text-slate-600">
+                                {pago.metodo_pago}
+                              </td>
+                              <td className="px-4 py-3 text-right font-bold text-blue-700">
+                                {formatoMoneda(pago.monto)}
+                              </td>
+                              <td className="px-4 py-3 text-slate-600">
+                                {pago.usuario}
+                              </td>
+                              <td className="px-4 py-3 text-slate-600">
+                                {pago.referencia || '—'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
                 )}
               </section>
             </div>

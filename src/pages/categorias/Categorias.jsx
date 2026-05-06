@@ -57,6 +57,15 @@ export default function Categorias() {
     };
   }, [categorias]);
 
+  const formatoFecha = (fecha) => {
+    if (!fecha) return '—';
+
+    return new Date(fecha).toLocaleString('es-MX', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    });
+  };
+
   const cargarCategorias = async () => {
     try {
       setCargando(true);
@@ -233,29 +242,20 @@ export default function Categorias() {
     }
   };
 
-  const formatoFecha = (fecha) => {
-    if (!fecha) return '—';
-
-    return new Date(fecha).toLocaleString('es-MX', {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    });
-  };
-
   return (
-    <div className="space-y-6">
-      <section className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+    <div className="w-full max-w-full overflow-hidden space-y-5 sm:space-y-6 pb-8">
+      <section className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-sm border border-slate-100 overflow-hidden">
         <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+          <div className="flex items-start sm:items-center gap-3 min-w-0">
+            <div className="w-12 h-12 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
               <Tags size={25} />
             </div>
 
-            <div>
-              <h1 className="text-2xl font-bold text-slate-800">
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-800 break-words">
                 Categorías
               </h1>
-              <p className="text-slate-500">
+              <p className="text-sm sm:text-base text-slate-500 leading-relaxed">
                 Administra el catálogo global de categorías para productos.
               </p>
             </div>
@@ -263,7 +263,7 @@ export default function Categorias() {
 
           <button
             onClick={abrirNuevo}
-            className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold shadow-lg shadow-emerald-900/20 transition"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold shadow-lg shadow-sky-900/20 transition"
           >
             <Plus size={20} />
             Nueva categoría
@@ -271,7 +271,7 @@ export default function Categorias() {
         </div>
 
         <div className="mt-6 flex flex-col md:flex-row gap-3">
-          <div className="relative flex-1">
+          <div className="relative flex-1 min-w-0">
             <Search
               className="absolute left-4 top-3.5 text-slate-400"
               size={20}
@@ -279,14 +279,14 @@ export default function Categorias() {
             <input
               value={buscar}
               onChange={(e) => setBuscar(e.target.value)}
-              className="w-full pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="w-full min-w-0 pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
               placeholder="Buscar por nombre o descripción..."
             />
           </div>
 
           <button
             onClick={cargarCategorias}
-            className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition"
+            className="w-full md:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition"
           >
             <RefreshCw size={19} className={cargando ? 'animate-spin' : ''} />
             Actualizar
@@ -294,9 +294,9 @@ export default function Categorias() {
         </div>
       </section>
 
-      <section className="grid sm:grid-cols-3 gap-5">
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+      <section className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-5">
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0">
+          <div className="w-12 h-12 rounded-2xl bg-sky-50 text-sky-700 flex items-center justify-center">
             <Tags size={24} />
           </div>
           <p className="text-sm text-slate-500 mt-5">Total categorías</p>
@@ -305,17 +305,17 @@ export default function Categorias() {
           </h3>
         </div>
 
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0">
           <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-700 flex items-center justify-center">
             <CheckCircle size={24} />
           </div>
           <p className="text-sm text-slate-500 mt-5">Activas</p>
-          <h3 className="text-3xl font-bold text-emerald-700 mt-1">
+          <h3 className="text-3xl font-bold text-sky-700 mt-1">
             {resumen.activas}
           </h3>
         </div>
 
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0">
           <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center">
             <X size={24} />
           </div>
@@ -326,8 +326,101 @@ export default function Categorias() {
         </div>
       </section>
 
-      <section className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-        <div className="overflow-x-auto">
+      <section className="bg-white rounded-2xl sm:rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+        <div className="px-4 sm:px-6 py-5 border-b border-slate-100">
+          <h2 className="text-lg sm:text-xl font-bold text-slate-800">
+            Listado de categorías
+          </h2>
+          <p className="text-sm text-slate-500">
+            Consulta, edita o desactiva categorías del catálogo.
+          </p>
+        </div>
+
+        <div className="md:hidden p-4 space-y-3">
+          {cargando ? (
+            <div className="rounded-2xl bg-slate-50 p-6 text-center text-slate-500 font-semibold">
+              Cargando categorías...
+            </div>
+          ) : categoriasFiltradas.length === 0 ? (
+            <div className="rounded-2xl bg-slate-50 p-6 text-center text-slate-500 font-semibold">
+              No hay categorías registradas.
+            </div>
+          ) : (
+            categoriasFiltradas.map((categoria) => (
+              <article
+                key={categoria.id_categoria}
+                className="rounded-2xl border border-slate-100 p-4 shadow-sm bg-white"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-2xl bg-sky-50 text-sky-700 flex items-center justify-center shrink-0">
+                      <Tags size={19} />
+                    </div>
+
+                    <div className="min-w-0">
+                      <p className="font-bold text-slate-800 break-words">
+                        {categoria.nombre}
+                      </p>
+                      <p className="text-xs text-slate-400 mt-1">
+                        ID #{categoria.id_categoria}
+                      </p>
+                    </div>
+                  </div>
+
+                  <span
+                    className={`text-xs font-bold px-3 py-1 rounded-full shrink-0 ${
+                      categoria.activo
+                        ? 'bg-sky-100 text-sky-700'
+                        : 'bg-slate-200 text-slate-600'
+                    }`}
+                  >
+                    {categoria.activo ? 'Activa' : 'Inactiva'}
+                  </span>
+                </div>
+
+                <div className="mt-4 rounded-2xl bg-slate-50 p-3">
+                  <p className="text-xs text-slate-500 flex items-center gap-1">
+                    <FileText size={15} />
+                    Descripción
+                  </p>
+                  <p className="font-semibold text-slate-700 mt-1 break-words">
+                    {categoria.descripcion || '—'}
+                  </p>
+                </div>
+
+                <div className="mt-3 rounded-2xl bg-slate-50 p-3">
+                  <p className="text-xs text-slate-500">Alta</p>
+                  <p className="font-semibold text-slate-700">
+                    {formatoFecha(categoria.fecha_creacion)}
+                  </p>
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => abrirEditar(categoria)}
+                    className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold transition"
+                    title="Editar"
+                  >
+                    <Pencil size={18} />
+                    Editar
+                  </button>
+
+                  <button
+                    onClick={() => desactivarCategoria(categoria)}
+                    disabled={!categoria.activo}
+                    className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-red-50 text-red-700 hover:bg-red-100 font-bold transition disabled:opacity-40"
+                    title="Desactivar"
+                  >
+                    <Trash2 size={18} />
+                    Desactivar
+                  </button>
+                </div>
+              </article>
+            ))
+          )}
+        </div>
+
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full min-w-[900px]">
             <thead className="bg-slate-50 border-b border-slate-100">
               <tr>
@@ -343,7 +436,7 @@ export default function Categorias() {
                 <th className="px-5 py-4 text-left text-xs font-bold text-slate-500 uppercase">
                   Alta
                 </th>
-                <th className="px-5 py-4 text-center text-xs font-bold text-slate-500 uppercase">
+                <th className="px-5 py-4 text-center text-xs font-bold text-slate-500 uppercase sticky right-0 bg-slate-50 shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.45)] z-10">
                   Acciones
                 </th>
               </tr>
@@ -367,12 +460,12 @@ export default function Categorias() {
                   <tr key={categoria.id_categoria} className="hover:bg-slate-50">
                     <td className="px-5 py-4">
                       <div className="flex items-start gap-3">
-                        <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+                        <div className="w-10 h-10 rounded-2xl bg-sky-50 text-sky-700 flex items-center justify-center shrink-0">
                           <Tags size={19} />
                         </div>
 
-                        <div>
-                          <p className="font-bold text-slate-800">
+                        <div className="min-w-0">
+                          <p className="font-bold text-slate-800 break-words">
                             {categoria.nombre}
                           </p>
                           <p className="text-xs text-slate-400 mt-1">
@@ -385,7 +478,7 @@ export default function Categorias() {
                     <td className="px-5 py-4 text-sm text-slate-600 max-w-xl">
                       <div className="flex items-start gap-2">
                         <FileText size={15} className="text-slate-400 mt-0.5 shrink-0" />
-                        <span className="line-clamp-2">
+                        <span className="line-clamp-2 break-words">
                           {categoria.descripcion || '—'}
                         </span>
                       </div>
@@ -395,7 +488,7 @@ export default function Categorias() {
                       <span
                         className={`text-xs font-bold px-3 py-1 rounded-full ${
                           categoria.activo
-                            ? 'bg-emerald-100 text-emerald-700'
+                            ? 'bg-sky-100 text-sky-700'
                             : 'bg-slate-200 text-slate-600'
                         }`}
                       >
@@ -407,7 +500,7 @@ export default function Categorias() {
                       {formatoFecha(categoria.fecha_creacion)}
                     </td>
 
-                    <td className="px-5 py-4">
+                    <td className="px-5 py-4 sticky right-0 bg-white shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.45)]">
                       <div className="flex items-center justify-center gap-2">
                         <button
                           onClick={() => abrirEditar(categoria)}
@@ -436,11 +529,16 @@ export default function Categorias() {
       </section>
 
       {modalAbierto && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden">
-            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-bold text-slate-800">
+        <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center px-3 sm:px-4 py-4 sm:py-8 overflow-y-auto">
+          <div
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm"
+            onClick={cerrarModal}
+          />
+
+          <div className="relative bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden my-auto">
+            <div className="px-4 sm:px-6 py-5 border-b border-slate-100 flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h2 className="text-lg sm:text-xl font-bold text-slate-800">
                   {modoEdicion ? 'Editar categoría' : 'Nueva categoría'}
                 </h2>
                 <p className="text-sm text-slate-500">
@@ -450,14 +548,14 @@ export default function Categorias() {
 
               <button
                 onClick={cerrarModal}
-                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center"
+                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center shrink-0"
               >
                 <X size={20} />
               </button>
             </div>
 
-            <form onSubmit={guardarCategoria} className="p-6">
-              <div className="space-y-5">
+            <form onSubmit={guardarCategoria}>
+              <div className="p-4 sm:p-6 space-y-5 max-h-[70vh] overflow-y-auto">
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-2">
                     Nombre *
@@ -471,7 +569,7 @@ export default function Categorias() {
                       name="nombre"
                       value={form.nombre}
                       onChange={handleChange}
-                      className="w-full pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
                       placeholder="Ej. Analgésicos"
                     />
                   </div>
@@ -486,7 +584,7 @@ export default function Categorias() {
                     value={form.descripcion}
                     onChange={handleChange}
                     rows="4"
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 resize-none"
                     placeholder="Descripción opcional de la categoría"
                   />
                 </div>
@@ -498,7 +596,7 @@ export default function Categorias() {
                       name="activo"
                       checked={form.activo}
                       onChange={handleChange}
-                      className="w-5 h-5 accent-emerald-700"
+                      className="w-5 h-5 accent-sky-700 shrink-0"
                     />
                     <span className="font-semibold text-slate-700">
                       Categoría activa
@@ -507,11 +605,11 @@ export default function Categorias() {
                 )}
               </div>
 
-              <div className="mt-6 flex justify-end gap-3 border-t border-slate-100 pt-5">
+              <div className="px-4 sm:px-6 py-5 flex flex-col sm:flex-row justify-end gap-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={cerrarModal}
-                  className="px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition"
+                  className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition"
                 >
                   Cancelar
                 </button>
@@ -519,14 +617,14 @@ export default function Categorias() {
                 <button
                   type="submit"
                   disabled={guardando}
-                  className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold transition disabled:opacity-60"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold transition disabled:opacity-60"
                 >
                   <Save size={19} />
                   {guardando
                     ? 'Guardando...'
                     : modoEdicion
-                    ? 'Actualizar categoría'
-                    : 'Guardar categoría'}
+                      ? 'Actualizar categoría'
+                      : 'Guardar categoría'}
                 </button>
               </div>
             </form>

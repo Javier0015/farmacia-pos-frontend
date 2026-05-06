@@ -3,6 +3,7 @@ export const permisosPorRol = {
     'dashboard',
     'productos',
     'inventario',
+    'stock-sucursales',
     'pos',
     'caja',
     'cajas',
@@ -13,32 +14,43 @@ export const permisosPorRol = {
     'tarjetas-puntos',
     'sucursales',
     'categorias',
+    'alertas',
+    'puntos',
+    'recetas-admin',
+    'ofertas',
   ],
 
   ADMIN_SUCURSAL: [
     'dashboard',
     'productos',
     'inventario',
+    'stock-sucursales',
     'pos',
     'caja',
     'ventas',
     'proveedores',
     'compras',
     'tarjetas-puntos',
+    'alertas',
+    'configuracion-puntos',
+    'recetas-admin',
   ],
 
   CAJERO: [
     'dashboard',
     'pos',
+    'stock-sucursales',
     'caja',
     'ventas',
     'tarjetas-puntos',
+    'recetas-admin',
   ],
 
   ALMACEN: [
     'dashboard',
     'productos',
     'inventario',
+    'stock-sucursales',
   ],
 
   COMPRAS: [
@@ -46,13 +58,23 @@ export const permisosPorRol = {
     'proveedores',
     'compras',
     'inventario',
+    'stock-sucursales',
   ],
 
   LECTURA: [
     'dashboard',
     'ventas',
     'inventario',
+    'stock-sucursales',
   ],
+
+  DOCTOR: [
+    'doctor-perfil',
+    'stock-sucursales',
+
+    'recetas',
+  ],
+
 };
 
 export const tienePermiso = (rol, modulo) => {

@@ -21,7 +21,7 @@ export default function NoAutorizado() {
 
         <button
           onClick={() => navigate('/app/dashboard')}
-          className="mt-6 inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold transition"
+          className="mt-6 inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold transition"
         >
           <ArrowLeft size={19} />
           Volver al dashboard

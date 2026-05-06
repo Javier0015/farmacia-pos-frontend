@@ -288,7 +288,7 @@ export default function Sucursales() {
       <section className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
         <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+            <div className="w-12 h-12 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center">
               <Store size={25} />
             </div>
 
@@ -304,7 +304,7 @@ export default function Sucursales() {
 
           <button
             onClick={abrirNuevo}
-            className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold shadow-lg shadow-emerald-900/20 transition"
+            className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold shadow-lg shadow-sky-900/20 transition"
           >
             <Plus size={20} />
             Nueva sucursal
@@ -320,7 +320,7 @@ export default function Sucursales() {
             <input
               value={buscar}
               onChange={(e) => setBuscar(e.target.value)}
-              className="w-full pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="w-full pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
               placeholder="Buscar por nombre, clave, dirección, teléfono, correo o responsable..."
             />
           </div>
@@ -337,7 +337,7 @@ export default function Sucursales() {
 
       <section className="grid sm:grid-cols-3 gap-5">
         <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+          <div className="w-12 h-12 rounded-2xl bg-sky-50 text-sky-700 flex items-center justify-center">
             <Store size={24} />
           </div>
           <p className="text-sm text-slate-500 mt-5">Total sucursales</p>
@@ -351,7 +351,7 @@ export default function Sucursales() {
             <CheckCircle size={24} />
           </div>
           <p className="text-sm text-slate-500 mt-5">Activas</p>
-          <h3 className="text-3xl font-bold text-emerald-700 mt-1">
+          <h3 className="text-3xl font-bold text-sky-700 mt-1">
             {resumen.activas}
           </h3>
         </div>
@@ -417,7 +417,7 @@ export default function Sucursales() {
                   <tr key={sucursal.id_sucursal} className="hover:bg-slate-50">
                     <td className="px-5 py-4">
                       <div className="flex items-start gap-3">
-                        <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+                        <div className="w-10 h-10 rounded-2xl bg-sky-50 text-sky-700 flex items-center justify-center shrink-0">
                           <Store size={19} />
                         </div>
 
@@ -473,7 +473,7 @@ export default function Sucursales() {
                       <span
                         className={`text-xs font-bold px-3 py-1 rounded-full ${
                           sucursal.activo
-                            ? 'bg-emerald-100 text-emerald-700'
+                            ? 'bg-sky-100 text-sky-700'
                             : 'bg-slate-200 text-slate-600'
                         }`}
                       >
@@ -549,7 +549,7 @@ export default function Sucursales() {
                       name="nombre"
                       value={form.nombre}
                       onChange={handleChange}
-                      className="w-full pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
                       placeholder="Ej. Farmacia Centro"
                     />
                   </div>
@@ -573,7 +573,7 @@ export default function Sucursales() {
                           clave: e.target.value.toUpperCase(),
                         })
                       }
-                      className="w-full pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 uppercase"
+                      className="w-full pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 uppercase"
                       placeholder="Ej. CENTRO"
                     />
                   </div>
@@ -595,7 +595,7 @@ export default function Sucursales() {
                       name="responsable"
                       value={form.responsable}
                       onChange={handleChange}
-                      className="w-full pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
                       placeholder="Nombre del encargado"
                     />
                   </div>
@@ -614,7 +614,7 @@ export default function Sucursales() {
                       name="telefono"
                       value={form.telefono}
                       onChange={handleChange}
-                      className="w-full pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
                       placeholder="7711234567"
                     />
                   </div>
@@ -633,7 +633,7 @@ export default function Sucursales() {
                       name="correo"
                       value={form.correo}
                       onChange={handleChange}
-                      className="w-full pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
                       placeholder="sucursal@farmacia.com"
                     />
                   </div>
@@ -653,7 +653,7 @@ export default function Sucursales() {
                       value={form.direccion}
                       onChange={handleChange}
                       rows="3"
-                      className="w-full pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+                      className="w-full pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 resize-none"
                       placeholder="Calle, número, colonia, municipio..."
                     />
                   </div>
@@ -667,7 +667,7 @@ export default function Sucursales() {
                         name="activo"
                         checked={form.activo}
                         onChange={handleChange}
-                        className="w-5 h-5 accent-emerald-700"
+                        className="w-5 h-5 accent-sky-700"
                       />
                       <span className="font-semibold text-slate-700">
                         Sucursal activa
@@ -689,7 +689,7 @@ export default function Sucursales() {
                 <button
                   type="submit"
                   disabled={guardando}
-                  className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold transition disabled:opacity-60"
+                  className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold transition disabled:opacity-60"
                 >
                   <Save size={19} />
                   {guardando

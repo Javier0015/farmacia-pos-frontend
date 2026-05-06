@@ -140,6 +140,37 @@ export default function Inventario() {
     };
   }, [inventario]);
 
+  const formatoMoneda = (valor) => {
+    return Number(valor || 0).toLocaleString('es-MX', {
+      style: 'currency',
+      currency: 'MXN',
+    });
+  };
+
+  const formatoNumero = (valor) => {
+    return Number(valor || 0).toLocaleString('es-MX', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    });
+  };
+
+  const formatoFecha = (fecha) => {
+    if (!fecha) return '—';
+
+    return new Date(fecha).toLocaleString('es-MX', {
+      dateStyle: 'short',
+      timeStyle: 'short',
+    });
+  };
+
+  const getProductoNombre = (idProducto) => {
+    const producto = productos.find(
+      (p) => Number(p.id_producto) === Number(idProducto)
+    );
+
+    return producto?.nombre || '';
+  };
+
   const cargarSucursales = async () => {
     try {
       const { data } = await api.get('/sucursales');
@@ -652,57 +683,26 @@ export default function Inventario() {
     }
   };
 
-  const formatoMoneda = (valor) => {
-    return Number(valor || 0).toLocaleString('es-MX', {
-      style: 'currency',
-      currency: 'MXN',
-    });
-  };
-
-  const formatoNumero = (valor) => {
-    return Number(valor || 0).toLocaleString('es-MX', {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
-    });
-  };
-
-  const formatoFecha = (fecha) => {
-    if (!fecha) return '—';
-
-    return new Date(fecha).toLocaleString('es-MX', {
-      dateStyle: 'short',
-      timeStyle: 'short',
-    });
-  };
-
-  const getProductoNombre = (idProducto) => {
-    const producto = productos.find(
-      (p) => Number(p.id_producto) === Number(idProducto)
-    );
-
-    return producto?.nombre || '';
-  };
-
   return (
-    <div className="space-y-6">
-      <section className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+    <div className="w-full max-w-full overflow-hidden space-y-5 sm:space-y-6 pb-8">
+      <section className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-sm border border-slate-100 overflow-hidden">
         <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+          <div className="flex items-start sm:items-center gap-3 min-w-0">
+            <div className="w-12 h-12 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
               <Boxes size={25} />
             </div>
 
-            <div>
-              <h1 className="text-2xl font-bold text-slate-800">
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-800 break-words">
                 Inventario
               </h1>
-              <p className="text-slate-500">
+              <p className="text-sm sm:text-base text-slate-500 leading-relaxed">
                 Control de stock por sucursal, entradas, salidas y ajustes.
               </p>
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:flex gap-3 w-full xl:w-auto">
             <button
               onClick={abrirBajoStock}
               className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-amber-100 hover:bg-amber-200 text-amber-800 font-bold transition"
@@ -729,7 +729,7 @@ export default function Inventario() {
 
             <button
               onClick={abrirAsignar}
-              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold shadow-lg shadow-emerald-900/20 transition"
+              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold shadow-lg shadow-sky-900/20 transition"
             >
               <Plus size={20} />
               Asignar stock
@@ -737,8 +737,8 @@ export default function Inventario() {
           </div>
         </div>
 
-        <div className="mt-6 grid md:grid-cols-4 gap-4">
-          <div>
+        <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="min-w-0">
             <label className="block text-sm font-bold text-slate-700 mb-2">
               Sucursal
             </label>
@@ -747,7 +747,7 @@ export default function Inventario() {
               <select
                 value={idSucursal}
                 onChange={(e) => setIdSucursal(e.target.value)}
-                className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
               >
                 <option value="">Selecciona sucursal</option>
                 {sucursales.map((sucursal) => (
@@ -760,7 +760,7 @@ export default function Inventario() {
                 ))}
               </select>
             ) : (
-              <div className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 text-slate-700 font-semibold">
+              <div className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 text-slate-700 font-semibold truncate">
                 {sucursalActual?.nombre ||
                   sucursales[0]?.nombre ||
                   'Sucursal asignada'}
@@ -768,12 +768,12 @@ export default function Inventario() {
             )}
           </div>
 
-          <div className="md:col-span-3">
+          <div className="md:col-span-3 min-w-0">
             <label className="block text-sm font-bold text-slate-700 mb-2">
               Buscar
             </label>
             <div className="flex flex-col sm:flex-row gap-3">
-              <div className="relative flex-1">
+              <div className="relative flex-1 min-w-0">
                 <Search
                   className="absolute left-4 top-3.5 text-slate-400"
                   size={20}
@@ -784,14 +784,14 @@ export default function Inventario() {
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') cargarInventario();
                   }}
-                  className="w-full pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="w-full min-w-0 pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
                   placeholder="Buscar por producto, código, laboratorio o presentación..."
                 />
               </div>
 
               <button
                 onClick={cargarInventario}
-                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition"
               >
                 <RefreshCw size={19} className={cargando ? 'animate-spin' : ''} />
                 Buscar
@@ -801,28 +801,28 @@ export default function Inventario() {
         </div>
       </section>
 
-      <section className="grid sm:grid-cols-2 xl:grid-cols-4 gap-5">
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+      <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-5">
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0">
+          <div className="w-12 h-12 rounded-2xl bg-sky-50 text-sky-700 flex items-center justify-center">
             <Package size={24} />
           </div>
           <p className="text-sm text-slate-500 mt-5">
             Productos en inventario
           </p>
-          <h3 className="text-3xl font-bold text-slate-800 mt-1">
+          <h3 className="text-3xl font-bold text-slate-800 mt-1 break-words">
             {resumen.totalProductos}
           </h3>
-          <p className="text-sm text-slate-400 mt-2">
+          <p className="text-sm text-slate-400 mt-2 truncate">
             {sucursalActual?.nombre || 'Sin sucursal'}
           </p>
         </div>
 
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0">
           <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center">
             <AlertTriangle size={24} />
           </div>
           <p className="text-sm text-slate-500 mt-5">Bajo stock</p>
-          <h3 className="text-3xl font-bold text-slate-800 mt-1">
+          <h3 className="text-3xl font-bold text-slate-800 mt-1 break-words">
             {resumen.productosBajoStock}
           </h3>
           <p className="text-sm text-slate-400 mt-2">
@@ -830,12 +830,12 @@ export default function Inventario() {
           </p>
         </div>
 
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0">
           <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-700 flex items-center justify-center">
             <Warehouse size={24} />
           </div>
           <p className="text-sm text-slate-500 mt-5">Valor de compra</p>
-          <h3 className="text-3xl font-bold text-slate-800 mt-1">
+          <h3 className="text-2xl sm:text-3xl font-bold text-slate-800 mt-1 break-words">
             {formatoMoneda(resumen.valorInventario)}
           </h3>
           <p className="text-sm text-slate-400 mt-2">
@@ -843,12 +843,12 @@ export default function Inventario() {
           </p>
         </div>
 
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0">
           <div className="w-12 h-12 rounded-2xl bg-violet-50 text-violet-700 flex items-center justify-center">
             <Boxes size={24} />
           </div>
           <p className="text-sm text-slate-500 mt-5">Valor de venta</p>
-          <h3 className="text-3xl font-bold text-slate-800 mt-1">
+          <h3 className="text-2xl sm:text-3xl font-bold text-slate-800 mt-1 break-words">
             {formatoMoneda(resumen.valorVentaEstimado)}
           </h3>
           <p className="text-sm text-slate-400 mt-2">
@@ -857,8 +857,156 @@ export default function Inventario() {
         </div>
       </section>
 
-      <section className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-        <div className="overflow-x-auto">
+      <section className="bg-white rounded-2xl sm:rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+        <div className="px-4 sm:px-6 py-5 border-b border-slate-100">
+          <h2 className="text-lg sm:text-xl font-bold text-slate-800">
+            Productos en inventario
+          </h2>
+          <p className="text-sm text-slate-500">
+            Existencias, ubicación, caducidad y acciones por producto.
+          </p>
+        </div>
+
+        <div className="md:hidden p-4 space-y-3">
+          {cargando ? (
+            <div className="rounded-2xl bg-slate-50 p-6 text-center text-slate-500 font-semibold">
+              Cargando inventario...
+            </div>
+          ) : inventario.length === 0 ? (
+            <div className="rounded-2xl bg-slate-50 p-6 text-center text-slate-500 font-semibold">
+              No hay productos con inventario asignado en esta sucursal.
+            </div>
+          ) : (
+            inventario.map((item) => (
+              <article
+                key={item.id_inventario}
+                className={`rounded-2xl border p-4 shadow-sm ${
+                  item.bajo_stock
+                    ? 'bg-amber-50/60 border-amber-100'
+                    : 'bg-white border-slate-100'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-bold text-slate-800 break-words">
+                      {item.producto}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1 break-words">
+                      {item.laboratorio || 'Sin laboratorio'} ·{' '}
+                      {item.presentacion || 'Sin presentación'}
+                    </p>
+                  </div>
+
+                  {item.bajo_stock ? (
+                    <span className="inline-flex items-center gap-1 text-xs font-bold px-3 py-1 rounded-full bg-amber-100 text-amber-800 shrink-0">
+                      <AlertTriangle size={13} />
+                      Bajo
+                    </span>
+                  ) : (
+                    <span className="text-xs font-bold px-3 py-1 rounded-full bg-sky-100 text-sky-700 shrink-0">
+                      Correcto
+                    </span>
+                  )}
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                  <div className="rounded-xl bg-slate-50 p-3">
+                    <p className="text-xs text-slate-500">Código</p>
+                    <p className="font-bold text-slate-700 truncate">
+                      {item.codigo_barras || '—'}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl bg-slate-50 p-3">
+                    <p className="text-xs text-slate-500">Categoría</p>
+                    <p className="font-bold text-slate-700 truncate">
+                      {item.categoria || 'Sin categoría'}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl bg-slate-50 p-3">
+                    <p className="text-xs text-slate-500">Stock</p>
+                    <p className="font-bold text-slate-800">
+                      {formatoNumero(item.stock_actual)}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl bg-slate-50 p-3">
+                    <p className="text-xs text-slate-500">Mínimo</p>
+                    <p className="font-bold text-slate-700">
+                      {formatoNumero(item.stock_minimo)}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl bg-slate-50 p-3">
+                    <p className="text-xs text-slate-500">Ubicación</p>
+                    <p className="font-bold text-slate-700 truncate">
+                      {item.ubicacion || '—'}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl bg-slate-50 p-3">
+                    <p className="text-xs text-slate-500">Precio venta</p>
+                    <p className="font-bold text-sky-700">
+                      {formatoMoneda(item.precio_venta)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-3 rounded-xl bg-slate-50 p-3">
+                  <p className="text-xs text-slate-500">Próxima caducidad</p>
+                  {item.proxima_caducidad ? (
+                    <p
+                      className={`font-bold ${
+                        item.caducidad_proxima ? 'text-red-700' : 'text-slate-700'
+                      }`}
+                    >
+                      {new Date(item.proxima_caducidad).toLocaleDateString('es-MX')}
+                    </p>
+                  ) : (
+                    <p className="font-bold text-slate-400">—</p>
+                  )}
+                </div>
+
+                <div className="mt-4 grid grid-cols-4 gap-2">
+                  <button
+                    onClick={() => abrirMovimiento(item, 'ENTRADA')}
+                    className="h-11 rounded-xl bg-sky-50 text-sky-700 hover:bg-sky-100 flex items-center justify-center transition"
+                    title="Entrada"
+                  >
+                    <ArrowDownCircle size={19} />
+                  </button>
+
+                  <button
+                    onClick={() => abrirMovimiento(item, 'SALIDA')}
+                    className="h-11 rounded-xl bg-red-50 text-red-700 hover:bg-red-100 flex items-center justify-center transition"
+                    title="Salida"
+                  >
+                    <ArrowUpCircle size={19} />
+                  </button>
+
+                  <button
+                    onClick={() => abrirMovimiento(item, 'AJUSTE_POSITIVO')}
+                    className="h-11 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 flex items-center justify-center transition"
+                    title="Ajuste"
+                  >
+                    <RefreshCw size={18} />
+                  </button>
+
+                  <button
+                    onClick={() => abrirLotes(item)}
+                    className="h-11 rounded-xl bg-violet-50 text-violet-700 hover:bg-violet-100 flex items-center justify-center transition"
+                    title="Ver lotes"
+                  >
+                    <Package size={18} />
+                  </button>
+                </div>
+              </article>
+            ))
+          )}
+        </div>
+
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full min-w-[1250px]">
             <thead className="bg-slate-50 border-b border-slate-100">
               <tr>
@@ -889,7 +1037,7 @@ export default function Inventario() {
                 <th className="px-5 py-4 text-center text-xs font-bold text-slate-500 uppercase">
                   Estado
                 </th>
-                <th className="px-5 py-4 text-center text-xs font-bold text-slate-500 uppercase">
+                <th className="px-5 py-4 text-center text-xs font-bold text-slate-500 uppercase sticky right-0 bg-slate-50 shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.45)] z-10">
                   Acciones
                 </th>
               </tr>
@@ -968,7 +1116,7 @@ export default function Inventario() {
                       {formatoNumero(item.stock_minimo)}
                     </td>
 
-                    <td className="px-5 py-4 text-right font-bold text-emerald-700">
+                    <td className="px-5 py-4 text-right font-bold text-sky-700">
                       {formatoMoneda(item.precio_venta)}
                     </td>
 
@@ -979,17 +1127,17 @@ export default function Inventario() {
                           Bajo stock
                         </span>
                       ) : (
-                        <span className="text-xs font-bold px-3 py-1 rounded-full bg-emerald-100 text-emerald-700">
+                        <span className="text-xs font-bold px-3 py-1 rounded-full bg-sky-100 text-sky-700">
                           Correcto
                         </span>
                       )}
                     </td>
 
-                    <td className="px-5 py-4">
+                    <td className="px-5 py-4 sticky right-0 bg-white shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.45)]">
                       <div className="flex items-center justify-center gap-2">
                         <button
                           onClick={() => abrirMovimiento(item, 'ENTRADA')}
-                          className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 flex items-center justify-center transition"
+                          className="w-9 h-9 rounded-xl bg-sky-50 text-sky-700 hover:bg-sky-100 flex items-center justify-center transition"
                           title="Entrada"
                         >
                           <ArrowDownCircle size={18} />
@@ -1029,29 +1177,34 @@ export default function Inventario() {
       </section>
 
       {modalAsignar && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden">
-            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-bold text-slate-800">
+        <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center px-3 sm:px-4 py-4 sm:py-8 overflow-y-auto">
+          <div
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm"
+            onClick={cerrarModalAsignar}
+          />
+
+          <div className="relative bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden my-auto">
+            <div className="px-4 sm:px-6 py-5 border-b border-slate-100 flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h2 className="text-lg sm:text-xl font-bold text-slate-800">
                   Asignar stock inicial
                 </h2>
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-slate-500 break-words">
                   Sucursal: {sucursalActual?.nombre || 'Sin sucursal'}
                 </p>
               </div>
 
               <button
                 onClick={cerrarModalAsignar}
-                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center"
+                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center shrink-0"
               >
                 <X size={20} />
               </button>
             </div>
 
-            <form onSubmit={asignarInventario} className="p-6">
-              <div className="grid md:grid-cols-2 gap-5">
-                <div className="md:col-span-2">
+            <form onSubmit={asignarInventario}>
+              <div className="p-4 sm:p-6 grid grid-cols-1 md:grid-cols-2 gap-5 max-h-[70vh] overflow-y-auto">
+                <div className="md:col-span-2 min-w-0">
                   <label className="block text-sm font-bold text-slate-700 mb-2">
                     Producto *
                   </label>
@@ -1059,7 +1212,7 @@ export default function Inventario() {
                     name="id_producto"
                     value={formAsignar.id_producto}
                     onChange={handleAsignarChange}
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
                   >
                     <option value="">Selecciona producto</option>
                     {productosSinInventario.map((producto) => (
@@ -1088,7 +1241,7 @@ export default function Inventario() {
                     name="stock_inicial"
                     value={formAsignar.stock_inicial}
                     onChange={handleAsignarChange}
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
                     placeholder="0"
                   />
                 </div>
@@ -1103,7 +1256,7 @@ export default function Inventario() {
                     name="stock_minimo"
                     value={formAsignar.stock_minimo}
                     onChange={handleAsignarChange}
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
                     placeholder="0"
                   />
                 </div>
@@ -1116,7 +1269,7 @@ export default function Inventario() {
                     name="ubicacion"
                     value={formAsignar.ubicacion}
                     onChange={handleAsignarChange}
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
                     placeholder="Anaquel A1"
                   />
                 </div>
@@ -1129,7 +1282,7 @@ export default function Inventario() {
                     name="lote"
                     value={formAsignar.lote}
                     onChange={handleAsignarChange}
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
                     placeholder="Ej. PAR-2026-A"
                   />
                 </div>
@@ -1143,7 +1296,7 @@ export default function Inventario() {
                     name="fecha_caducidad"
                     value={formAsignar.fecha_caducidad}
                     onChange={handleAsignarChange}
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
                   />
                 </div>
 
@@ -1157,7 +1310,7 @@ export default function Inventario() {
                     name="precio_compra"
                     value={formAsignar.precio_compra}
                     onChange={handleAsignarChange}
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
                     placeholder="0.00"
                   />
                 </div>
@@ -1170,17 +1323,17 @@ export default function Inventario() {
                     name="observaciones"
                     value={formAsignar.observaciones}
                     onChange={handleAsignarChange}
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
                     placeholder="Carga inicial"
                   />
                 </div>
               </div>
 
-              <div className="mt-6 flex justify-end gap-3 border-t border-slate-100 pt-5">
+              <div className="px-4 sm:px-6 py-5 flex flex-col sm:flex-row justify-end gap-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={cerrarModalAsignar}
-                  className="px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition"
+                  className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition"
                 >
                   Cancelar
                 </button>
@@ -1188,7 +1341,7 @@ export default function Inventario() {
                 <button
                   type="submit"
                   disabled={guardando}
-                  className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold transition disabled:opacity-60"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold transition disabled:opacity-60"
                 >
                   <Save size={19} />
                   {guardando ? 'Guardando...' : 'Guardar'}
@@ -1200,14 +1353,19 @@ export default function Inventario() {
       )}
 
       {modalMovimiento && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden">
-            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-bold text-slate-800">
+        <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center px-3 sm:px-4 py-4 sm:py-8 overflow-y-auto">
+          <div
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm"
+            onClick={cerrarModalMovimiento}
+          />
+
+          <div className="relative bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden my-auto">
+            <div className="px-4 sm:px-6 py-5 border-b border-slate-100 flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h2 className="text-lg sm:text-xl font-bold text-slate-800">
                   Movimiento de inventario
                 </h2>
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-slate-500 break-words">
                   {getProductoNombre(formMovimiento.id_producto) ||
                     'Selecciona un producto'}
                 </p>
@@ -1215,14 +1373,14 @@ export default function Inventario() {
 
               <button
                 onClick={cerrarModalMovimiento}
-                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center"
+                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center shrink-0"
               >
                 <X size={20} />
               </button>
             </div>
 
-            <form onSubmit={guardarMovimiento} className="p-6">
-              <div className="grid md:grid-cols-2 gap-5">
+            <form onSubmit={guardarMovimiento}>
+              <div className="p-4 sm:p-6 grid grid-cols-1 md:grid-cols-2 gap-5 max-h-[70vh] overflow-y-auto">
                 <div className="md:col-span-2">
                   <label className="block text-sm font-bold text-slate-700 mb-2">
                     Producto *
@@ -1231,7 +1389,7 @@ export default function Inventario() {
                     name="id_producto"
                     value={formMovimiento.id_producto}
                     onChange={handleMovimientoChange}
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
                   >
                     <option value="">Selecciona producto</option>
                     {inventario.map((item) => (
@@ -1250,7 +1408,7 @@ export default function Inventario() {
                     name="tipo_movimiento"
                     value={formMovimiento.tipo_movimiento}
                     onChange={handleMovimientoChange}
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
                   >
                     {tiposMovimiento.map((tipo) => (
                       <option key={tipo.value} value={tipo.value}>
@@ -1269,7 +1427,7 @@ export default function Inventario() {
                       name="id_lote"
                       value={formMovimiento.id_lote}
                       onChange={handleMovimientoChange}
-                      className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
                     >
                       <option value="">Automático FEFO</option>
                       {lotes
@@ -1308,7 +1466,7 @@ export default function Inventario() {
                     name="cantidad"
                     value={formMovimiento.cantidad}
                     onChange={handleMovimientoChange}
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
                     placeholder="0"
                   />
                 </div>
@@ -1323,7 +1481,7 @@ export default function Inventario() {
                         name="lote"
                         value={formMovimiento.lote}
                         onChange={handleMovimientoChange}
-                        className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
                         placeholder="Ej. PAR-2026-B"
                       />
                     </div>
@@ -1337,7 +1495,7 @@ export default function Inventario() {
                         name="fecha_caducidad"
                         value={formMovimiento.fecha_caducidad}
                         onChange={handleMovimientoChange}
-                        className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
                       />
                     </div>
 
@@ -1351,7 +1509,7 @@ export default function Inventario() {
                         name="precio_compra"
                         value={formMovimiento.precio_compra}
                         onChange={handleMovimientoChange}
-                        className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
                         placeholder="0.00"
                       />
                     </div>
@@ -1368,7 +1526,7 @@ export default function Inventario() {
                     name="stock_minimo"
                     value={formMovimiento.stock_minimo}
                     onChange={handleMovimientoChange}
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
                     placeholder="Opcional"
                   />
                 </div>
@@ -1381,7 +1539,7 @@ export default function Inventario() {
                     name="ubicacion"
                     value={formMovimiento.ubicacion}
                     onChange={handleMovimientoChange}
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
                     placeholder="Anaquel A1"
                   />
                 </div>
@@ -1394,7 +1552,7 @@ export default function Inventario() {
                     name="referencia"
                     value={formMovimiento.referencia}
                     onChange={handleMovimientoChange}
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
                     placeholder="COMPRA-001, AJUSTE-001..."
                   />
                 </div>
@@ -1407,17 +1565,17 @@ export default function Inventario() {
                     name="observaciones"
                     value={formMovimiento.observaciones}
                     onChange={handleMovimientoChange}
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
                     placeholder="Motivo del movimiento"
                   />
                 </div>
               </div>
 
-              <div className="mt-6 flex justify-end gap-3 border-t border-slate-100 pt-5">
+              <div className="px-4 sm:px-6 py-5 flex flex-col sm:flex-row justify-end gap-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={cerrarModalMovimiento}
-                  className="px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition"
+                  className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition"
                 >
                   Cancelar
                 </button>
@@ -1425,7 +1583,7 @@ export default function Inventario() {
                 <button
                   type="submit"
                   disabled={guardando}
-                  className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold transition disabled:opacity-60"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold transition disabled:opacity-60"
                 >
                   <Save size={19} />
                   {guardando ? 'Guardando...' : 'Guardar movimiento'}
@@ -1437,27 +1595,32 @@ export default function Inventario() {
       )}
 
       {modalLotes && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden">
-            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-bold text-slate-800">
+        <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center px-3 sm:px-4 py-4 sm:py-8 overflow-y-auto">
+          <div
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm"
+            onClick={() => setModalLotes(false)}
+          />
+
+          <div className="relative bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden my-auto">
+            <div className="px-4 sm:px-6 py-5 border-b border-slate-100 flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h2 className="text-lg sm:text-xl font-bold text-slate-800">
                   Lotes del producto
                 </h2>
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-slate-500 break-words">
                   {productoLotes?.producto || 'Producto'}
                 </p>
               </div>
 
               <button
                 onClick={() => setModalLotes(false)}
-                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center"
+                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center shrink-0"
               >
                 <X size={20} />
               </button>
             </div>
 
-            <div className="p-6 overflow-y-auto max-h-[75vh]">
+            <div className="p-4 sm:p-6 overflow-y-auto max-h-[75vh]">
               {lotes.length === 0 ? (
                 <div className="text-center py-10 text-slate-500">
                   No hay lotes registrados para este producto.
@@ -1521,7 +1684,7 @@ export default function Inventario() {
                                 Por caducar
                               </span>
                             ) : (
-                              <span className="text-xs font-bold px-3 py-1 rounded-full bg-emerald-100 text-emerald-700">
+                              <span className="text-xs font-bold px-3 py-1 rounded-full bg-sky-100 text-sky-700">
                                 Vigente
                               </span>
                             )}
@@ -1542,11 +1705,16 @@ export default function Inventario() {
       )}
 
       {modalCaducidad && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden">
-            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-bold text-slate-800">
+        <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center px-3 sm:px-4 py-4 sm:py-8 overflow-y-auto">
+          <div
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm"
+            onClick={() => setModalCaducidad(false)}
+          />
+
+          <div className="relative bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden my-auto">
+            <div className="px-4 sm:px-6 py-5 border-b border-slate-100 flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h2 className="text-lg sm:text-xl font-bold text-slate-800">
                   Caducidad próxima
                 </h2>
                 <p className="text-sm text-slate-500">
@@ -1556,13 +1724,13 @@ export default function Inventario() {
 
               <button
                 onClick={() => setModalCaducidad(false)}
-                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center"
+                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center shrink-0"
               >
                 <X size={20} />
               </button>
             </div>
 
-            <div className="p-6 overflow-y-auto max-h-[75vh]">
+            <div className="p-4 sm:p-6 overflow-y-auto max-h-[75vh]">
               {caducidadProxima.length === 0 ? (
                 <div className="text-center py-10 text-slate-500">
                   No hay productos próximos a caducar.
@@ -1648,11 +1816,16 @@ export default function Inventario() {
       )}
 
       {modalBajoStock && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden">
-            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-bold text-slate-800">
+        <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center px-3 sm:px-4 py-4 sm:py-8 overflow-y-auto">
+          <div
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm"
+            onClick={() => setModalBajoStock(false)}
+          />
+
+          <div className="relative bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden my-auto">
+            <div className="px-4 sm:px-6 py-5 border-b border-slate-100 flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h2 className="text-lg sm:text-xl font-bold text-slate-800">
                   Productos con bajo stock
                 </h2>
                 <p className="text-sm text-slate-500">
@@ -1662,13 +1835,13 @@ export default function Inventario() {
 
               <button
                 onClick={() => setModalBajoStock(false)}
-                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center"
+                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center shrink-0"
               >
                 <X size={20} />
               </button>
             </div>
 
-            <div className="p-6 overflow-y-auto max-h-[75vh]">
+            <div className="p-4 sm:p-6 overflow-y-auto max-h-[75vh]">
               {bajoStock.length === 0 ? (
                 <div className="text-center py-10 text-slate-500">
                   No hay productos con bajo stock.
@@ -1726,11 +1899,16 @@ export default function Inventario() {
       )}
 
       {modalMovimientos && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden">
-            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-bold text-slate-800">
+        <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center px-3 sm:px-4 py-4 sm:py-8 overflow-y-auto">
+          <div
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm"
+            onClick={() => setModalMovimientos(false)}
+          />
+
+          <div className="relative bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden my-auto">
+            <div className="px-4 sm:px-6 py-5 border-b border-slate-100 flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h2 className="text-lg sm:text-xl font-bold text-slate-800">
                   Movimientos de inventario
                 </h2>
                 <p className="text-sm text-slate-500">
@@ -1740,13 +1918,13 @@ export default function Inventario() {
 
               <button
                 onClick={() => setModalMovimientos(false)}
-                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center"
+                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center shrink-0"
               >
                 <X size={20} />
               </button>
             </div>
 
-            <div className="p-6 overflow-y-auto max-h-[75vh]">
+            <div className="p-4 sm:p-6 overflow-y-auto max-h-[75vh]">
               {cargandoMovimientos ? (
                 <div className="text-center py-10 text-slate-500">
                   Cargando movimientos...
@@ -1807,7 +1985,7 @@ export default function Inventario() {
                           <td className="px-4 py-3 text-right text-slate-600">
                             {formatoNumero(mov.stock_anterior)}
                           </td>
-                          <td className="px-4 py-3 text-right text-emerald-700 font-bold">
+                          <td className="px-4 py-3 text-right text-sky-700 font-bold">
                             {formatoNumero(mov.stock_nuevo)}
                           </td>
                           <td className="px-4 py-3 text-slate-600">

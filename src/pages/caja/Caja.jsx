@@ -41,6 +41,21 @@ const tiposMovimiento = [
   { value: 'AJUSTE', label: 'Ajuste de caja' },
 ];
 
+const denominacionesCaja = [
+  { tipo: 'Billete', valor: 1000 },
+  { tipo: 'Billete', valor: 500 },
+  { tipo: 'Billete', valor: 200 },
+  { tipo: 'Billete', valor: 100 },
+  { tipo: 'Billete', valor: 50 },
+  { tipo: 'Billete', valor: 20 },
+  { tipo: 'Moneda', valor: 20 },
+  { tipo: 'Moneda', valor: 10 },
+  { tipo: 'Moneda', valor: 5 },
+  { tipo: 'Moneda', valor: 2 },
+  { tipo: 'Moneda', valor: 1 },
+  { tipo: 'Moneda', valor: 0.5 },
+];
+
 export default function Caja() {
   const { usuario } = useAuth();
 
@@ -67,7 +82,24 @@ export default function Caja() {
   const [montoInicial, setMontoInicial] = useState('');
   const [montoFinalReal, setMontoFinalReal] = useState('');
   const [observacionesCierre, setObservacionesCierre] = useState('');
+  const [conteoEfectivo, setConteoEfectivo] = useState({});
   const [formMovimiento, setFormMovimiento] = useState(movimientoInicial);
+
+  const formatoMoneda = (valor) => {
+    return Number(valor || 0).toLocaleString('es-MX', {
+      style: 'currency',
+      currency: 'MXN',
+    });
+  };
+
+  const formatoFecha = (fecha) => {
+    if (!fecha) return '—';
+
+    return new Date(fecha).toLocaleString('es-MX', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    });
+  };
 
   const sucursalActual = useMemo(() => {
     return sucursales.find((s) => Number(s.id_sucursal) === Number(idSucursal));
@@ -76,6 +108,21 @@ export default function Caja() {
   const cajaActual = useMemo(() => {
     return cajas.find((c) => Number(c.id_caja) === Number(idCaja));
   }, [cajas, idCaja]);
+
+  const estadoAbierta = Boolean(sesionAbierta);
+  const resumen = resumenCaja?.resumen;
+
+  const diferenciaActual =
+    montoFinalReal === ''
+      ? 0
+      : Number(montoFinalReal || 0) - Number(resumen?.monto_final_sistema || 0);
+
+  const totalConteoEfectivo = useMemo(() => {
+    return denominacionesCaja.reduce((acc, denominacion) => {
+      const cantidad = Number(conteoEfectivo[denominacion.valor] || 0);
+      return acc + cantidad * Number(denominacion.valor);
+    }, 0);
+  }, [conteoEfectivo]);
 
   const cargarSucursales = async () => {
     try {
@@ -428,6 +475,7 @@ export default function Caja() {
         setModalCerrar(false);
         setMontoFinalReal('');
         setObservacionesCierre('');
+        setConteoEfectivo({});
         setSesionAbierta(null);
         setResumenCaja(null);
         setMovimientos([]);
@@ -478,6 +526,8 @@ export default function Caja() {
     await cargarResumen();
 
     const montoSistema = Number(resumenCaja?.resumen?.monto_final_sistema || 0);
+
+    setConteoEfectivo({});
     setMontoFinalReal(String(montoSistema));
     setModalCerrar(true);
   };
@@ -496,48 +546,64 @@ export default function Caja() {
     setModalMovimientos(true);
   };
 
-  const formatoMoneda = (valor) => {
-    return Number(valor || 0).toLocaleString('es-MX', {
-      style: 'currency',
-      currency: 'MXN',
-    });
+  const cambiarConteoEfectivo = (valor, cantidad) => {
+    const cantidadLimpia = Math.max(Number(cantidad || 0), 0);
+
+    setConteoEfectivo((prev) => ({
+      ...prev,
+      [valor]: cantidadLimpia,
+    }));
   };
 
-  const formatoFecha = (fecha) => {
-    if (!fecha) return '—';
-
-    return new Date(fecha).toLocaleString('es-MX', {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    });
+  const aplicarConteoEfectivo = () => {
+    setMontoFinalReal(totalConteoEfectivo.toFixed(2));
   };
 
-  const estadoAbierta = Boolean(sesionAbierta);
-  const resumen = resumenCaja?.resumen;
+  const limpiarConteoEfectivo = () => {
+    setConteoEfectivo({});
+    setMontoFinalReal('');
+  };
 
-  const diferenciaActual =
-    montoFinalReal === ''
-      ? 0
-      : Number(montoFinalReal || 0) - Number(resumen?.monto_final_sistema || 0);
+  const claseMovimiento = (tipo) => {
+    if (['ENTRADA', 'VENTA', 'APERTURA'].includes(tipo)) {
+      return 'bg-sky-100 text-sky-700';
+    }
+
+    if (
+      [
+        'SALIDA',
+        'GASTO',
+        'RETIRO',
+        'PAGO_PROVEEDOR',
+        'DEVOLUCION',
+      ].includes(tipo)
+    ) {
+      return 'bg-red-100 text-red-700';
+    }
+
+    return 'bg-slate-100 text-slate-700';
+  };
 
   return (
-    <div className="space-y-6">
-      <section className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+    <div className="w-full max-w-full overflow-hidden space-y-5 sm:space-y-6 pb-8">
+      <section className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-sm border border-slate-100 overflow-hidden">
         <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+          <div className="flex items-start sm:items-center gap-3 min-w-0">
+            <div className="w-12 h-12 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
               <Wallet size={25} />
             </div>
 
-            <div>
-              <h1 className="text-2xl font-bold text-slate-800">Caja</h1>
-              <p className="text-slate-500">
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-800 break-words">
+                Caja
+              </h1>
+              <p className="text-sm sm:text-base text-slate-500 leading-relaxed">
                 Apertura, movimientos, resumen y corte de caja.
               </p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:flex gap-3 w-full xl:w-auto">
             <button
               onClick={refrescarTodo}
               className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition"
@@ -550,7 +616,7 @@ export default function Caja() {
               <button
                 onClick={() => setModalAbrir(true)}
                 disabled={!idCaja}
-                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold shadow-lg shadow-emerald-900/20 transition disabled:opacity-50"
+                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold shadow-lg shadow-sky-900/20 transition disabled:opacity-50"
               >
                 <UnlockKeyhole size={19} />
                 Abrir caja
@@ -567,8 +633,8 @@ export default function Caja() {
           </div>
         </div>
 
-        <div className="mt-6 grid md:grid-cols-2 gap-4">
-          <div>
+        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="min-w-0">
             <label className="block text-sm font-bold text-slate-700 mb-2">
               Sucursal
             </label>
@@ -580,7 +646,7 @@ export default function Caja() {
                   setIdSucursal(e.target.value);
                   setIdCaja('');
                 }}
-                className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
               >
                 <option value="">Selecciona sucursal</option>
                 {sucursales.map((sucursal) => (
@@ -593,7 +659,7 @@ export default function Caja() {
                 ))}
               </select>
             ) : (
-              <div className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 text-slate-700 font-semibold">
+              <div className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 text-slate-700 font-semibold truncate">
                 {sucursalActual?.nombre ||
                   sucursales[0]?.nombre ||
                   'Sucursal asignada'}
@@ -601,14 +667,14 @@ export default function Caja() {
             )}
           </div>
 
-          <div>
+          <div className="min-w-0">
             <label className="block text-sm font-bold text-slate-700 mb-2">
               Caja
             </label>
             <select
               value={idCaja}
               onChange={(e) => setIdCaja(e.target.value)}
-              className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
             >
               <option value="">Selecciona caja</option>
               {cajas.map((caja) => (
@@ -621,15 +687,16 @@ export default function Caja() {
         </div>
       </section>
 
-      <section className="grid lg:grid-cols-3 gap-5">
+      <section className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-5">
         <div
-          className={`rounded-3xl p-6 shadow-sm border ${estadoAbierta
-            ? 'bg-emerald-700 text-white border-emerald-600'
-            : 'bg-slate-900 text-white border-slate-800'
-            }`}
+          className={`rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border min-w-0 ${
+            estadoAbierta
+              ? 'bg-sky-700 text-white border-sky-600'
+              : 'bg-slate-900 text-white border-slate-800'
+          }`}
         >
-          <div className="flex items-center justify-between">
-            <div className="w-12 h-12 rounded-2xl bg-white/15 flex items-center justify-center">
+          <div className="flex items-center justify-between gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-white/15 flex items-center justify-center shrink-0">
               {estadoAbierta ? (
                 <UnlockKeyhole size={24} />
               ) : (
@@ -637,45 +704,45 @@ export default function Caja() {
               )}
             </div>
 
-            <span className="text-xs font-bold px-3 py-1 rounded-full bg-white/15">
+            <span className="text-xs font-bold px-3 py-1 rounded-full bg-white/15 shrink-0">
               {estadoAbierta ? 'ABIERTA' : 'CERRADA'}
             </span>
           </div>
 
           <p className="text-sm mt-5 opacity-80">Estado actual</p>
-          <h3 className="text-3xl font-bold mt-1">
+          <h3 className="text-2xl sm:text-3xl font-bold mt-1 break-words">
             {estadoAbierta ? 'Caja abierta' : 'Sin sesión'}
           </h3>
 
-          <p className="text-sm mt-3 opacity-80">
+          <p className="text-sm mt-3 opacity-80 break-words">
             {estadoAbierta
               ? `Apertura: ${formatoFecha(sesionAbierta?.fecha_apertura)}`
               : 'Abre caja para comenzar operaciones.'}
           </p>
         </div>
 
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0">
           <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-700 flex items-center justify-center">
             <DollarSign size={24} />
           </div>
 
           <p className="text-sm text-slate-500 mt-5">Monto inicial</p>
-          <h3 className="text-3xl font-bold text-slate-800 mt-1">
+          <h3 className="text-2xl sm:text-3xl font-bold text-slate-800 mt-1 break-words">
             {formatoMoneda(sesionAbierta?.monto_inicial)}
           </h3>
 
-          <p className="text-sm text-slate-400 mt-2">
+          <p className="text-sm text-slate-400 mt-2 truncate">
             {cajaActual?.nombre || 'Sin caja seleccionada'}
           </p>
         </div>
 
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0">
+          <div className="w-12 h-12 rounded-2xl bg-sky-50 text-sky-700 flex items-center justify-center">
             <Calculator size={24} />
           </div>
 
           <p className="text-sm text-slate-500 mt-5">Monto esperado</p>
-          <h3 className="text-3xl font-bold text-slate-800 mt-1">
+          <h3 className="text-2xl sm:text-3xl font-bold text-slate-800 mt-1 break-words">
             {formatoMoneda(resumen?.monto_final_sistema)}
           </h3>
 
@@ -685,57 +752,57 @@ export default function Caja() {
         </div>
       </section>
 
-      <section className="grid xl:grid-cols-4 gap-5">
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+      <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-5">
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0">
           <p className="text-sm text-slate-500">Ventas efectivo</p>
-          <h3 className="text-2xl font-bold text-emerald-700 mt-1">
+          <h3 className="text-2xl font-bold text-sky-700 mt-1 break-words">
             {formatoMoneda(resumen?.ventas_efectivo)}
           </h3>
         </div>
 
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0">
           <p className="text-sm text-slate-500">Entradas efectivo</p>
-          <h3 className="text-2xl font-bold text-blue-700 mt-1">
+          <h3 className="text-2xl font-bold text-blue-700 mt-1 break-words">
             {formatoMoneda(resumen?.entradas_efectivo)}
           </h3>
         </div>
 
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0">
           <p className="text-sm text-slate-500">Salidas / gastos</p>
-          <h3 className="text-2xl font-bold text-red-700 mt-1">
+          <h3 className="text-2xl font-bold text-red-700 mt-1 break-words">
             {formatoMoneda(
               Number(resumen?.salidas_efectivo || 0) +
-              Number(resumen?.gastos_efectivo || 0) +
-              Number(resumen?.retiros_efectivo || 0) +
-              Number(resumen?.pagos_proveedor_efectivo || 0)
+                Number(resumen?.gastos_efectivo || 0) +
+                Number(resumen?.retiros_efectivo || 0) +
+                Number(resumen?.pagos_proveedor_efectivo || 0)
             )}
           </h3>
         </div>
 
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0">
           <p className="text-sm text-slate-500">Devoluciones</p>
-          <h3 className="text-2xl font-bold text-amber-700 mt-1">
+          <h3 className="text-2xl font-bold text-amber-700 mt-1 break-words">
             {formatoMoneda(resumen?.devoluciones_efectivo)}
           </h3>
         </div>
       </section>
 
-      <section className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+      <section className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-sm border border-slate-100 overflow-hidden">
         <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5">
-          <div>
-            <h2 className="text-xl font-bold text-slate-800">
+          <div className="min-w-0">
+            <h2 className="text-lg sm:text-xl font-bold text-slate-800">
               Operaciones de caja
             </h2>
-            <p className="text-slate-500">
+            <p className="text-sm sm:text-base text-slate-500 leading-relaxed">
               Registra entradas, salidas, gastos y consulta movimientos.
             </p>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full xl:w-auto">
             <button
               onClick={() => abrirModalMovimiento('ENTRADA')}
               disabled={!estadoAbierta}
-              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold transition disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-sky-100 hover:bg-sky-200 text-sky-800 font-bold transition disabled:opacity-50"
             >
               <PlusCircle size={19} />
               Entrada
@@ -762,8 +829,7 @@ export default function Caja() {
         </div>
 
         <div className="mt-6">
-          {/* Vista móvil */}
-          <div className="md:hidden space-y-4">
+          <div className="md:hidden space-y-3">
             {!estadoAbierta ? (
               <div className="rounded-2xl border border-slate-100 bg-slate-50 p-5 text-center text-slate-500">
                 No hay caja abierta.
@@ -779,27 +845,16 @@ export default function Caja() {
                   className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm"
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <div>
+                    <div className="min-w-0">
                       <span
-                        className={`inline-flex text-xs font-bold px-3 py-1 rounded-full ${['ENTRADA', 'VENTA', 'APERTURA'].includes(
+                        className={`inline-flex text-xs font-bold px-3 py-1 rounded-full ${claseMovimiento(
                           mov.tipo_movimiento
-                        )
-                          ? 'bg-emerald-100 text-emerald-700'
-                          : [
-                            'SALIDA',
-                            'GASTO',
-                            'RETIRO',
-                            'PAGO_PROVEEDOR',
-                            'DEVOLUCION',
-                          ].includes(mov.tipo_movimiento)
-                            ? 'bg-red-100 text-red-700'
-                            : 'bg-slate-100 text-slate-700'
-                          }`}
+                        )}`}
                       >
                         {mov.tipo_movimiento}
                       </span>
 
-                      <p className="mt-3 font-bold text-slate-800">
+                      <p className="mt-3 font-bold text-slate-800 break-words">
                         {mov.concepto}
                       </p>
 
@@ -808,7 +863,7 @@ export default function Caja() {
                       </p>
 
                       {mov.referencia && (
-                        <p className="mt-1 text-xs text-slate-400">
+                        <p className="mt-1 text-xs text-slate-400 break-words">
                           Ref: {mov.referencia}
                         </p>
                       )}
@@ -826,7 +881,7 @@ export default function Caja() {
 
                   <div className="mt-4 rounded-xl bg-slate-50 p-3">
                     <p className="text-xs text-slate-500">Usuario</p>
-                    <p className="text-sm font-semibold text-slate-700">
+                    <p className="text-sm font-semibold text-slate-700 break-words">
                       {mov.usuario || '—'}
                     </p>
                   </div>
@@ -835,7 +890,6 @@ export default function Caja() {
             )}
           </div>
 
-          {/* Vista escritorio */}
           <div className="hidden md:block overflow-x-auto">
             <table className="w-full min-w-[900px]">
               <thead className="bg-slate-50 border-b border-slate-100">
@@ -883,20 +937,9 @@ export default function Caja() {
 
                       <td className="px-4 py-3">
                         <span
-                          className={`text-xs font-bold px-3 py-1 rounded-full ${['ENTRADA', 'VENTA', 'APERTURA'].includes(
+                          className={`text-xs font-bold px-3 py-1 rounded-full ${claseMovimiento(
                             mov.tipo_movimiento
-                          )
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : [
-                              'SALIDA',
-                              'GASTO',
-                              'RETIRO',
-                              'PAGO_PROVEEDOR',
-                              'DEVOLUCION',
-                            ].includes(mov.tipo_movimiento)
-                              ? 'bg-red-100 text-red-700'
-                              : 'bg-slate-100 text-slate-700'
-                            }`}
+                          )}`}
                         >
                           {mov.tipo_movimiento}
                         </span>
@@ -932,50 +975,57 @@ export default function Caja() {
       </section>
 
       {modalAbrir && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden">
-            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-bold text-slate-800">
+        <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center px-3 sm:px-4 py-4 sm:py-8 overflow-y-auto">
+          <div
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm"
+            onClick={() => setModalAbrir(false)}
+          />
+
+          <div className="relative bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden my-auto">
+            <div className="px-4 sm:px-6 py-5 border-b border-slate-100 flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h2 className="text-lg sm:text-xl font-bold text-slate-800">
                   Abrir caja
                 </h2>
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-slate-500 break-words">
                   {sucursalActual?.nombre} · {cajaActual?.nombre}
                 </p>
               </div>
 
               <button
                 onClick={() => setModalAbrir(false)}
-                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center"
+                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center shrink-0"
               >
                 <X size={20} />
               </button>
             </div>
 
-            <form onSubmit={abrirCaja} className="p-6 space-y-5">
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">
-                  Monto inicial *
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={montoInicial}
-                  onChange={(e) => setMontoInicial(e.target.value)}
-                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  placeholder="0.00"
-                />
+            <form onSubmit={abrirCaja}>
+              <div className="p-4 sm:p-6 space-y-5">
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Monto inicial *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={montoInicial}
+                    onChange={(e) => setMontoInicial(e.target.value)}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    placeholder="0.00"
+                  />
+                </div>
+
+                <div className="rounded-2xl bg-sky-50 border border-sky-100 p-4 text-sm text-sky-800">
+                  Este monto representa el efectivo inicial con el que comienza la caja.
+                </div>
               </div>
 
-              <div className="rounded-2xl bg-emerald-50 border border-emerald-100 p-4 text-sm text-emerald-800">
-                Este monto representa el efectivo inicial con el que comienza la caja.
-              </div>
-
-              <div className="flex justify-end gap-3 border-t border-slate-100 pt-5">
+              <div className="px-4 sm:px-6 py-5 flex flex-col sm:flex-row justify-end gap-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setModalAbrir(false)}
-                  className="px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition"
+                  className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition"
                 >
                   Cancelar
                 </button>
@@ -983,7 +1033,7 @@ export default function Caja() {
                 <button
                   type="submit"
                   disabled={guardando}
-                  className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold transition disabled:opacity-60"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold transition disabled:opacity-60"
                 >
                   <Save size={19} />
                   {guardando ? 'Abriendo...' : 'Abrir caja'}
@@ -995,28 +1045,33 @@ export default function Caja() {
       )}
 
       {modalMovimiento && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden">
-            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-bold text-slate-800">
+        <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center px-3 sm:px-4 py-4 sm:py-8 overflow-y-auto">
+          <div
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm"
+            onClick={() => setModalMovimiento(false)}
+          />
+
+          <div className="relative bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden my-auto">
+            <div className="px-4 sm:px-6 py-5 border-b border-slate-100 flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h2 className="text-lg sm:text-xl font-bold text-slate-800">
                   Registrar movimiento
                 </h2>
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-slate-500 break-words">
                   Sesión #{sesionAbierta?.id_sesion} · {cajaActual?.nombre}
                 </p>
               </div>
 
               <button
                 onClick={() => setModalMovimiento(false)}
-                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center"
+                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center shrink-0"
               >
                 <X size={20} />
               </button>
             </div>
 
-            <form onSubmit={registrarMovimiento} className="p-6">
-              <div className="grid md:grid-cols-2 gap-5">
+            <form onSubmit={registrarMovimiento}>
+              <div className="p-4 sm:p-6 grid grid-cols-1 md:grid-cols-2 gap-5 max-h-[70vh] overflow-y-auto">
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-2">
                     Tipo *
@@ -1029,7 +1084,7 @@ export default function Caja() {
                         tipo_movimiento: e.target.value,
                       })
                     }
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
                   >
                     {tiposMovimiento.map((tipo) => (
                       <option key={tipo.value} value={tipo.value}>
@@ -1053,7 +1108,7 @@ export default function Caja() {
                         monto: e.target.value,
                       })
                     }
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
                     placeholder="0.00"
                   />
                 </div>
@@ -1070,7 +1125,7 @@ export default function Caja() {
                         concepto: e.target.value,
                       })
                     }
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
                     placeholder="Ej. Compra de bolsas, retiro parcial, entrada extra..."
                   />
                 </div>
@@ -1087,7 +1142,7 @@ export default function Caja() {
                         metodo_pago: e.target.value,
                       })
                     }
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
                   >
                     <option value="EFECTIVO">Efectivo</option>
                     <option value="TARJETA">Tarjeta</option>
@@ -1107,7 +1162,7 @@ export default function Caja() {
                         referencia: e.target.value,
                       })
                     }
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
                     placeholder="Opcional"
                   />
                 </div>
@@ -1125,17 +1180,17 @@ export default function Caja() {
                         observaciones: e.target.value,
                       })
                     }
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 resize-none"
                     placeholder="Observaciones opcionales"
                   />
                 </div>
               </div>
 
-              <div className="mt-6 flex justify-end gap-3 border-t border-slate-100 pt-5">
+              <div className="px-4 sm:px-6 py-5 flex flex-col sm:flex-row justify-end gap-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setModalMovimiento(false)}
-                  className="px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition"
+                  className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition"
                 >
                   Cancelar
                 </button>
@@ -1143,7 +1198,7 @@ export default function Caja() {
                 <button
                   type="submit"
                   disabled={guardando}
-                  className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold transition disabled:opacity-60"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold transition disabled:opacity-60"
                 >
                   <Save size={19} />
                   {guardando ? 'Guardando...' : 'Guardar movimiento'}
@@ -1155,11 +1210,16 @@ export default function Caja() {
       )}
 
       {modalCerrar && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden">
-            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-bold text-slate-800">
+        <div className="fixed inset-0 z-50 flex items-start justify-center px-3 sm:px-4 py-4 sm:py-8 overflow-y-auto">
+          <div
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm"
+            onClick={() => setModalCerrar(false)}
+          />
+
+          <div className="relative bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-4xl my-auto overflow-hidden max-h-[92vh] flex flex-col">
+            <div className="px-4 sm:px-6 py-5 border-b border-slate-100 flex items-start justify-between gap-4 shrink-0">
+              <div className="min-w-0">
+                <h2 className="text-lg sm:text-xl font-bold text-slate-800">
                   Cerrar caja
                 </h2>
                 <p className="text-sm text-slate-500">
@@ -1169,86 +1229,240 @@ export default function Caja() {
 
               <button
                 onClick={() => setModalCerrar(false)}
-                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center"
+                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center shrink-0"
               >
                 <X size={20} />
               </button>
             </div>
 
-            <form onSubmit={cerrarCaja} className="p-6 space-y-5">
-              <div className="grid sm:grid-cols-3 gap-4">
-                <div className="rounded-2xl bg-slate-50 p-4">
-                  <p className="text-sm text-slate-500">Sistema</p>
-                  <p className="text-xl font-bold text-slate-800">
-                    {formatoMoneda(resumen?.monto_final_sistema)}
-                  </p>
-                </div>
+            <form onSubmit={cerrarCaja} className="flex flex-col flex-1 min-h-0">
+              <div className="p-4 sm:p-6 space-y-5 overflow-y-auto">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="rounded-2xl bg-slate-50 p-4 min-w-0">
+                    <p className="text-sm text-slate-500">Sistema</p>
+                    <p className="text-xl font-bold text-slate-800 break-words">
+                      {formatoMoneda(resumen?.monto_final_sistema)}
+                    </p>
+                  </div>
 
-                <div className="rounded-2xl bg-slate-50 p-4">
-                  <p className="text-sm text-slate-500">Contado</p>
-                  <p className="text-xl font-bold text-slate-800">
-                    {formatoMoneda(montoFinalReal)}
-                  </p>
-                </div>
+                  <div className="rounded-2xl bg-slate-50 p-4 min-w-0">
+                    <p className="text-sm text-slate-500">Contado</p>
+                    <p className="text-xl font-bold text-slate-800 break-words">
+                      {formatoMoneda(montoFinalReal)}
+                    </p>
+                  </div>
 
-                <div
-                  className={`rounded-2xl p-4 ${diferenciaActual === 0 ? 'bg-emerald-50' : 'bg-red-50'
+                  <div
+                    className={`rounded-2xl p-4 min-w-0 ${
+                      diferenciaActual === 0 ? 'bg-sky-50' : 'bg-red-50'
                     }`}
-                >
-                  <p className="text-sm text-slate-500">Diferencia</p>
-                  <p
-                    className={`text-xl font-bold ${diferenciaActual === 0
-                      ? 'text-emerald-700'
-                      : 'text-red-700'
-                      }`}
                   >
-                    {formatoMoneda(diferenciaActual)}
+                    <p className="text-sm text-slate-500">Diferencia</p>
+                    <p
+                      className={`text-xl font-bold break-words ${
+                        diferenciaActual === 0
+                          ? 'text-sky-700'
+                          : 'text-red-700'
+                      }`}
+                    >
+                      {formatoMoneda(diferenciaActual)}
+                    </p>
+                  </div>
+                </div>
+
+                {diferenciaActual !== 0 && (
+                  <div className="rounded-2xl bg-amber-50 border border-amber-100 p-4 flex items-start gap-3 text-amber-800">
+                    <AlertTriangle size={22} className="shrink-0 mt-0.5" />
+                    <p className="text-sm">
+                      Existe diferencia entre el monto esperado por el sistema y el
+                      efectivo contado.
+                    </p>
+                  </div>
+                )}
+
+                <div className="rounded-2xl sm:rounded-3xl border border-slate-100 bg-slate-50 p-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                    <div className="min-w-0">
+                      <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                        <Calculator size={19} className="shrink-0" />
+                        Calculadora de efectivo
+                      </h3>
+                      <p className="text-sm text-slate-500 leading-relaxed">
+                        Captura cuántos billetes y monedas tienes para calcular el monto contado.
+                      </p>
+                    </div>
+
+                    <div className="sm:text-right rounded-2xl bg-white px-4 py-3 border border-slate-100">
+                      <p className="text-xs text-slate-500">Total contado</p>
+                      <p className="text-2xl font-bold text-sky-700">
+                        {formatoMoneda(totalConteoEfectivo)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="md:hidden space-y-2">
+                    {denominacionesCaja.map((denominacion) => {
+                      const cantidad = Number(conteoEfectivo[denominacion.valor] || 0);
+                      const importe = cantidad * Number(denominacion.valor);
+
+                      return (
+                        <div
+                          key={`${denominacion.tipo}-mobile-${denominacion.valor}`}
+                          className="rounded-2xl bg-white border border-slate-100 p-3"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <p className="text-xs text-slate-500">
+                                {denominacion.tipo}
+                              </p>
+                              <p className="font-bold text-slate-800">
+                                {formatoMoneda(denominacion.valor)}
+                              </p>
+                            </div>
+
+                            <input
+                              type="number"
+                              min="0"
+                              step="1"
+                              value={conteoEfectivo[denominacion.valor] || ''}
+                              onChange={(e) =>
+                                cambiarConteoEfectivo(
+                                  denominacion.valor,
+                                  e.target.value
+                                )
+                              }
+                              className="w-24 px-3 py-2 text-center rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                              placeholder="0"
+                            />
+                          </div>
+
+                          <div className="mt-2 flex justify-between gap-3 text-sm">
+                            <span className="text-slate-500">Importe</span>
+                            <span className="font-bold text-slate-700">
+                              {formatoMoneda(importe)}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="hidden md:block overflow-x-auto">
+                    <table className="w-full min-w-[520px]">
+                      <thead>
+                        <tr className="border-b border-slate-200">
+                          <th className="py-2 text-left text-xs font-bold text-slate-500 uppercase">
+                            Tipo
+                          </th>
+                          <th className="py-2 text-right text-xs font-bold text-slate-500 uppercase">
+                            Denominación
+                          </th>
+                          <th className="py-2 text-center text-xs font-bold text-slate-500 uppercase">
+                            Cantidad
+                          </th>
+                          <th className="py-2 text-right text-xs font-bold text-slate-500 uppercase">
+                            Importe
+                          </th>
+                        </tr>
+                      </thead>
+
+                      <tbody className="divide-y divide-slate-200">
+                        {denominacionesCaja.map((denominacion) => {
+                          const cantidad = Number(conteoEfectivo[denominacion.valor] || 0);
+                          const importe = cantidad * Number(denominacion.valor);
+
+                          return (
+                            <tr key={`${denominacion.tipo}-${denominacion.valor}`}>
+                              <td className="py-2 text-sm font-semibold text-slate-700">
+                                {denominacion.tipo}
+                              </td>
+
+                              <td className="py-2 text-right text-sm font-bold text-slate-800">
+                                {formatoMoneda(denominacion.valor)}
+                              </td>
+
+                              <td className="py-2 text-center">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="1"
+                                  value={conteoEfectivo[denominacion.valor] || ''}
+                                  onChange={(e) =>
+                                    cambiarConteoEfectivo(
+                                      denominacion.valor,
+                                      e.target.value
+                                    )
+                                  }
+                                  className="w-24 px-3 py-2 text-center rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                                  placeholder="0"
+                                />
+                              </td>
+
+                              <td className="py-2 text-right text-sm font-bold text-slate-700">
+                                {formatoMoneda(importe)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={limpiarConteoEfectivo}
+                      className="px-4 py-3 rounded-2xl bg-white hover:bg-slate-100 text-slate-700 font-bold border border-slate-200 transition"
+                    >
+                      Limpiar conteo
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={aplicarConteoEfectivo}
+                      className="px-4 py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold transition"
+                    >
+                      Usar total contado
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Monto final contado *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={montoFinalReal}
+                    onChange={(e) => setMontoFinalReal(e.target.value)}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    placeholder="0.00"
+                  />
+                  <p className="text-xs text-slate-500 mt-2">
+                    Puedes capturarlo manualmente o llenarlo con la calculadora de efectivo.
                   </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Observaciones
+                  </label>
+                  <textarea
+                    rows="3"
+                    value={observacionesCierre}
+                    onChange={(e) => setObservacionesCierre(e.target.value)}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 resize-none"
+                    placeholder="Observaciones del corte"
+                  />
                 </div>
               </div>
 
-              {diferenciaActual !== 0 && (
-                <div className="rounded-2xl bg-amber-50 border border-amber-100 p-4 flex gap-3 text-amber-800">
-                  <AlertTriangle size={22} />
-                  <p className="text-sm">
-                    Existe diferencia entre el monto esperado por el sistema y el
-                    efectivo contado.
-                  </p>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">
-                  Monto final contado *
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={montoFinalReal}
-                  onChange={(e) => setMontoFinalReal(e.target.value)}
-                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  placeholder="0.00"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">
-                  Observaciones
-                </label>
-                <textarea
-                  rows="3"
-                  value={observacionesCierre}
-                  onChange={(e) => setObservacionesCierre(e.target.value)}
-                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
-                  placeholder="Observaciones del corte"
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 border-t border-slate-100 pt-5">
+              <div className="px-4 sm:px-6 py-5 flex flex-col sm:flex-row justify-end gap-3 border-t border-slate-100 bg-white shrink-0">
                 <button
                   type="button"
                   onClick={() => setModalCerrar(false)}
-                  className="px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition"
+                  className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition"
                 >
                   Cancelar
                 </button>
@@ -1256,7 +1470,7 @@ export default function Caja() {
                 <button
                   type="submit"
                   disabled={guardando}
-                  className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-red-600 hover:bg-red-700 text-white font-bold transition disabled:opacity-60"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-red-600 hover:bg-red-700 text-white font-bold transition disabled:opacity-60"
                 >
                   <LockKeyhole size={19} />
                   {guardando ? 'Cerrando...' : 'Cerrar caja'}
@@ -1268,11 +1482,16 @@ export default function Caja() {
       )}
 
       {modalMovimientos && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden">
-            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-bold text-slate-800">
+        <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center px-3 sm:px-4 py-4 sm:py-8 overflow-y-auto">
+          <div
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm"
+            onClick={() => setModalMovimientos(false)}
+          />
+
+          <div className="relative bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden my-auto">
+            <div className="px-4 sm:px-6 py-5 border-b border-slate-100 flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h2 className="text-lg sm:text-xl font-bold text-slate-800">
                   Movimientos de caja
                 </h2>
                 <p className="text-sm text-slate-500">
@@ -1282,7 +1501,7 @@ export default function Caja() {
 
               <button
                 onClick={() => setModalMovimientos(false)}
-                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center"
+                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center shrink-0"
               >
                 <X size={20} />
               </button>
@@ -1295,20 +1514,23 @@ export default function Caja() {
                 </div>
               ) : (
                 <div>
-                  {/* Vista móvil */}
-                  <div className="md:hidden space-y-4">
+                  <div className="md:hidden space-y-3">
                     {movimientos.map((mov) => (
                       <div
                         key={mov.id_movimiento}
                         className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm"
                       >
                         <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <span className="inline-flex text-xs font-bold px-3 py-1 rounded-full bg-slate-100 text-slate-700">
+                          <div className="min-w-0">
+                            <span
+                              className={`inline-flex text-xs font-bold px-3 py-1 rounded-full ${claseMovimiento(
+                                mov.tipo_movimiento
+                              )}`}
+                            >
                               {mov.tipo_movimiento}
                             </span>
 
-                            <p className="mt-3 font-bold text-slate-800">
+                            <p className="mt-3 font-bold text-slate-800 break-words">
                               {mov.concepto}
                             </p>
 
@@ -1330,14 +1552,14 @@ export default function Caja() {
                         <div className="mt-4 grid grid-cols-1 gap-3">
                           <div className="rounded-xl bg-slate-50 p-3">
                             <p className="text-xs text-slate-500">Referencia</p>
-                            <p className="text-sm font-semibold text-slate-700">
+                            <p className="text-sm font-semibold text-slate-700 break-words">
                               {mov.referencia || '—'}
                             </p>
                           </div>
 
                           <div className="rounded-xl bg-slate-50 p-3">
                             <p className="text-xs text-slate-500">Usuario</p>
-                            <p className="text-sm font-semibold text-slate-700">
+                            <p className="text-sm font-semibold text-slate-700 break-words">
                               {mov.usuario || '—'}
                             </p>
                           </div>
@@ -1346,7 +1568,6 @@ export default function Caja() {
                     ))}
                   </div>
 
-                  {/* Vista escritorio */}
                   <div className="hidden md:block overflow-x-auto">
                     <table className="w-full min-w-[1000px]">
                       <thead className="bg-slate-50 border-b border-slate-100">
@@ -1383,7 +1604,11 @@ export default function Caja() {
                             </td>
 
                             <td className="px-4 py-3">
-                              <span className="text-xs font-bold px-3 py-1 rounded-full bg-slate-100 text-slate-700">
+                              <span
+                                className={`text-xs font-bold px-3 py-1 rounded-full ${claseMovimiento(
+                                  mov.tipo_movimiento
+                                )}`}
+                              >
                                 {mov.tipo_movimiento}
                               </span>
                             </td>

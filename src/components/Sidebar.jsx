@@ -1,169 +1,232 @@
 import { NavLink } from 'react-router-dom';
 import {
-    LayoutDashboard,
-    ShoppingCart,
-    Package,
-    Boxes,
-    Wallet,
-    ReceiptText,
-    Truck,
-    ClipboardList,
-    Pill,
-    Users,
-    BadgePercent,
-    Store,
-    Tags,
+  LayoutDashboard,
+  ShoppingCart,
+  Package,
+  Boxes,
+  Wallet,
+  ReceiptText,
+  Truck,
+  ClipboardList,
+  Users,
+  BadgePercent,
+  Store,
+  Tags,
+  Search,
+  Bell,
+  Award,
+  UserRound,
+  FileText,
+  ClipboardCheck,
 } from 'lucide-react';
 
 import { useAuth } from '../context/AuthContext';
 import { tienePermiso } from '../config/permisos';
 
+import logoFarmacia from '../assets/logoShaddai.png';
+
 const links = [
-    {
-        to: '/app/dashboard',
-        label: 'Dashboard',
-        icon: LayoutDashboard,
-        modulo: 'dashboard',
-    },
-    {
-        to: '/app/pos',
-        label: 'Punto de venta',
-        icon: ShoppingCart,
-        modulo: 'pos',
-    },
-    {
-        to: '/app/productos',
-        label: 'Productos',
-        icon: Package,
-        modulo: 'productos',
-    },
-    {
-        to: '/app/inventario',
-        label: 'Inventario',
-        icon: Boxes,
-        modulo: 'inventario',
-    },
-    {
-        to: '/app/tarjetas-puntos',
-        label: 'Tarjetas puntos',
-        icon: BadgePercent,
-        modulo: 'tarjetas-puntos',
-    },
-    {
-        to: '/app/caja',
-        label: 'Caja',
-        icon: Wallet,
-        modulo: 'caja',
-    },
-    {
-        to: '/app/cajas',
-        label: 'Administrar cajas',
-        icon: Wallet,
-        modulo: 'cajas',
-    },
-    {
-        to: '/app/ventas',
-        label: 'Ventas',
-        icon: ReceiptText,
-        modulo: 'ventas',
-    },
-    {
-        to: '/app/proveedores',
-        label: 'Proveedores',
-        icon: Truck,
-        modulo: 'proveedores',
-    },
-    {
-        to: '/app/compras',
-        label: 'Compras',
-        icon: ClipboardList,
-        modulo: 'compras',
-    },
-    {
-        to: '/app/usuarios',
-        label: 'Usuarios',
-        icon: Users,
-        modulo: 'usuarios',
-    },
-    {
-        to: '/app/sucursales',
-        label: 'Sucursales',
-        icon: Store,
-        modulo: 'sucursales',
-    },
-    {
-        to: '/app/categorias',
-        label: 'Categorías',
-        icon: Tags,
-        modulo: 'categorias',
-    },
+  {
+    to: '/app/dashboard',
+    label: 'Dashboard',
+    icon: LayoutDashboard,
+    modulo: 'dashboard',
+  },
+  {
+    to: '/app/pos',
+    label: 'Punto de venta',
+    icon: ShoppingCart,
+    modulo: 'pos',
+  },
+  {
+    to: '/app/recetas-admin',
+    label: 'Recetas recibidas',
+    icon: ClipboardCheck,
+    modulo: 'recetas-admin',
+  },
+  {
+    to: '/app/ofertas',
+    label: 'Ofertas',
+    icon: BadgePercent,
+    modulo: 'ofertas',
+  },
+  {
+    to: '/app/productos',
+    label: 'Productos',
+    icon: Package,
+    modulo: 'productos',
+  },
+  {
+    to: '/app/inventario',
+    label: 'Inventario',
+    icon: Boxes,
+    modulo: 'inventario',
+  },
+  {
+    to: '/app/stock-sucursales',
+    label: 'Consultar stock',
+    icon: Search,
+    modulo: 'stock-sucursales',
+  },
+  {
+    to: '/app/doctor-perfil',
+    label: 'Mi perfil médico',
+    icon: UserRound,
+    modulo: 'doctor-perfil',
+  },
+  {
+    to: '/app/recetas',
+    label: 'Recetas',
+    icon: FileText,
+    modulo: 'recetas',
+  },
+  {
+    to: '/app/tarjetas-puntos',
+    label: 'Tarjetas puntos',
+    icon: BadgePercent,
+    modulo: 'tarjetas-puntos',
+  },
+  {
+    to: '/app/caja',
+    label: 'Caja',
+    icon: Wallet,
+    modulo: 'caja',
+  },
+  {
+    to: '/app/cajas',
+    label: 'Administrar cajas',
+    icon: Wallet,
+    modulo: 'cajas',
+  },
+  {
+    to: '/app/ventas',
+    label: 'Ventas',
+    icon: ReceiptText,
+    modulo: 'ventas',
+  },
+  {
+    to: '/app/proveedores',
+    label: 'Proveedores',
+    icon: Truck,
+    modulo: 'proveedores',
+  },
+  {
+    to: '/app/compras',
+    label: 'Compras de proveedores',
+    icon: ClipboardList,
+    modulo: 'compras',
+  },
+  {
+    to: '/app/usuarios',
+    label: 'Usuarios',
+    icon: Users,
+    modulo: 'usuarios',
+  },
+  {
+    to: '/app/sucursales',
+    label: 'Sucursales',
+    icon: Store,
+    modulo: 'sucursales',
+  },
+  {
+    to: '/app/categorias',
+    label: 'Categorías',
+    icon: Tags,
+    modulo: 'categorias',
+  },
+  {
+    to: '/app/alertas',
+    label: 'Alertas',
+    icon: Bell,
+    modulo: 'alertas',
+  },
+  {
+    to: '/app/configuracion-puntos',
+    label: 'Config. puntos',
+    icon: BadgePercent,
+    modulo: 'configuracion-puntos',
+  },
+  {
+    to: '/app/puntos',
+    label: 'Puntos',
+    icon: Award,
+    modulo: 'puntos',
+  },
 ];
 
 export default function Sidebar({ modoMovil = false, onNavigate }) {
-    const { usuario } = useAuth();
+  const { usuario } = useAuth();
 
-    const linksPermitidos = links.filter((link) =>
-        tienePermiso(usuario?.rol, link.modulo)
-    );
+  const linksPermitidos = links.filter((link) =>
+    tienePermiso(usuario?.rol, link.modulo)
+  );
 
-    return (
-        <aside
-            className={`w-72 bg-slate-950 text-white min-h-screen flex flex-col ${modoMovil ? '' : 'hidden lg:flex'
-                }`}
-        >
-            <div className="p-6 border-b border-white/10">
-                <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 rounded-2xl bg-emerald-600 flex items-center justify-center">
-                        <Pill size={24} />
-                    </div>
+  return (
+    <aside
+      className={`w-72 bg-slate-950 text-white h-screen max-h-screen overflow-hidden flex-col ${
+        modoMovil ? 'flex' : 'hidden lg:flex'
+      }`}
+    >
+      <div className="shrink-0 p-5 sm:p-6 border-b border-white/10">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="relative w-12 h-12 rounded-2xl bg-gradient-to-br from-sky-500/25 to-cyan-400/20 border border-white/10 flex items-center justify-center shrink-0 overflow-hidden shadow-lg shadow-sky-950/30">
+            <div className="absolute inset-0 bg-white/5" />
 
-                    <div>
-                        <h1 className="font-bold text-lg leading-tight">
-                            Shaddai POS
-                        </h1>
-                        <p className="text-xs text-slate-400">
-                            Farmacia multi-sucursal
-                        </p>
-                    </div>
-                </div>
-            </div>
+            <img
+              src={logoFarmacia}
+              alt="Logo Farmacias Shaddai"
+              className="relative w-9 h-9 object-contain drop-shadow"
+            />
+          </div>
 
-            <nav className="flex-1 p-4 space-y-1">
-                {linksPermitidos.map((item) => {
-                    const Icon = item.icon;
+          <div className="min-w-0">
+            <h1 className="font-black text-lg leading-tight truncate">
+              Shaddai
+            </h1>
+            <p className="text-xs text-slate-400 truncate">
+              Bienestar al alcane de todos
+            </p>
+          </div>
+        </div>
+      </div>
 
-                    return (
-                        <NavLink
-                            key={item.to}
-                            to={item.to}
-                            onClick={onNavigate}
-                            className={({ isActive }) =>
-                                `flex items-center gap-3 px-4 py-3 rounded-2xl transition text-sm font-semibold ${isActive
-                                    ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/30'
-                                    : 'text-slate-300 hover:bg-white/10 hover:text-white'
-                                }`
-                            }
-                        >
-                            <Icon size={20} />
-                            {item.label}
-                        </NavLink>
-                    );
-                })}
-            </nav>
+      <nav className="sidebar-scroll flex-1 min-h-0 p-3 sm:p-4 space-y-1 overflow-y-auto overscroll-contain">
+        {linksPermitidos.map((item) => {
+          const Icon = item.icon;
 
-            <div className="p-4 border-t border-white/10">
-                <div className="rounded-2xl bg-white/5 p-4">
-                    <p className="text-xs text-slate-400">
-                        Sesión activa
-                    </p>
-                    <p className="text-sm font-semibold text-emerald-300">
-                        {usuario?.rol || 'Sin rol'}
-                    </p>
-                    <p className="text-xs text-slate-400 mt-1">
-                        {usuario?.nombre || usuario?.usuario}
-                    </p>
-                </div>
-            </div>
-        </aside>
-    );
+          return (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              onClick={onNavigate}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-4 py-3 rounded-2xl transition text-sm font-semibold min-w-0 ${
+                  isActive
+                    ? 'bg-sky-600 text-white shadow-lg shadow-sky-900/30'
+                    : 'text-slate-300 hover:bg-white/10 hover:text-white'
+                }`
+              }
+            >
+              <Icon size={20} className="shrink-0" />
+              <span className="truncate">{item.label}</span>
+            </NavLink>
+          );
+        })}
+      </nav>
+
+      <div className="shrink-0 p-3 sm:p-4 border-t border-white/10">
+        <div className="rounded-2xl bg-white/5 p-4 min-w-0">
+          <p className="text-xs text-slate-400">
+            Sesión activa
+          </p>
+          <p className="text-sm font-semibold text-sky-300 truncate">
+            {usuario?.rol || 'Sin rol'}
+          </p>
+          <p className="text-xs text-slate-400 mt-1 truncate">
+            {usuario?.nombre || usuario?.usuario}
+          </p>
+        </div>
+      </div>
+    </aside>
+  );
 }

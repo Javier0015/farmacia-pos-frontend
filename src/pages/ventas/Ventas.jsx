@@ -74,6 +74,35 @@ export default function Ventas() {
     };
   }, [ventas]);
 
+  const formatoMoneda = (valor) => {
+    return Number(valor || 0).toLocaleString('es-MX', {
+      style: 'currency',
+      currency: 'MXN',
+    });
+  };
+
+  const formatoNumero = (valor) => {
+    return Number(valor || 0).toLocaleString('es-MX', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    });
+  };
+
+  const formatoFecha = (fecha) => {
+    if (!fecha) return '—';
+
+    return new Date(fecha).toLocaleString('es-MX', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    });
+  };
+
+  const iconoMetodo = (metodo) => {
+    if (metodo === 'EFECTIVO') return <Banknote size={17} />;
+    if (metodo === 'TARJETA') return <CreditCard size={17} />;
+    return <FileText size={17} />;
+  };
+
   const cargarSucursales = async () => {
     try {
       const { data } = await api.get('/sucursales');
@@ -205,11 +234,16 @@ export default function Ventas() {
         <head>
           <title>Ticket ${detalleVenta?.folio || ''}</title>
           <style>
+            * {
+              box-sizing: border-box;
+            }
+
             body {
               font-family: Arial, sans-serif;
               margin: 0;
               padding: 12px;
               color: #111827;
+              background: #ffffff;
             }
 
             .ticket {
@@ -244,6 +278,7 @@ export default function Ventas() {
 
             th, td {
               padding: 3px 0;
+              vertical-align: top;
             }
 
             th {
@@ -264,9 +299,14 @@ export default function Ventas() {
               font-weight: bold;
             }
 
+            @page {
+              margin: 4mm;
+            }
+
             @media print {
               body {
                 margin: 0;
+                padding: 0;
               }
             }
           </style>
@@ -300,49 +340,20 @@ export default function Ventas() {
     }
   }, [idSucursal]);
 
-  const formatoMoneda = (valor) => {
-    return Number(valor || 0).toLocaleString('es-MX', {
-      style: 'currency',
-      currency: 'MXN',
-    });
-  };
-
-  const formatoNumero = (valor) => {
-    return Number(valor || 0).toLocaleString('es-MX', {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
-    });
-  };
-
-  const formatoFecha = (fecha) => {
-    if (!fecha) return '—';
-
-    return new Date(fecha).toLocaleString('es-MX', {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    });
-  };
-
-  const iconoMetodo = (metodo) => {
-    if (metodo === 'EFECTIVO') return <Banknote size={17} />;
-    if (metodo === 'TARJETA') return <CreditCard size={17} />;
-    return <FileText size={17} />;
-  };
-
   return (
-    <div className="space-y-6">
-      <section className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+    <div className="w-full max-w-full overflow-hidden space-y-5 sm:space-y-6 pb-8">
+      <section className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-sm border border-slate-100 overflow-hidden">
         <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+          <div className="flex items-start sm:items-center gap-3 min-w-0">
+            <div className="w-12 h-12 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
               <ReceiptText size={25} />
             </div>
 
-            <div>
-              <h1 className="text-2xl font-bold text-slate-800">
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-800 break-words">
                 Ventas
               </h1>
-              <p className="text-slate-500">
+              <p className="text-sm sm:text-base text-slate-500 leading-relaxed">
                 Historial de ventas, detalle de productos y lotes descontados.
               </p>
             </div>
@@ -351,15 +362,15 @@ export default function Ventas() {
           <button
             onClick={cargarVentas}
             disabled={!idSucursal}
-            className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition disabled:opacity-50"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition disabled:opacity-50"
           >
             <RefreshCw size={19} className={cargando ? 'animate-spin' : ''} />
             Actualizar
           </button>
         </div>
 
-        <div className="mt-6 grid md:grid-cols-4 gap-4">
-          <div>
+        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+          <div className="min-w-0">
             <label className="block text-sm font-bold text-slate-700 mb-2">
               Sucursal
             </label>
@@ -368,7 +379,7 @@ export default function Ventas() {
               <select
                 value={idSucursal}
                 onChange={(e) => setIdSucursal(e.target.value)}
-                className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
               >
                 <option value="">Selecciona sucursal</option>
                 {sucursales.map((sucursal) => (
@@ -381,7 +392,7 @@ export default function Ventas() {
                 ))}
               </select>
             ) : (
-              <div className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 text-slate-700 font-semibold">
+              <div className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 text-slate-700 font-semibold truncate">
                 {sucursalActual?.nombre ||
                   sucursales[0]?.nombre ||
                   'Sucursal asignada'}
@@ -389,7 +400,7 @@ export default function Ventas() {
             )}
           </div>
 
-          <div>
+          <div className="min-w-0">
             <label className="block text-sm font-bold text-slate-700 mb-2">
               Fecha inicio
             </label>
@@ -397,11 +408,11 @@ export default function Ventas() {
               type="date"
               value={fechaInicio}
               onChange={(e) => setFechaInicio(e.target.value)}
-              className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
             />
           </div>
 
-          <div>
+          <div className="min-w-0">
             <label className="block text-sm font-bold text-slate-700 mb-2">
               Fecha fin
             </label>
@@ -409,7 +420,7 @@ export default function Ventas() {
               type="date"
               value={fechaFin}
               onChange={(e) => setFechaFin(e.target.value)}
-              className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
             />
           </div>
 
@@ -417,7 +428,7 @@ export default function Ventas() {
             <button
               onClick={cargarVentas}
               disabled={!idSucursal}
-              className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold transition disabled:opacity-50"
+              className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold transition disabled:opacity-50"
             >
               <Search size={19} />
               Buscar
@@ -426,26 +437,26 @@ export default function Ventas() {
         </div>
       </section>
 
-      <section className="grid sm:grid-cols-2 xl:grid-cols-5 gap-5">
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+      <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4 sm:gap-5">
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0">
+          <div className="w-12 h-12 rounded-2xl bg-sky-50 text-sky-700 flex items-center justify-center">
             <ReceiptText size={24} />
           </div>
           <p className="text-sm text-slate-500 mt-5">Ventas</p>
           <h3 className="text-3xl font-bold text-slate-800 mt-1">
             {resumen.totalVentas}
           </h3>
-          <p className="text-sm text-slate-400 mt-2">
+          <p className="text-sm text-slate-400 mt-2 truncate">
             {sucursalActual?.nombre || 'Sucursal asignada'}
           </p>
         </div>
 
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0 sm:col-span-1 xl:col-span-1">
           <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-700 flex items-center justify-center">
             <Wallet size={24} />
           </div>
           <p className="text-sm text-slate-500 mt-5">Total vendido</p>
-          <h3 className="text-3xl font-bold text-slate-800 mt-1">
+          <h3 className="text-2xl sm:text-3xl font-bold text-slate-800 mt-1 break-words">
             {formatoMoneda(resumen.totalImporte)}
           </h3>
           <p className="text-sm text-slate-400 mt-2">
@@ -453,39 +464,159 @@ export default function Ventas() {
           </p>
         </div>
 
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0">
+          <div className="w-12 h-12 rounded-2xl bg-sky-50 text-sky-700 flex items-center justify-center">
             <Banknote size={24} />
           </div>
           <p className="text-sm text-slate-500 mt-5">Efectivo</p>
-          <h3 className="text-2xl font-bold text-emerald-700 mt-1">
+          <h3 className="text-2xl font-bold text-sky-700 mt-1 break-words">
             {formatoMoneda(resumen.efectivo)}
           </h3>
         </div>
 
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0">
           <div className="w-12 h-12 rounded-2xl bg-violet-50 text-violet-700 flex items-center justify-center">
             <CreditCard size={24} />
           </div>
           <p className="text-sm text-slate-500 mt-5">Tarjeta</p>
-          <h3 className="text-2xl font-bold text-violet-700 mt-1">
+          <h3 className="text-2xl font-bold text-violet-700 mt-1 break-words">
             {formatoMoneda(resumen.tarjeta)}
           </h3>
         </div>
 
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0">
           <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center">
             <FileText size={24} />
           </div>
           <p className="text-sm text-slate-500 mt-5">Transferencia</p>
-          <h3 className="text-2xl font-bold text-amber-700 mt-1">
+          <h3 className="text-2xl font-bold text-amber-700 mt-1 break-words">
             {formatoMoneda(resumen.transferencia)}
           </h3>
         </div>
       </section>
 
-      <section className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-        <div className="overflow-x-auto">
+      <section className="bg-white rounded-2xl sm:rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+        <div className="px-4 sm:px-6 py-5 border-b border-slate-100">
+          <h2 className="text-lg sm:text-xl font-bold text-slate-800">
+            Listado de ventas
+          </h2>
+          <p className="text-sm text-slate-500">
+            Consulta ventas, detalle de productos, pagos y lotes.
+          </p>
+        </div>
+
+        <div className="md:hidden p-4 space-y-3">
+          {cargando ? (
+            <div className="rounded-2xl bg-slate-50 p-6 text-center text-slate-500 font-semibold">
+              Cargando ventas...
+            </div>
+          ) : ventas.length === 0 ? (
+            <div className="rounded-2xl bg-slate-50 p-6 text-center text-slate-500 font-semibold">
+              No hay ventas registradas.
+            </div>
+          ) : (
+            ventas.map((venta) => (
+              <article
+                key={venta.id_venta}
+                className="rounded-2xl border border-slate-100 p-4 shadow-sm bg-white"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-bold text-slate-800 break-words">
+                      {venta.folio}
+                    </p>
+                    <p className="text-xs text-slate-400 mt-1">
+                      ID #{venta.id_venta}
+                    </p>
+                  </div>
+
+                  <span
+                    className={`text-xs font-bold px-3 py-1 rounded-full shrink-0 ${
+                      venta.estado === 'COMPLETADA'
+                        ? 'bg-sky-100 text-sky-700'
+                        : 'bg-slate-100 text-slate-600'
+                    }`}
+                  >
+                    {venta.estado}
+                  </span>
+                </div>
+
+                <div className="mt-4 rounded-2xl bg-slate-50 p-3">
+                  <p className="text-xs text-slate-500">Fecha</p>
+                  <p className="font-semibold text-slate-700">
+                    {formatoFecha(venta.fecha_venta)}
+                  </p>
+                </div>
+
+                <div className="mt-3 grid grid-cols-1 gap-3">
+                  <div className="rounded-2xl bg-slate-50 p-3">
+                    <p className="text-xs text-slate-500 flex items-center gap-1">
+                      <Store size={15} />
+                      Sucursal / Caja
+                    </p>
+                    <p className="font-bold text-slate-800 mt-1 break-words">
+                      {venta.sucursal}
+                    </p>
+                    <p className="text-xs text-slate-500 break-words">
+                      {venta.caja} · Sesión #{venta.id_sesion}
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl bg-slate-50 p-3">
+                    <p className="text-xs text-slate-500">Usuario</p>
+                    <p className="font-semibold text-slate-700 break-words">
+                      {venta.usuario || '—'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <span className="inline-flex items-center gap-2 text-xs font-bold px-3 py-1 rounded-full bg-slate-100 text-slate-700">
+                    {iconoMetodo(venta.metodo_pago)}
+                    {venta.metodo_pago}
+                  </span>
+
+                  <span className="inline-flex text-xs font-bold px-3 py-1 rounded-full bg-sky-100 text-sky-700">
+                    Total: {formatoMoneda(venta.total)}
+                  </span>
+                </div>
+
+                <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-xl bg-slate-50 p-3">
+                    <p className="text-xs text-slate-500">Subtotal</p>
+                    <p className="font-bold text-slate-700">
+                      {formatoMoneda(venta.subtotal)}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl bg-red-50 p-3">
+                    <p className="text-xs text-red-700">Descuento</p>
+                    <p className="font-bold text-red-700">
+                      -{formatoMoneda(venta.descuento)}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl bg-sky-50 p-3">
+                    <p className="text-xs text-sky-700">Total</p>
+                    <p className="font-bold text-sky-800">
+                      {formatoMoneda(venta.total)}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => verDetalleVenta(venta.id_venta)}
+                  className="mt-4 w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold transition"
+                >
+                  <Eye size={18} />
+                  Ver detalle
+                </button>
+              </article>
+            ))
+          )}
+        </div>
+
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full min-w-[1150px]">
             <thead className="bg-slate-50 border-b border-slate-100">
               <tr>
@@ -516,7 +647,7 @@ export default function Ventas() {
                 <th className="px-5 py-4 text-center text-xs font-bold text-slate-500 uppercase">
                   Estado
                 </th>
-                <th className="px-5 py-4 text-center text-xs font-bold text-slate-500 uppercase">
+                <th className="px-5 py-4 text-center text-xs font-bold text-slate-500 uppercase sticky right-0 bg-slate-50 shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.45)] z-10">
                   Acción
                 </th>
               </tr>
@@ -553,8 +684,8 @@ export default function Ventas() {
 
                     <td className="px-5 py-4">
                       <div className="flex items-start gap-2">
-                        <Store size={17} className="text-slate-400 mt-0.5" />
-                        <div>
+                        <Store size={17} className="text-slate-400 mt-0.5 shrink-0" />
+                        <div className="min-w-0">
                           <p className="font-semibold text-slate-800">
                             {venta.sucursal}
                           </p>
@@ -584,7 +715,7 @@ export default function Ventas() {
                       -{formatoMoneda(venta.descuento)}
                     </td>
 
-                    <td className="px-5 py-4 text-right font-bold text-emerald-700">
+                    <td className="px-5 py-4 text-right font-bold text-sky-700">
                       {formatoMoneda(venta.total)}
                     </td>
 
@@ -592,7 +723,7 @@ export default function Ventas() {
                       <span
                         className={`text-xs font-bold px-3 py-1 rounded-full ${
                           venta.estado === 'COMPLETADA'
-                            ? 'bg-emerald-100 text-emerald-700'
+                            ? 'bg-sky-100 text-sky-700'
                             : 'bg-slate-100 text-slate-600'
                         }`}
                       >
@@ -600,7 +731,7 @@ export default function Ventas() {
                       </span>
                     </td>
 
-                    <td className="px-5 py-4 text-center">
+                    <td className="px-5 py-4 text-center sticky right-0 bg-white shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.45)]">
                       <button
                         onClick={() => verDetalleVenta(venta.id_venta)}
                         className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold transition"
@@ -618,88 +749,93 @@ export default function Ventas() {
       </section>
 
       {modalDetalle && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-6xl max-h-[92vh] overflow-hidden">
-            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-bold text-slate-800">
+        <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center px-3 sm:px-4 py-4 sm:py-8 overflow-y-auto">
+          <div
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm"
+            onClick={cerrarDetalle}
+          />
+
+          <div className="relative bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-6xl max-h-[92vh] overflow-hidden my-auto">
+            <div className="px-4 sm:px-6 py-5 border-b border-slate-100 flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h2 className="text-lg sm:text-xl font-bold text-slate-800">
                   Detalle de venta
                 </h2>
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-slate-500 break-words">
                   {detalleVenta?.folio || 'Cargando...'}
                 </p>
               </div>
 
               <button
                 onClick={cerrarDetalle}
-                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center"
+                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center shrink-0"
               >
                 <X size={20} />
               </button>
             </div>
 
-            <div className="p-6 overflow-y-auto max-h-[80vh]">
+            <div className="p-4 sm:p-6 overflow-y-auto max-h-[80vh]">
               {cargandoDetalle ? (
                 <div className="text-center py-10 text-slate-500">
                   Cargando detalle...
                 </div>
               ) : detalleVenta ? (
                 <div className="space-y-6">
-                  <section className="grid md:grid-cols-4 gap-4">
-                    <div className="rounded-2xl bg-slate-50 p-4">
+                  <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                    <div className="rounded-2xl bg-slate-50 p-4 min-w-0">
                       <p className="text-sm text-slate-500">Fecha</p>
-                      <p className="font-bold text-slate-800 mt-1">
+                      <p className="font-bold text-slate-800 mt-1 break-words">
                         {formatoFecha(detalleVenta.fecha_venta)}
                       </p>
                     </div>
 
-                    <div className="rounded-2xl bg-slate-50 p-4">
+                    <div className="rounded-2xl bg-slate-50 p-4 min-w-0">
                       <p className="text-sm text-slate-500">Sucursal</p>
-                      <p className="font-bold text-slate-800 mt-1">
+                      <p className="font-bold text-slate-800 mt-1 break-words">
                         {detalleVenta.sucursal}
                       </p>
                     </div>
 
-                    <div className="rounded-2xl bg-slate-50 p-4">
+                    <div className="rounded-2xl bg-slate-50 p-4 min-w-0">
                       <p className="text-sm text-slate-500">Caja</p>
-                      <p className="font-bold text-slate-800 mt-1">
+                      <p className="font-bold text-slate-800 mt-1 break-words">
                         {detalleVenta.caja} · Sesión #{detalleVenta.id_sesion}
                       </p>
                     </div>
 
-                    <div className="rounded-2xl bg-slate-50 p-4">
+                    <div className="rounded-2xl bg-slate-50 p-4 min-w-0">
                       <p className="text-sm text-slate-500">Cajero</p>
-                      <p className="font-bold text-slate-800 mt-1">
+                      <p className="font-bold text-slate-800 mt-1 break-words">
                         {detalleVenta.usuario}
                       </p>
                     </div>
                   </section>
 
-                  <section className="grid md:grid-cols-4 gap-4">
-                    <div className="rounded-2xl bg-emerald-50 p-4">
-                      <p className="text-sm text-emerald-700">Total</p>
-                      <p className="text-2xl font-bold text-emerald-800 mt-1">
+                  <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                    <div className="rounded-2xl bg-sky-50 p-4 min-w-0">
+                      <p className="text-sm text-sky-700">Total</p>
+                      <p className="text-2xl font-bold text-sky-800 mt-1 break-words">
                         {formatoMoneda(detalleVenta.total)}
                       </p>
                     </div>
 
-                    <div className="rounded-2xl bg-blue-50 p-4">
+                    <div className="rounded-2xl bg-blue-50 p-4 min-w-0">
                       <p className="text-sm text-blue-700">Método</p>
-                      <p className="font-bold text-blue-800 mt-1">
+                      <p className="font-bold text-blue-800 mt-1 break-words">
                         {detalleVenta.metodo_pago}
                       </p>
                     </div>
 
-                    <div className="rounded-2xl bg-slate-50 p-4">
+                    <div className="rounded-2xl bg-slate-50 p-4 min-w-0">
                       <p className="text-sm text-slate-500">Recibido</p>
-                      <p className="font-bold text-slate-800 mt-1">
+                      <p className="font-bold text-slate-800 mt-1 break-words">
                         {formatoMoneda(detalleVenta.monto_recibido)}
                       </p>
                     </div>
 
-                    <div className="rounded-2xl bg-slate-50 p-4">
+                    <div className="rounded-2xl bg-slate-50 p-4 min-w-0">
                       <p className="text-sm text-slate-500">Cambio</p>
-                      <p className="font-bold text-slate-800 mt-1">
+                      <p className="font-bold text-slate-800 mt-1 break-words">
                         {formatoMoneda(detalleVenta.cambio)}
                       </p>
                     </div>
@@ -707,13 +843,65 @@ export default function Ventas() {
 
                   <section>
                     <div className="flex items-center gap-2 mb-4">
-                      <Package className="text-emerald-700" size={22} />
+                      <Package className="text-sky-700 shrink-0" size={22} />
                       <h3 className="text-lg font-bold text-slate-800">
                         Productos vendidos
                       </h3>
                     </div>
 
-                    <div className="overflow-x-auto rounded-2xl border border-slate-100">
+                    <div className="md:hidden space-y-3">
+                      {detalleProductos.length === 0 ? (
+                        <div className="rounded-2xl bg-slate-50 p-5 text-center text-slate-500">
+                          No hay productos asociados.
+                        </div>
+                      ) : (
+                        detalleProductos.map((item) => (
+                          <div
+                            key={item.id_detalle}
+                            className="rounded-2xl border border-slate-100 p-4 bg-white"
+                          >
+                            <p className="font-bold text-slate-800 break-words">
+                              {item.producto}
+                            </p>
+                            <p className="text-xs text-slate-500 mt-1 break-words">
+                              Código: {item.codigo_barras || '—'}
+                            </p>
+
+                            <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+                              <div className="rounded-xl bg-slate-50 p-3">
+                                <p className="text-xs text-slate-500">Cantidad</p>
+                                <p className="font-bold text-slate-800">
+                                  {formatoNumero(item.cantidad)}
+                                </p>
+                              </div>
+
+                              <div className="rounded-xl bg-slate-50 p-3">
+                                <p className="text-xs text-slate-500">Precio</p>
+                                <p className="font-bold text-slate-800">
+                                  {formatoMoneda(item.precio_unitario)}
+                                </p>
+                              </div>
+
+                              <div className="rounded-xl bg-red-50 p-3">
+                                <p className="text-xs text-red-700">Descuento</p>
+                                <p className="font-bold text-red-700">
+                                  -{formatoMoneda(item.descuento)}
+                                </p>
+                              </div>
+
+                              <div className="rounded-xl bg-sky-50 p-3">
+                                <p className="text-xs text-sky-700">Subtotal</p>
+                                <p className="font-bold text-sky-800">
+                                  {formatoMoneda(item.subtotal)}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    <div className="hidden md:block overflow-x-auto rounded-2xl border border-slate-100">
                       <table className="w-full min-w-[850px]">
                         <thead className="bg-slate-50">
                           <tr>
@@ -756,7 +944,7 @@ export default function Ventas() {
                               <td className="px-4 py-3 text-right text-red-600">
                                 -{formatoMoneda(item.descuento)}
                               </td>
-                              <td className="px-4 py-3 text-right font-bold text-emerald-700">
+                              <td className="px-4 py-3 text-right font-bold text-sky-700">
                                 {formatoMoneda(item.subtotal)}
                               </td>
                             </tr>
@@ -768,7 +956,7 @@ export default function Ventas() {
 
                   <section>
                     <div className="flex items-center gap-2 mb-4">
-                      <Boxes className="text-violet-700" size={22} />
+                      <Boxes className="text-violet-700 shrink-0" size={22} />
                       <h3 className="text-lg font-bold text-slate-800">
                         Lotes descontados FEFO
                       </h3>
@@ -779,68 +967,117 @@ export default function Ventas() {
                         No hay lotes asociados a esta venta.
                       </div>
                     ) : (
-                      <div className="overflow-x-auto rounded-2xl border border-slate-100">
-                        <table className="w-full min-w-[900px]">
-                          <thead className="bg-slate-50">
-                            <tr>
-                              <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
-                                Producto
-                              </th>
-                              <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
-                                Lote
-                              </th>
-                              <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
-                                Caducidad
-                              </th>
-                              <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">
-                                Cantidad
-                              </th>
-                              <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">
-                                Stock anterior
-                              </th>
-                              <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">
-                                Stock nuevo
-                              </th>
-                            </tr>
-                          </thead>
+                      <>
+                        <div className="md:hidden space-y-3">
+                          {detalleLotes.map((lote) => (
+                            <div
+                              key={lote.id_movimiento}
+                              className="rounded-2xl border border-slate-100 p-4 bg-white"
+                            >
+                              <p className="font-bold text-slate-800 break-words">
+                                {lote.producto}
+                              </p>
+                              <p className="text-xs text-slate-500 mt-1">
+                                Lote: {lote.lote || '—'}
+                              </p>
+                              <p className="text-xs text-slate-500 mt-1">
+                                Caducidad:{' '}
+                                {lote.fecha_caducidad
+                                  ? new Date(
+                                      lote.fecha_caducidad
+                                    ).toLocaleDateString('es-MX')
+                                  : 'Sin fecha'}
+                              </p>
 
-                          <tbody className="divide-y divide-slate-100">
-                            {detalleLotes.map((lote) => (
-                              <tr key={lote.id_movimiento}>
-                                <td className="px-4 py-3 font-bold text-slate-800">
-                                  {lote.producto}
-                                </td>
-                                <td className="px-4 py-3 text-slate-600">
-                                  {lote.lote || '—'}
-                                </td>
-                                <td className="px-4 py-3 text-slate-600">
-                                  {lote.fecha_caducidad
-                                    ? new Date(
-                                        lote.fecha_caducidad
-                                      ).toLocaleDateString('es-MX')
-                                    : 'Sin fecha'}
-                                </td>
-                                <td className="px-4 py-3 text-right font-bold text-red-700">
-                                  {formatoNumero(lote.cantidad)}
-                                </td>
-                                <td className="px-4 py-3 text-right text-slate-600">
-                                  {formatoNumero(lote.stock_anterior)}
-                                </td>
-                                <td className="px-4 py-3 text-right text-emerald-700 font-bold">
-                                  {formatoNumero(lote.stock_nuevo)}
-                                </td>
+                              <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+                                <div className="rounded-xl bg-red-50 p-3">
+                                  <p className="text-xs text-red-700">Cantidad</p>
+                                  <p className="font-bold text-red-700">
+                                    {formatoNumero(lote.cantidad)}
+                                  </p>
+                                </div>
+
+                                <div className="rounded-xl bg-slate-50 p-3">
+                                  <p className="text-xs text-slate-500">Anterior</p>
+                                  <p className="font-bold text-slate-700">
+                                    {formatoNumero(lote.stock_anterior)}
+                                  </p>
+                                </div>
+
+                                <div className="rounded-xl bg-sky-50 p-3">
+                                  <p className="text-xs text-sky-700">Nuevo</p>
+                                  <p className="font-bold text-sky-800">
+                                    {formatoNumero(lote.stock_nuevo)}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="hidden md:block overflow-x-auto rounded-2xl border border-slate-100">
+                          <table className="w-full min-w-[900px]">
+                            <thead className="bg-slate-50">
+                              <tr>
+                                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+                                  Producto
+                                </th>
+                                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+                                  Lote
+                                </th>
+                                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+                                  Caducidad
+                                </th>
+                                <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">
+                                  Cantidad
+                                </th>
+                                <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">
+                                  Stock anterior
+                                </th>
+                                <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">
+                                  Stock nuevo
+                                </th>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                            </thead>
+
+                            <tbody className="divide-y divide-slate-100">
+                              {detalleLotes.map((lote) => (
+                                <tr key={lote.id_movimiento}>
+                                  <td className="px-4 py-3 font-bold text-slate-800">
+                                    {lote.producto}
+                                  </td>
+                                  <td className="px-4 py-3 text-slate-600">
+                                    {lote.lote || '—'}
+                                  </td>
+                                  <td className="px-4 py-3 text-slate-600">
+                                    {lote.fecha_caducidad
+                                      ? new Date(
+                                          lote.fecha_caducidad
+                                        ).toLocaleDateString('es-MX')
+                                      : 'Sin fecha'}
+                                  </td>
+                                  <td className="px-4 py-3 text-right font-bold text-red-700">
+                                    {formatoNumero(lote.cantidad)}
+                                  </td>
+                                  <td className="px-4 py-3 text-right text-slate-600">
+                                    {formatoNumero(lote.stock_anterior)}
+                                  </td>
+                                  <td className="px-4 py-3 text-right text-sky-700 font-bold">
+                                    {formatoNumero(lote.stock_nuevo)}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </>
                     )}
                   </section>
 
                   <section className="flex justify-end">
                     <button
                       onClick={abrirTicket}
-                      className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition"
+                      className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition"
                     >
                       <ReceiptText size={19} />
                       Ver ticket
@@ -854,28 +1091,33 @@ export default function Ventas() {
       )}
 
       {modalTicket && detalleVenta && (
-        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 z-[60]">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl max-h-[92vh] overflow-hidden">
-            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-bold text-slate-800">
+        <div className="fixed inset-0 z-[60] flex items-start sm:items-center justify-center px-3 sm:px-4 py-4 sm:py-8 overflow-y-auto">
+          <div
+            className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm"
+            onClick={() => setModalTicket(false)}
+          />
+
+          <div className="relative bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-3xl max-h-[92vh] overflow-hidden my-auto">
+            <div className="px-4 sm:px-6 py-5 border-b border-slate-100 flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h2 className="text-lg sm:text-xl font-bold text-slate-800">
                   Ticket de venta
                 </h2>
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-slate-500 break-words">
                   {detalleVenta.folio}
                 </p>
               </div>
 
               <button
                 onClick={() => setModalTicket(false)}
-                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center"
+                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center shrink-0"
               >
                 <X size={20} />
               </button>
             </div>
 
-            <div className="p-6 overflow-y-auto max-h-[75vh] bg-slate-100">
-              <div className="mx-auto bg-white rounded-2xl shadow-sm border border-slate-200 p-5 max-w-sm">
+            <div className="p-4 sm:p-6 overflow-y-auto max-h-[75vh] bg-slate-100">
+              <div className="mx-auto bg-white rounded-2xl shadow-sm border border-slate-200 p-5 max-w-sm overflow-x-auto">
                 <div id="ticket-print-area">
                   <div className="ticket">
                     <div className="center">
@@ -1027,17 +1269,17 @@ export default function Ventas() {
               </div>
             </div>
 
-            <div className="px-6 py-5 border-t border-slate-100 flex flex-col sm:flex-row justify-end gap-3">
+            <div className="px-4 sm:px-6 py-5 border-t border-slate-100 flex flex-col sm:flex-row justify-end gap-3">
               <button
                 onClick={() => setModalTicket(false)}
-                className="px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition"
+                className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition"
               >
                 Cerrar
               </button>
 
               <button
                 onClick={imprimirTicket}
-                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold transition"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold transition"
               >
                 <ReceiptText size={19} />
                 Imprimir ticket
