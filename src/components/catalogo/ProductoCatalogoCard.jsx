@@ -48,15 +48,7 @@ export default function ProductoCatalogoCard({ producto, onVerDetalle }) {
                 )}
             </div>
 
-            {/* Favorito visual */}
-            <button
-                type="button"
-                onClick={(e) => e.stopPropagation()}
-                className="absolute top-4 right-4 z-10 w-10 h-10 rounded-2xl bg-white/90 border border-slate-200 text-sky-600 flex items-center justify-center shadow-sm hover:bg-sky-50 transition"
-                title="Favorito"
-            >
-                <Heart size={22} />
-            </button>
+           
 
             {/* Imagen */}
             <div className="h-56 bg-gradient-to-br from-slate-50 to-sky-50 flex items-center justify-center p-5">

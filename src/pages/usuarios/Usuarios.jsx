@@ -47,6 +47,12 @@ export default function Usuarios() {
   const [mostrarPassword, setMostrarPassword] = useState(false);
   const [form, setForm] = useState(formInicial);
 
+  const rolSeleccionado = useMemo(() => {
+    return roles.find((rol) => Number(rol.id_rol) === Number(form.id_rol));
+  }, [roles, form.id_rol]);
+
+  const esDoctor = rolSeleccionado?.nombre === 'DOCTOR';
+
   const totalActivos = useMemo(() => {
     return usuarios.filter((u) => u.activo).length;
   }, [usuarios]);
@@ -133,9 +139,7 @@ export default function Usuarios() {
     setForm({
       ...formInicial,
       id_rol: rolCajero?.id_rol || roles[0]?.id_rol || '',
-      sucursales: usuarioSesion?.sucursales?.[0]?.id_sucursal
-        ? [usuarioSesion.sucursales[0].id_sucursal]
-        : [],
+      sucursales: [],
     });
 
     setModoEdicion(false);
@@ -149,13 +153,17 @@ export default function Usuarios() {
     setModoEdicion(true);
     setMostrarPassword(false);
 
+    const esUsuarioDoctor = usuario.rol === 'DOCTOR';
+
     setForm({
       nombre: usuario.nombre || '',
       usuario: usuario.usuario || '',
       correo: usuario.correo || '',
       password: '',
       id_rol: usuario.id_rol || '',
-      sucursales: (usuario.sucursales || []).map((s) => Number(s.id_sucursal)),
+      sucursales: esUsuarioDoctor
+        ? []
+        : (usuario.sucursales || []).map((s) => Number(s.id_sucursal)),
       activo: Boolean(usuario.activo),
     });
 
@@ -172,6 +180,18 @@ export default function Usuarios() {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
+
+    if (name === 'id_rol') {
+      const rolNuevo = roles.find((rol) => Number(rol.id_rol) === Number(value));
+
+      setForm((prev) => ({
+        ...prev,
+        id_rol: value,
+        sucursales: rolNuevo?.nombre === 'DOCTOR' ? [] : prev.sucursales,
+      }));
+
+      return;
+    }
 
     setForm({
       ...form,
@@ -240,7 +260,10 @@ export default function Usuarios() {
       return false;
     }
 
-    if (!Array.isArray(form.sucursales) || form.sucursales.length === 0) {
+    if (
+      !esDoctor &&
+      (!Array.isArray(form.sucursales) || form.sucursales.length === 0)
+    ) {
       Swal.fire({
         icon: 'warning',
         title: 'Sucursal obligatoria',
@@ -278,7 +301,7 @@ export default function Usuarios() {
         usuario: form.usuario.trim(),
         correo: form.correo.trim() || null,
         id_rol: Number(form.id_rol),
-        sucursales: form.sucursales.map((id) => Number(id)),
+        sucursales: esDoctor ? [] : form.sucursales.map((id) => Number(id)),
         activo: form.activo,
       };
 
@@ -388,6 +411,7 @@ export default function Usuarios() {
     if (rol === 'CAJERO') return 'bg-sky-100 text-sky-700';
     if (rol === 'ALMACEN') return 'bg-amber-100 text-amber-700';
     if (rol === 'COMPRAS') return 'bg-violet-100 text-violet-700';
+    if (rol === 'DOCTOR') return 'bg-emerald-100 text-emerald-700';
     return 'bg-slate-100 text-slate-700';
   };
 
@@ -560,7 +584,17 @@ export default function Usuarios() {
                     <td className="px-5 py-4">
                       <div className="flex flex-wrap gap-2">
                         {(item.sucursales || []).length === 0 ? (
-                          <span className="text-sm text-slate-400">Sin sucursal</span>
+                          <span
+                            className={`text-sm font-semibold ${
+                              item.rol === 'DOCTOR'
+                                ? 'text-emerald-600'
+                                : 'text-slate-400'
+                            }`}
+                          >
+                            {item.rol === 'DOCTOR'
+                              ? 'Doctor independiente'
+                              : 'Sin sucursal'}
+                          </span>
                         ) : (
                           item.sucursales.map((sucursal) => (
                             <span
@@ -656,7 +690,7 @@ export default function Usuarios() {
                       value={form.nombre}
                       onChange={handleChange}
                       className="w-full pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
-                      placeholder="Ej. Cajero Principal"
+                      placeholder="Escribe el nombre..."
                     />
                   </div>
                 </div>
@@ -675,7 +709,7 @@ export default function Usuarios() {
                       value={form.usuario}
                       onChange={handleChange}
                       className="w-full pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
-                      placeholder="cajero1"
+                      placeholder="Escribe el usuario de acceso..."
                     />
                   </div>
                 </div>
@@ -694,7 +728,7 @@ export default function Usuarios() {
                       value={form.correo}
                       onChange={handleChange}
                       className="w-full pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
-                      placeholder="correo@farmacia.local"
+                      placeholder="Escribe el correo de contacto..."
                     />
                   </div>
                 </div>
@@ -774,43 +808,54 @@ export default function Usuarios() {
 
                 <div className="md:col-span-2">
                   <label className="block text-sm font-bold text-slate-700 mb-2">
-                    Sucursales asignadas *
+                    {esDoctor ? 'Sucursales asignadas' : 'Sucursales asignadas *'}
                   </label>
 
-                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {sucursales.map((sucursal) => {
-                      const checked = form.sucursales.includes(
-                        Number(sucursal.id_sucursal)
-                      );
+                  {esDoctor ? (
+                    <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-4 text-emerald-700">
+                      <p className="font-bold">
+                        Este usuario tiene rol DOCTOR, por lo que no necesita estar asignado a una farmacia.
+                      </p>
+                      <p className="text-sm mt-1">
+                        Se guardará como usuario independiente sin sucursal asignada.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {sucursales.map((sucursal) => {
+                        const checked = form.sucursales.includes(
+                          Number(sucursal.id_sucursal)
+                        );
 
-                      return (
-                        <label
-                          key={sucursal.id_sucursal}
-                          className={`flex items-center gap-3 rounded-2xl border p-4 cursor-pointer transition ${
-                            checked
-                              ? 'border-sky-500 bg-sky-50'
-                              : 'border-slate-200 bg-white hover:bg-slate-50'
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => toggleSucursal(sucursal.id_sucursal)}
-                            className="w-5 h-5 accent-sky-700"
-                          />
+                        return (
+                          <label
+                            key={sucursal.id_sucursal}
+                            className={`flex items-center gap-3 rounded-2xl border p-4 cursor-pointer transition ${
+                              checked
+                                ? 'border-sky-500 bg-sky-50'
+                                : 'border-slate-200 bg-white hover:bg-slate-50'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleSucursal(sucursal.id_sucursal)}
+                              className="w-5 h-5 accent-sky-700"
+                            />
 
-                          <div>
-                            <p className="font-bold text-slate-800">
-                              {sucursal.nombre}
-                            </p>
-                            <p className="text-xs text-slate-500">
-                              {sucursal.clave}
-                            </p>
-                          </div>
-                        </label>
-                      );
-                    })}
-                  </div>
+                            <div>
+                              <p className="font-bold text-slate-800">
+                                {sucursal.nombre}
+                              </p>
+                              <p className="text-xs text-slate-500">
+                                {sucursal.clave}
+                              </p>
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
 
