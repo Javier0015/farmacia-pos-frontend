@@ -26,15 +26,19 @@ import RecetasDoctor from '../pages/doctores/RecetasDoctor';
 import RecetasAdmin from '../pages/doctores/RecetasAdmin';
 import OfertasCategorias from '../pages/ofertas/OfertasCategorias';
 import SesionExpirada from '../pages/SesionExpirada';
+import CatalogoPublico from '../pages/publico/CatalogoPublico';
+import CatalogoAdmin from '../pages/catalogo/CatalogoAdmin';
 
 export default function AppRouter() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Rutas públicas */}
         <Route path="/" element={<Login />} />
-
         <Route path="/sesion-expirada" element={<SesionExpirada />} />
+        <Route path="/catalogo" element={<CatalogoPublico />} />
 
+        {/* Rutas privadas */}
         <Route
           path="/app"
           element={
@@ -225,9 +229,19 @@ export default function AppRouter() {
             }
           />
 
+          <Route
+            path="catalogo-admin"
+            element={
+              <RoleRoute modulo="catalogo-admin">
+                <CatalogoAdmin />
+              </RoleRoute>
+            }
+          />
+
           <Route path="no-autorizado" element={<NoAutorizado />} />
         </Route>
 
+        {/* Ruta no encontrada */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

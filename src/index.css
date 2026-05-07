@@ -93,3 +93,60 @@ body {
 .sidebar-scroll::-webkit-scrollbar-corner {
   background: transparent;
 }
+
+/* Scroll bonito para modal del catálogo */
+.catalogo-modal-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(14, 165, 233, 0.45) transparent;
+}
+
+/* Chrome, Edge, Brave */
+.catalogo-modal-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.catalogo-modal-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.catalogo-modal-scroll::-webkit-scrollbar-thumb {
+  background: rgba(14, 165, 233, 0.35);
+  border-radius: 999px;
+}
+
+.catalogo-modal-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(14, 165, 233, 0.75);
+}
+
+.catalogo-modal-scroll::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+
+/* Scroll bonito para página pública del catálogo */
+.catalogo-page-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(14, 165, 233, 0.45) transparent;
+}
+
+.catalogo-page-scroll::-webkit-scrollbar {
+  width: 9px;
+}
+
+.catalogo-page-scroll::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+.catalogo-page-scroll::-webkit-scrollbar-thumb {
+  background: rgba(14, 165, 233, 0.35);
+  border-radius: 999px;
+  border: 2px solid #f1f5f9;
+}
+
+.catalogo-page-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(14, 165, 233, 0.75);
+}
+
+.catalogo-page-scroll::-webkit-scrollbar-corner {
+  background: transparent;
+}

@@ -18,6 +18,7 @@ export const permisosPorRol = {
     'puntos',
     'recetas-admin',
     'ofertas',
+    'catalogo-admin',
   ],
 
   ADMIN_SUCURSAL: [

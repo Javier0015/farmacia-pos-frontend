@@ -152,6 +152,12 @@ const links = [
     icon: Award,
     modulo: 'puntos',
   },
+  {
+    to: '/app/catalogo-admin',
+    label: 'Catálogo digital',
+    icon: Package,
+    modulo: 'catalogo-admin',
+  }
 ];
 
 export default function Sidebar({ modoMovil = false, onNavigate }) {
@@ -163,9 +169,8 @@ export default function Sidebar({ modoMovil = false, onNavigate }) {
 
   return (
     <aside
-      className={`w-72 bg-slate-950 text-white h-screen max-h-screen overflow-hidden flex-col ${
-        modoMovil ? 'flex' : 'hidden lg:flex'
-      }`}
+      className={`w-72 bg-slate-950 text-white h-screen max-h-screen overflow-hidden flex-col ${modoMovil ? 'flex' : 'hidden lg:flex'
+        }`}
     >
       <div className="shrink-0 p-5 sm:p-6 border-b border-white/10">
         <div className="flex items-center gap-3 min-w-0">
@@ -200,10 +205,9 @@ export default function Sidebar({ modoMovil = false, onNavigate }) {
               to={item.to}
               onClick={onNavigate}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-4 py-3 rounded-2xl transition text-sm font-semibold min-w-0 ${
-                  isActive
-                    ? 'bg-sky-600 text-white shadow-lg shadow-sky-900/30'
-                    : 'text-slate-300 hover:bg-white/10 hover:text-white'
+                `flex items-center gap-3 px-4 py-3 rounded-2xl transition text-sm font-semibold min-w-0 ${isActive
+                  ? 'bg-sky-600 text-white shadow-lg shadow-sky-900/30'
+                  : 'text-slate-300 hover:bg-white/10 hover:text-white'
                 }`
               }
             >
