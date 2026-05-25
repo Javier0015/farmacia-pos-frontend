@@ -68,6 +68,22 @@ const movimientosSalida = tiposMovimiento
   .filter((tipo) => tipo.tipo === 'salida')
   .map((tipo) => tipo.value);
 
+const movimientosConLoteExistente = [
+  'SALIDA',
+  'AJUSTE_NEGATIVO',
+  'MERMA',
+  'CADUCIDAD',
+  'DEVOLUCION_PROVEEDOR',
+  'DEVOLUCION_CLIENTE',
+];
+
+const movimientosBajaTotalLote = ['CADUCIDAD'];
+
+const movimientosPermitenNuevoLote = [
+  'ENTRADA',
+  'AJUSTE_POSITIVO',
+];
+
 export default function Inventario() {
   const { usuario } = useAuth();
 
@@ -358,17 +374,17 @@ export default function Inventario() {
   }, [idSucursal]);
 
   useEffect(() => {
-    const cargarLotesParaSalida = async () => {
+    const cargarLotesParaMovimiento = async () => {
       if (
         modalMovimiento &&
         formMovimiento.id_producto &&
-        movimientosSalida.includes(formMovimiento.tipo_movimiento)
+        movimientosConLoteExistente.includes(formMovimiento.tipo_movimiento)
       ) {
         await cargarLotesProducto(formMovimiento.id_producto);
       }
     };
 
-    cargarLotesParaSalida();
+    cargarLotesParaMovimiento();
   }, [modalMovimiento, formMovimiento.id_producto, formMovimiento.tipo_movimiento]);
 
   const abrirAsignar = () => {
@@ -410,12 +426,48 @@ export default function Inventario() {
 
     setFormMovimiento(nuevoForm);
 
-    if (item?.id_producto && movimientosSalida.includes(tipo)) {
+    if (item?.id_producto && movimientosConLoteExistente.includes(tipo)) {
       await cargarLotesProducto(item.id_producto);
     } else {
       setLotes([]);
     }
 
+    setModalMovimiento(true);
+  };
+
+  const abrirBajaLote = async (loteItem, tipo = 'CADUCIDAD') => {
+    if (!idSucursal) return;
+
+    const productoInventario = inventario.find(
+      (item) => Number(item.id_producto) === Number(loteItem.id_producto)
+    );
+
+    const nuevoForm = {
+      ...formMovimientoInicial,
+      id_sucursal: idSucursal,
+      id_producto: loteItem.id_producto || productoInventario?.id_producto || '',
+      id_lote: loteItem.id_lote || '',
+      tipo_movimiento: tipo,
+      cantidad: loteItem.stock_actual || '',
+      stock_minimo: productoInventario?.stock_minimo || '',
+      ubicacion: productoInventario?.ubicacion || '',
+      lote: loteItem.lote || '',
+      fecha_caducidad: loteItem.fecha_caducidad
+        ? String(loteItem.fecha_caducidad).slice(0, 10)
+        : '',
+      precio_compra: loteItem.precio_compra || '',
+      referencia: tipo === 'CADUCIDAD' ? `BAJA-CADUCIDAD-${loteItem.lote || ''}` : '',
+      observaciones:
+        tipo === 'CADUCIDAD'
+          ? 'Baja de lote por caducidad'
+          : '',
+    };
+
+    setFormMovimiento(nuevoForm);
+    await cargarLotesProducto(loteItem.id_producto);
+
+    setModalCaducidad(false);
+    setModalLotes(false);
     setModalMovimiento(true);
   };
 
@@ -463,11 +515,52 @@ export default function Inventario() {
   const handleMovimientoChange = (e) => {
     const { name, value } = e.target;
 
-    setFormMovimiento((prev) => ({
-      ...prev,
-      [name]: value,
-      ...(name === 'id_producto' ? { id_lote: '' } : {}),
-    }));
+    setFormMovimiento((prev) => {
+      const cambios = {
+        ...prev,
+        [name]: value,
+      };
+
+      if (name === 'id_producto') {
+        cambios.id_lote = '';
+        cambios.cantidad = '';
+        cambios.lote = '';
+        cambios.fecha_caducidad = '';
+        cambios.precio_compra = '';
+      }
+
+      if (name === 'tipo_movimiento') {
+        cambios.id_lote = '';
+        cambios.cantidad = '';
+        cambios.lote = '';
+        cambios.fecha_caducidad = '';
+        cambios.precio_compra = '';
+      }
+
+      if (name === 'id_lote') {
+        const loteSeleccionado = lotes.find(
+          (lote) => Number(lote.id_lote) === Number(value)
+        );
+
+        if (loteSeleccionado) {
+          cambios.lote = loteSeleccionado.lote || '';
+          cambios.fecha_caducidad = loteSeleccionado.fecha_caducidad
+            ? String(loteSeleccionado.fecha_caducidad).slice(0, 10)
+            : '';
+          cambios.precio_compra = loteSeleccionado.precio_compra || '';
+
+          if (movimientosBajaTotalLote.includes(prev.tipo_movimiento)) {
+            cambios.cantidad = loteSeleccionado.stock_actual || '';
+          }
+        } else {
+          cambios.lote = '';
+          cambios.fecha_caducidad = '';
+          cambios.precio_compra = '';
+        }
+      }
+
+      return cambios;
+    });
   };
 
   const asignarInventario = async (e) => {
@@ -561,6 +654,18 @@ export default function Inventario() {
         icon: 'warning',
         title: 'Cantidad inválida',
         text: 'La cantidad debe ser mayor a cero.',
+      });
+      return;
+    }
+
+    if (
+      formMovimiento.tipo_movimiento === 'DEVOLUCION_CLIENTE' &&
+      !formMovimiento.id_lote
+    ) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Lote obligatorio',
+        text: 'Para devolución de cliente selecciona el lote al que regresará el producto.',
       });
       return;
     }
@@ -1418,10 +1523,12 @@ export default function Inventario() {
                   </select>
                 </div>
 
-                {movimientosSalida.includes(formMovimiento.tipo_movimiento) && (
+                {movimientosConLoteExistente.includes(formMovimiento.tipo_movimiento) && (
                   <div>
                     <label className="block text-sm font-bold text-slate-700 mb-2">
-                      Lote de salida
+                      {movimientosEntrada.includes(formMovimiento.tipo_movimiento)
+                        ? 'Lote recibido'
+                        : 'Lote de salida'}
                     </label>
                     <select
                       name="id_lote"
@@ -1429,7 +1536,11 @@ export default function Inventario() {
                       onChange={handleMovimientoChange}
                       className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
                     >
-                      <option value="">Automático FEFO</option>
+                      <option value="">
+                        {movimientosSalida.includes(formMovimiento.tipo_movimiento)
+                          ? 'Automático FEFO'
+                          : 'Selecciona lote'}
+                      </option>
                       {lotes
                         .filter(
                           (l) =>
@@ -1449,10 +1560,37 @@ export default function Inventario() {
                           </option>
                         ))}
                     </select>
-                    <p className="text-xs text-slate-500 mt-1">
-                      Si no seleccionas lote, el sistema descontará primero el lote
-                      que caduca antes.
-                    </p>
+                    {movimientosSalida.includes(formMovimiento.tipo_movimiento) ? (
+                      <p className="text-xs text-slate-500 mt-1">
+                        Si no seleccionas lote, el sistema descontará primero el lote
+                        que caduca antes.
+                      </p>
+                    ) : (
+                      <p className="text-xs text-slate-500 mt-1">
+                        Para devolución de cliente, selecciona el lote donde regresará
+                        el medicamento. Al elegirlo se llenan caducidad y precio.
+                      </p>
+                    )}
+
+                    {formMovimiento.id_lote && (
+                      <div className="mt-3 rounded-2xl bg-slate-50 border border-slate-100 p-4 text-sm">
+                        <p className="font-bold text-slate-700">
+                          Lote seleccionado: {formMovimiento.lote || '—'}
+                        </p>
+                        <p className="text-slate-500 mt-1">
+                          Caducidad:{' '}
+                          <span className="font-semibold text-slate-700">
+                            {formMovimiento.fecha_caducidad
+                              ? new Date(formMovimiento.fecha_caducidad).toLocaleDateString('es-MX')
+                              : 'Sin fecha'}
+                          </span>{' '}
+                          · Precio compra:{' '}
+                          <span className="font-semibold text-slate-700">
+                            {formatoMoneda(formMovimiento.precio_compra)}
+                          </span>
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1471,7 +1609,7 @@ export default function Inventario() {
                   />
                 </div>
 
-                {movimientosEntrada.includes(formMovimiento.tipo_movimiento) && (
+                {movimientosPermitenNuevoLote.includes(formMovimiento.tipo_movimiento) && (
                   <>
                     <div>
                       <label className="block text-sm font-bold text-slate-700 mb-2">
@@ -1627,7 +1765,7 @@ export default function Inventario() {
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[900px]">
+                  <table className="w-full min-w-[1050px]">
                     <thead className="bg-slate-50 border-b border-slate-100">
                       <tr>
                         <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
@@ -1647,6 +1785,9 @@ export default function Inventario() {
                         </th>
                         <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
                           Entrada
+                        </th>
+                        <th className="px-4 py-3 text-center text-xs font-bold text-slate-500 uppercase">
+                          Acción
                         </th>
                       </tr>
                     </thead>
@@ -1692,6 +1833,21 @@ export default function Inventario() {
 
                           <td className="px-4 py-3 text-slate-600">
                             {formatoFecha(loteItem.fecha_entrada)}
+                          </td>
+
+                          <td className="px-4 py-3 text-center">
+                            {Number(loteItem.stock_actual) > 0 ? (
+                              <button
+                                onClick={() => abrirBajaLote(loteItem, 'CADUCIDAD')}
+                                className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-red-50 text-red-700 hover:bg-red-100 font-bold transition"
+                              >
+                                Dar de baja
+                              </button>
+                            ) : (
+                              <span className="text-xs font-bold px-3 py-1 rounded-full bg-slate-100 text-slate-500">
+                                Sin stock
+                              </span>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -1798,7 +1954,7 @@ export default function Inventario() {
 
                           <td className="px-4 py-3 text-center">
                             <button
-                              onClick={() => darBajaCaducidad(item)}
+                              onClick={() => abrirBajaLote(item, 'CADUCIDAD')}
                               className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-red-50 text-red-700 hover:bg-red-100 font-bold transition"
                             >
                               Dar de baja

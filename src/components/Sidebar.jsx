@@ -1,4 +1,5 @@
 import { NavLink } from 'react-router-dom';
+
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -18,6 +19,8 @@ import {
   UserRound,
   FileText,
   ClipboardCheck,
+  HeartPulse,
+  FlaskConical,
 } from 'lucide-react';
 
 import { useAuth } from '../context/AuthContext';
@@ -40,10 +43,32 @@ const links = [
   },
   {
     to: '/app/recetas-admin',
-    label: 'Recetas recibidas',
+    label: 'Recetas externas',
     icon: ClipboardCheck,
     modulo: 'recetas-admin',
   },
+
+  {
+    to: '/app/fila-espera',
+    label: 'Fila de espera',
+    icon: HeartPulse,
+    modulo: 'fila-espera',
+  },
+
+  {
+    to: '/app/doctor-shaddai/fila-espera',
+    label: 'Fila de espera',
+    icon: HeartPulse,
+    modulo: 'doctor-shaddai-fila-espera',
+  },
+
+    {
+    to: '/app/recetas',
+    label: 'Recetas',
+    icon: FileText,
+    modulo: 'recetas',
+  },
+
   {
     to: '/app/ofertas',
     label: 'Ofertas',
@@ -74,12 +99,7 @@ const links = [
     icon: UserRound,
     modulo: 'doctor-perfil',
   },
-  {
-    to: '/app/recetas',
-    label: 'Recetas',
-    icon: FileText,
-    modulo: 'recetas',
-  },
+
   {
     to: '/app/tarjetas-puntos',
     label: 'Tarjetas puntos',
@@ -157,7 +177,43 @@ const links = [
     label: 'Catálogo digital',
     icon: Package,
     modulo: 'catalogo-admin',
-  }
+  },
+
+  {
+    to: '/app/doctor-shaddai/perfil',
+    label: 'Perfil Doctor',
+    icon: UserRound,
+    modulo: 'doctor-shaddai-perfil',
+  },
+
+  {
+    to: '/app/doctor-shaddai/expedientes',
+    label: 'Expedientes clínicos',
+    icon: HeartPulse,
+    modulo: 'expedientes-clinicos',
+  },
+
+  /*{
+    to: '/app/doctor-shaddai/recetas',
+    label: 'Recetas ',
+    icon: FileText,
+    modulo: 'doctor-shaddai-recetas',
+  },*/
+
+  {
+    to: '/app/doctor-shaddai/historial-recetas',
+    label: 'Historial recetas',
+    icon: ClipboardList,
+    modulo: 'doctor-shaddai-recetas',
+  },
+
+
+  {
+    to: '/app/doctor-shaddai/historial-laboratorio',
+    label: 'Solicitudes laboratorio',
+    icon: FlaskConical,
+    modulo: 'doctor-shaddai-laboratorio',
+  },
 ];
 
 export default function Sidebar({ modoMovil = false, onNavigate }) {
@@ -189,7 +245,7 @@ export default function Sidebar({ modoMovil = false, onNavigate }) {
               Shaddai
             </h1>
             <p className="text-xs text-slate-400 truncate">
-              Bienestar al alcane de todos
+              Bienestar al alcance de todos
             </p>
           </div>
         </div>
@@ -220,12 +276,12 @@ export default function Sidebar({ modoMovil = false, onNavigate }) {
 
       <div className="shrink-0 p-3 sm:p-4 border-t border-white/10">
         <div className="rounded-2xl bg-white/5 p-4 min-w-0">
-          <p className="text-xs text-slate-400">
-            Sesión activa
-          </p>
+          <p className="text-xs text-slate-400">Sesión activa</p>
+
           <p className="text-sm font-semibold text-sky-300 truncate">
             {usuario?.rol || 'Sin rol'}
           </p>
+
           <p className="text-xs text-slate-400 mt-1 truncate">
             {usuario?.nombre || usuario?.usuario}
           </p>

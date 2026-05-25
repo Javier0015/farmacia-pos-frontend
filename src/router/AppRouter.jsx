@@ -29,6 +29,15 @@ import SesionExpirada from '../pages/SesionExpirada';
 import CatalogoPublico from '../pages/publico/CatalogoPublico';
 import CatalogoAdmin from '../pages/catalogo/CatalogoAdmin';
 
+import DoctorShaddaiPerfil from '../pages/doctorShaddai/DoctorShaddaiPerfil';
+import ExpedientesClinicos from '../pages/doctorShaddai/ExpedientesClinicos';
+import DoctorShaddaiRecetas from '../pages/doctorShaddai/DoctorShaddaiRecetas';
+import HistorialRecetas from '../pages/doctorShaddai/HistorialRecetas';
+import DoctorFilaEspera from '../pages/doctorShaddai/DoctorFilaEspera';
+import HistorialSolicitudesLaboratorio from '../pages/doctorShaddai/HistorialSolicitudesLaboratorio';
+
+import FilaEsperaPOS from '../pages/filaEspera/FilaEsperaPOS';
+
 export default function AppRouter() {
   return (
     <BrowserRouter>
@@ -99,6 +108,15 @@ export default function AppRouter() {
             element={
               <RoleRoute modulo="pos">
                 <POS />
+              </RoleRoute>
+            }
+          />
+
+          <Route
+            path="fila-espera"
+            element={
+              <RoleRoute modulo="fila-espera">
+                <FilaEsperaPOS />
               </RoleRoute>
             }
           />
@@ -236,6 +254,56 @@ export default function AppRouter() {
                 <CatalogoAdmin />
               </RoleRoute>
             }
+          />
+
+          <Route
+            path="doctor-shaddai/perfil"
+            element={
+              <RoleRoute modulo="doctor-shaddai-perfil">
+                <DoctorShaddaiPerfil />
+              </RoleRoute>
+            }
+          />
+
+          <Route
+            path="doctor-shaddai/fila-espera"
+            element={
+              <RoleRoute modulo="doctor-shaddai-fila-espera">
+                <DoctorFilaEspera />
+              </RoleRoute>
+            }
+          />
+
+          <Route
+            path="doctor-shaddai/expedientes"
+            element={
+              <RoleRoute modulo="expedientes-clinicos">
+                <ExpedientesClinicos />
+              </RoleRoute>
+            }
+          />
+
+          <Route
+            path="doctor-shaddai/recetas"
+            element={
+              <RoleRoute modulo="doctor-shaddai-recetas">
+                <DoctorShaddaiRecetas />
+              </RoleRoute>
+            }
+          />
+
+          <Route
+            path="doctor-shaddai/historial-recetas"
+            element={
+              <RoleRoute modulo="doctor-shaddai-recetas">
+                <HistorialRecetas />
+              </RoleRoute>
+            }
+          />
+
+          <Route
+            path="/app/doctor-shaddai/historial-laboratorio"
+            element={<HistorialSolicitudesLaboratorio />}
           />
 
           <Route path="no-autorizado" element={<NoAutorizado />} />

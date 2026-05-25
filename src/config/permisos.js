@@ -19,6 +19,14 @@ export const permisosPorRol = {
     'recetas-admin',
     'ofertas',
     'catalogo-admin',
+    'fila-espera',
+
+/*    // Doctor Shaddai
+    'doctor-shaddai-perfil',
+    'expedientes-clinicos',
+    'doctor-shaddai-recetas',
+    'doctor-shaddai-fila-espera',
+    'doctor-shaddai-laboratorio',*/
   ],
 
   ADMIN_SUCURSAL: [
@@ -45,6 +53,7 @@ export const permisosPorRol = {
     'ventas',
     'tarjetas-puntos',
     'recetas-admin',
+    'fila-espera',
   ],
 
   ALMACEN: [
@@ -72,10 +81,16 @@ export const permisosPorRol = {
   DOCTOR: [
     'doctor-perfil',
     'stock-sucursales',
-
     'recetas',
   ],
 
+  DOCTOR_SHADDAI: [
+    'doctor-shaddai-perfil',
+    'expedientes-clinicos',
+    'doctor-shaddai-recetas',
+    'doctor-shaddai-fila-espera',
+    'doctor-shaddai-laboratorio',
+  ],
 };
 
 export const tienePermiso = (rol, modulo) => {

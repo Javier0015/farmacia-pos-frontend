@@ -43,6 +43,14 @@ export default function Login() {
       return '/app/recetas';
     }
 
+    if (rol === 'DOCTOR_SHADDAI') {
+     /* if (usuarioLogin?.requiere_completar_perfil_doctor) {
+        return '/app/recetas';
+      }*/
+
+      return '/app/doctor-shaddai/fila-espera';
+    }
+
     return '/app/dashboard';
   };
 
@@ -117,11 +125,23 @@ export default function Login() {
           {/* Patrón interno */}
           <div className="absolute inset-0 opacity-[0.11] bg-[radial-gradient(circle_at_1px_1px,#ffffff_1px,transparent_0)] [background-size:26px_26px]" />
 
-          {/* Figuras decorativas */}
-          <div className="absolute right-10 top-10 w-28 h-28 rounded-[2rem] border border-white/20 rotate-12" />
-          <div className="absolute right-28 bottom-40 w-20 h-20 rounded-full border border-white/20" />
-          <div className="absolute left-10 bottom-36 w-24 h-24 rounded-[2rem] bg-white/10 -rotate-12 blur-[1px]" />
+          {/* Figuras decorativas animadas */}
+          <div className="absolute right-10 top-10 w-28 h-28 rounded-[2rem] border border-white/25 rotate-12 animate-[floatRotate_8s_ease-in-out_infinite]" />
 
+          <div className="absolute right-28 bottom-40 w-20 h-20 rounded-full border border-white/25 animate-[bubbleFloat_7s_ease-in-out_infinite]" />
+
+          <div className="absolute left-10 bottom-36 w-24 h-24 rounded-[2rem] bg-white/10 -rotate-12 blur-[1px] animate-[softDrift_9s_ease-in-out_infinite]" />
+
+          {/* Nuevas figuras */}
+          <div className="absolute left-16 top-28 w-14 h-14 rounded-full border border-white/20 bg-white/5 animate-[tinyFloat_6s_ease-in-out_infinite]" />
+
+          <div className="absolute right-52 top-56 w-10 h-10 rounded-xl border border-white/20 bg-white/10 rotate-45 animate-[spinFloat_10s_linear_infinite]" />
+
+          <div className="absolute left-1/2 bottom-20 w-16 h-16 rounded-[1.4rem] border border-cyan-100/25 bg-white/5 animate-[floatRotateReverse_11s_ease-in-out_infinite]" />
+
+          <div className="absolute right-16 bottom-24 w-3 h-3 rounded-full bg-white/50 shadow-[0_0_24px_rgba(255,255,255,0.8)] animate-[sparkMove_5s_ease-in-out_infinite]" />
+
+          <div className="absolute left-32 top-1/2 w-2 h-2 rounded-full bg-cyan-100/70 shadow-[0_0_18px_rgba(255,255,255,0.65)] animate-[sparkMoveReverse_6s_ease-in-out_infinite]" />
           <div className="relative">
             <div className="inline-flex items-center gap-2 rounded-full bg-white/20 border border-white/25 px-4 py-2 text-sm font-black text-white shadow-sm backdrop-blur">
               <ShieldCheck size={18} />
@@ -161,8 +181,7 @@ export default function Login() {
             </h1>
 
             <p className="mt-6 text-xl text-sky-50 leading-relaxed max-w-xl font-medium">
-              Administra ventas, caja, inventario, recetas, proveedores y
-              sucursales desde un solo lugar.
+              Bienestar al alcance de todos.
             </p>
 
             <div className="mt-8 flex flex-wrap gap-3">
@@ -331,48 +350,137 @@ export default function Login() {
 
       <style>
         {`
-          @keyframes fadeUp {
-            from {
-              opacity: 0;
-              transform: translateY(18px) scale(0.98);
-            }
-            to {
-              opacity: 1;
-              transform: translateY(0) scale(1);
-            }
-          }
+    @keyframes fadeUp {
+      from {
+        opacity: 0;
+        transform: translateY(18px) scale(0.98);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
 
-          @keyframes softFloat {
-            0%, 100% {
-              transform: translateY(0);
-            }
-            50% {
-              transform: translateY(-8px);
-            }
-          }
+    @keyframes softFloat {
+      0%, 100% {
+        transform: translateY(0);
+      }
+      50% {
+        transform: translateY(-8px);
+      }
+    }
 
-          @keyframes slowPulse {
-            0%, 100% {
-              opacity: 0.45;
-              transform: scale(1);
-            }
-            50% {
-              opacity: 0.85;
-              transform: scale(1.08);
-            }
-          }
+    @keyframes slowPulse {
+      0%, 100% {
+        opacity: 0.45;
+        transform: scale(1);
+      }
+      50% {
+        opacity: 0.85;
+        transform: scale(1.08);
+      }
+    }
 
-          @keyframes softGlow {
-            0%, 100% {
-              opacity: 0.45;
-              transform: scale(1);
-            }
-            50% {
-              opacity: 0.8;
-              transform: scale(1.08);
-            }
-          }
-        `}
+    @keyframes softGlow {
+      0%, 100% {
+        opacity: 0.45;
+        transform: scale(1);
+      }
+      50% {
+        opacity: 0.8;
+        transform: scale(1.08);
+      }
+    }
+
+    @keyframes floatRotate {
+      0%, 100% {
+        transform: translateY(0) rotate(12deg) scale(1);
+        opacity: 0.75;
+      }
+      50% {
+        transform: translateY(-18px) rotate(24deg) scale(1.06);
+        opacity: 1;
+      }
+    }
+
+    @keyframes floatRotateReverse {
+      0%, 100% {
+        transform: translateY(0) rotate(-10deg) scale(1);
+        opacity: 0.65;
+      }
+      50% {
+        transform: translateY(16px) rotate(-22deg) scale(1.08);
+        opacity: 0.95;
+      }
+    }
+
+    @keyframes bubbleFloat {
+      0%, 100% {
+        transform: translate(0, 0) scale(1);
+        opacity: 0.65;
+      }
+      50% {
+        transform: translate(-12px, -22px) scale(1.08);
+        opacity: 1;
+      }
+    }
+
+    @keyframes softDrift {
+      0%, 100% {
+        transform: translate(0, 0) rotate(-12deg);
+        opacity: 0.65;
+      }
+      50% {
+        transform: translate(16px, -16px) rotate(-4deg);
+        opacity: 0.95;
+      }
+    }
+
+    @keyframes tinyFloat {
+      0%, 100% {
+        transform: translateY(0) scale(1);
+        opacity: 0.55;
+      }
+      50% {
+        transform: translateY(-14px) scale(1.12);
+        opacity: 0.9;
+      }
+    }
+
+    @keyframes spinFloat {
+      0% {
+        transform: translateY(0) rotate(45deg);
+      }
+      50% {
+        transform: translateY(-12px) rotate(225deg);
+      }
+      100% {
+        transform: translateY(0) rotate(405deg);
+      }
+    }
+
+    @keyframes sparkMove {
+      0%, 100% {
+        transform: translate(0, 0) scale(1);
+        opacity: 0.35;
+      }
+      50% {
+        transform: translate(-18px, -28px) scale(1.5);
+        opacity: 1;
+      }
+    }
+
+    @keyframes sparkMoveReverse {
+      0%, 100% {
+        transform: translate(0, 0) scale(1);
+        opacity: 0.35;
+      }
+      50% {
+        transform: translate(22px, 18px) scale(1.45);
+        opacity: 1;
+      }
+    }
+  `}
       </style>
     </div>
   );

@@ -186,6 +186,25 @@ export default function MainLayout() {
     }
   };
 
+  const marcarTodasAlertasComoLeidas = async () => {
+    try {
+      await api.put('/alertas/leer-todas');
+
+      setAlertas((prev) =>
+        prev.map((alerta) => ({
+          ...alerta,
+          leida: true,
+        }))
+      );
+
+      setTotalAlertas(0);
+      await cargarMisAlertas();
+      await cargarTotalAlertas();
+    } catch (error) {
+      console.error('Error al marcar todas las alertas como leídas:', error);
+    }
+  };
+
   const abrirChat = async () => {
     const nuevoEstado = !mostrarChat;
 
@@ -208,17 +227,9 @@ export default function MainLayout() {
   };
 
   const validarDestinoChat = () => {
-    if (tipoDestinoChat === 'ROL' && !destinoRolChat) {
-      return false;
-    }
-
-    if (tipoDestinoChat === 'SUCURSAL' && !destinoSucursalChat) {
-      return false;
-    }
-
-    if (tipoDestinoChat === 'USUARIO' && !destinoUsuarioChat) {
-      return false;
-    }
+    if (tipoDestinoChat === 'ROL' && !destinoRolChat) return false;
+    if (tipoDestinoChat === 'SUCURSAL' && !destinoSucursalChat) return false;
+    if (tipoDestinoChat === 'USUARIO' && !destinoUsuarioChat) return false;
 
     return true;
   };
@@ -348,13 +359,8 @@ export default function MainLayout() {
     const claveHoy = obtenerClaveFecha(hoy);
     const claveAyer = obtenerClaveFecha(ayer);
 
-    if (claveMensaje === claveHoy) {
-      return 'Hoy';
-    }
-
-    if (claveMensaje === claveAyer) {
-      return 'Ayer';
-    }
+    if (claveMensaje === claveHoy) return 'Hoy';
+    if (claveMensaje === claveAyer) return 'Ayer';
 
     return fechaMensaje.toLocaleDateString('es-MX', {
       weekday: 'long',
@@ -376,7 +382,7 @@ export default function MainLayout() {
         if (mostrarChat) {
           cargarMensajesChat();
         }
-      }, 5000);
+      }, 15000);
 
       return () => clearInterval(intervalo);
     }
@@ -424,7 +430,7 @@ export default function MainLayout() {
     };
   }, [mostrarAlertas, mostrarChat]);
 
-  const PanelChat = () => (
+  const renderPanelChat = () => (
     <div
       className="
         fixed lg:absolute
@@ -482,16 +488,14 @@ export default function MainLayout() {
                 )}
 
                 <div
-                  className={`flex ${
-                    mensaje.es_mio ? 'justify-end' : 'justify-start'
-                  }`}
+                  className={`flex ${mensaje.es_mio ? 'justify-end' : 'justify-start'
+                    }`}
                 >
                   <div
-                    className={`max-w-[90%] sm:max-w-[82%] rounded-2xl px-4 py-3 shadow-sm min-w-0 ${
-                      mensaje.es_mio
+                    className={`max-w-[90%] sm:max-w-[82%] rounded-2xl px-4 py-3 shadow-sm min-w-0 ${mensaje.es_mio
                         ? 'bg-sky-700 text-white rounded-br-md'
                         : 'bg-white text-slate-800 border border-slate-100 rounded-bl-md'
-                    }`}
+                      }`}
                   >
                     {!mensaje.es_mio && (
                       <p className="text-xs font-bold text-sky-700 mb-1 break-words">
@@ -505,19 +509,17 @@ export default function MainLayout() {
 
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mt-2">
                       <span
-                        className={`w-fit text-[10px] px-2 py-0.5 rounded-full break-words ${
-                          mensaje.es_mio
+                        className={`w-fit text-[10px] px-2 py-0.5 rounded-full break-words ${mensaje.es_mio
                             ? 'bg-white/15 text-sky-50'
                             : 'bg-slate-100 text-slate-500'
-                        }`}
+                          }`}
                       >
                         {obtenerEtiquetaDestino(mensaje)}
                       </span>
 
                       <span
-                        className={`text-[10px] ${
-                          mensaje.es_mio ? 'text-sky-100' : 'text-slate-400'
-                        }`}
+                        className={`text-[10px] ${mensaje.es_mio ? 'text-sky-100' : 'text-slate-400'
+                          }`}
                       >
                         {formatoHoraChat(mensaje.fecha_envio)}
                       </span>
@@ -566,10 +568,7 @@ export default function MainLayout() {
             >
               <option value="">Selecciona sucursal</option>
               {sucursalesChat.map((sucursal) => (
-                <option
-                  key={sucursal.id_sucursal}
-                  value={sucursal.id_sucursal}
-                >
+                <option key={sucursal.id_sucursal} value={sucursal.id_sucursal}>
                   {sucursal.nombre}
                 </option>
               ))}
@@ -620,7 +619,7 @@ export default function MainLayout() {
     </div>
   );
 
-  const PanelAlertas = ({ escritorio = false }) => (
+  const renderPanelAlertas = (escritorio = false) => (
     <div
       className={`
         fixed lg:absolute
@@ -635,20 +634,32 @@ export default function MainLayout() {
         flex flex-col
       `}
     >
-      <div className="px-4 sm:px-5 py-4 border-b border-slate-100 flex items-start justify-between gap-3 shrink-0">
-        <div className="min-w-0">
-          <h3 className="font-bold text-slate-800">Alertas</h3>
-          <p className="text-xs text-slate-500">
-            {escritorio
-              ? 'Notificaciones recientes del sistema'
-              : 'Notificaciones recientes'}
-          </p>
+      <div className="px-4 sm:px-5 py-4 border-b border-slate-100 shrink-0">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="font-bold text-slate-800">Alertas</h3>
+            <p className="text-xs text-slate-500">
+              {escritorio
+                ? 'Notificaciones recientes de los últimos 7 días'
+                : 'Últimos 7 días'}
+            </p>
+          </div>
+
+          {totalAlertas > 0 && (
+            <span className="px-3 py-1 rounded-full bg-amber-100 text-amber-700 text-xs font-bold shrink-0">
+              {totalAlertas} nuevas
+            </span>
+          )}
         </div>
 
         {totalAlertas > 0 && (
-          <span className="px-3 py-1 rounded-full bg-amber-100 text-amber-700 text-xs font-bold shrink-0">
-            {totalAlertas} nuevas
-          </span>
+          <button
+            type="button"
+            onClick={marcarTodasAlertasComoLeidas}
+            className="mt-3 w-full inline-flex items-center justify-center px-4 py-2 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition"
+          >
+            Marcar todas como leídas
+          </button>
         )}
       </div>
 
@@ -663,9 +674,8 @@ export default function MainLayout() {
               key={alerta.id_alerta}
               type="button"
               onClick={() => marcarComoLeida(alerta.id_alerta)}
-              className={`w-full text-left px-4 sm:px-5 py-4 border-b border-slate-100 hover:bg-slate-50 transition ${
-                !alerta.leida ? 'bg-sky-50/40' : 'bg-white'
-              }`}
+              className={`w-full text-left px-4 sm:px-5 py-4 border-b border-slate-100 hover:bg-slate-50 transition ${!alerta.leida ? 'bg-sky-50/40' : 'bg-white'
+                }`}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -737,7 +747,7 @@ export default function MainLayout() {
 
             <div className="flex-1 text-right min-w-0">
               <p className="text-sm font-bold text-slate-800 truncate">
-                Shaddai POS
+                Farmacias Shaddai 
               </p>
               <p className="text-xs text-slate-500 truncate">
                 {usuario?.nombre || usuario?.usuario || 'Farmacia multi-sucursal'}
@@ -760,7 +770,7 @@ export default function MainLayout() {
                 )}
               </button>
 
-              {mostrarChat && <PanelChat />}
+              {mostrarChat && renderPanelChat()}
             </div>
 
             <div className="relative shrink-0" ref={alertasMovilRef}>
@@ -779,7 +789,7 @@ export default function MainLayout() {
                 )}
               </button>
 
-              {mostrarAlertas && <PanelAlertas />}
+              {mostrarAlertas && renderPanelAlertas()}
             </div>
 
             <button
@@ -817,7 +827,7 @@ export default function MainLayout() {
                 )}
               </button>
 
-              {mostrarChat && <PanelChat />}
+              {mostrarChat && renderPanelChat()}
             </div>
 
             <div className="relative" ref={alertasEscritorioRef}>
@@ -836,7 +846,7 @@ export default function MainLayout() {
                 )}
               </button>
 
-              {mostrarAlertas && <PanelAlertas escritorio />}
+              {mostrarAlertas && renderPanelAlertas(true)}
             </div>
 
             <div className="text-right max-w-[180px]">
