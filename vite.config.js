@@ -51,6 +51,10 @@ export default defineConfig({
         clientsClaim: true,
         skipWaiting: true,
 
+        // Aumenta el límite de archivos que Workbox puede precachear.
+        // El default es 2 MiB y tu index.js pesa aprox. 2.46 MB.
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+
         navigateFallback: '/index.html',
 
         runtimeCaching: [
