@@ -13,6 +13,8 @@ import {
   Calculator,
   DollarSign,
   AlertTriangle,
+  Printer,
+  FileText,
 } from 'lucide-react';
 import api from '../../api/axios';
 import { useAuth } from '../../context/AuthContext';
@@ -37,7 +39,6 @@ const tiposMovimiento = [
   { value: 'GASTO', label: 'Gasto operativo' },
   { value: 'RETIRO', label: 'Retiro de caja' },
   { value: 'PAGO_PROVEEDOR', label: 'Pago a proveedor' },
-  { value: 'DEVOLUCION', label: 'Devolución' },
   { value: 'AJUSTE', label: 'Ajuste de caja' },
 ];
 
@@ -56,6 +57,629 @@ const denominacionesCaja = [
   { tipo: 'Moneda', valor: 0.5 },
 ];
 
+const METODOS_PAGO = ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'PUNTOS'];
+
+const normalizarMetodoPago = (metodo) => {
+  const valor = String(metodo || '').trim().toUpperCase();
+  return valor || '—';
+};
+
+const numeroSeguro = (valor) => {
+  const n = Number(valor);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const obtenerPrimerValorNumerico = (objeto, campos = []) => {
+  for (const campo of campos) {
+    if (objeto?.[campo] !== undefined && objeto?.[campo] !== null && objeto?.[campo] !== '') {
+      return Number(objeto[campo]);
+    }
+  }
+
+  return null;
+};
+
+const parsearPosibleJson = (valor) => {
+  if (!valor) return null;
+  if (Array.isArray(valor)) return valor;
+
+  if (typeof valor === 'string') {
+    try {
+      const parsed = JSON.parse(valor);
+      return Array.isArray(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+};
+
+const obtenerPagosDeVenta = (venta = {}) => {
+  const pagosDirectos =
+    parsearPosibleJson(venta.pagos) ||
+    parsearPosibleJson(venta.detalle_pagos) ||
+    parsearPosibleJson(venta.pagos_detalle) ||
+    parsearPosibleJson(venta.formas_pago);
+
+  if (pagosDirectos?.length) {
+    return pagosDirectos
+      .map((pago) => ({
+        metodo_pago: normalizarMetodoPago(pago.metodo_pago || pago.metodo || pago.tipo_pago),
+        monto: obtenerPrimerValorNumerico(pago, ['monto', 'importe', 'total', 'cantidad']),
+        referencia: pago.referencia || pago.folio_referencia || null,
+        explicito: true,
+      }))
+      .filter((pago) => pago.metodo_pago !== '—');
+  }
+
+  const pagosPorCampo = [
+    {
+      metodo_pago: 'EFECTIVO',
+      monto: obtenerPrimerValorNumerico(venta, ['monto_efectivo', 'efectivo', 'ventas_efectivo', 'pago_efectivo']),
+    },
+    {
+      metodo_pago: 'TARJETA',
+      monto: obtenerPrimerValorNumerico(venta, ['monto_tarjeta', 'tarjeta', 'ventas_tarjeta', 'pago_tarjeta']),
+    },
+    {
+      metodo_pago: 'TRANSFERENCIA',
+      monto: obtenerPrimerValorNumerico(venta, ['monto_transferencia', 'transferencia', 'ventas_transferencia', 'pago_transferencia']),
+    },
+    {
+      metodo_pago: 'PUNTOS',
+      monto: obtenerPrimerValorNumerico(venta, ['monto_puntos', 'puntos', 'ventas_puntos', 'pago_puntos']),
+    },
+  ].filter((pago) => pago.monto !== null && Number(pago.monto) > 0);
+
+  if (pagosPorCampo.length) {
+    return pagosPorCampo.map((pago) => ({ ...pago, explicito: true }));
+  }
+
+  const montoPagoExplicito = obtenerPrimerValorNumerico(venta, [
+    'monto_pago',
+    'importe_pago',
+    'total_pago',
+    'monto_pagado',
+    'pago_monto',
+  ]);
+
+  const metodo = normalizarMetodoPago(venta.metodo_pago || venta.metodo || venta.tipo_pago);
+
+  if (metodo === 'MIXTO') {
+    return [{ metodo_pago: 'MIXTO', monto: null, referencia: null, explicito: false }];
+  }
+
+  return [
+    {
+      metodo_pago: metodo,
+      monto: montoPagoExplicito !== null ? montoPagoExplicito : numeroSeguro(venta.total),
+      referencia: venta.referencia || null,
+      explicito: montoPagoExplicito !== null,
+    },
+  ];
+};
+
+const agruparVentas = (ventas = []) => {
+  const mapa = new Map();
+
+  ventas.forEach((venta, index) => {
+    const clave = venta.id_venta || venta.folio || `${venta.fecha_venta || 'venta'}-${index}`;
+    const pagos = obtenerPagosDeVenta(venta);
+
+    if (!mapa.has(clave)) {
+      mapa.set(clave, {
+        ...venta,
+        pagos: [],
+      });
+    }
+
+    const agrupada = mapa.get(clave);
+
+    agrupada.total = venta.total ?? agrupada.total;
+    agrupada.subtotal = venta.subtotal ?? agrupada.subtotal;
+    agrupada.descuento = venta.descuento ?? agrupada.descuento;
+    agrupada.usuario = venta.usuario || agrupada.usuario;
+    agrupada.metodo_pago = venta.metodo_pago || agrupada.metodo_pago;
+
+    pagos.forEach((pago) => {
+      const metodo = normalizarMetodoPago(pago.metodo_pago);
+      const yaExiste = agrupada.pagos.some(
+        (p) =>
+          normalizarMetodoPago(p.metodo_pago) === metodo &&
+          Number(p.monto || 0) === Number(pago.monto || 0) &&
+          Boolean(p.explicito) === Boolean(pago.explicito)
+      );
+
+      if (!yaExiste) {
+        agrupada.pagos.push({ ...pago, metodo_pago: metodo });
+      }
+    });
+  });
+
+  return Array.from(mapa.values()).map((venta) => {
+    const pagosValidos = venta.pagos.filter((pago) => pago.metodo_pago && pago.metodo_pago !== '—');
+    const pagosUnicos = new Map();
+
+    pagosValidos.forEach((pago) => {
+      const llave = `${pago.metodo_pago}-${pago.explicito ? pago.monto : 'sin-monto'}`;
+      if (!pagosUnicos.has(llave)) pagosUnicos.set(llave, pago);
+    });
+
+    return {
+      ...venta,
+      pagos: Array.from(pagosUnicos.values()),
+      metodo_pago:
+        pagosValidos.length > 1
+          ? 'MIXTO'
+          : venta.metodo_pago || pagosValidos[0]?.metodo_pago || '—',
+    };
+  });
+};
+
+const agruparMovimientosCaja = (movimientos = []) => {
+  const resultado = [];
+  const mapaVentas = new Map();
+
+  movimientos.forEach((movimiento) => {
+    const tipo = normalizarMetodoPago(movimiento.tipo_movimiento);
+    const referencia = movimiento.referencia || '';
+    const concepto = movimiento.concepto || '';
+    const esVenta = tipo === 'VENTA';
+
+    if (!esVenta || (!referencia && !concepto)) {
+      resultado.push(movimiento);
+      return;
+    }
+
+    const clave = `${referencia || concepto}`;
+
+    if (!mapaVentas.has(clave)) {
+      const agrupado = {
+        ...movimiento,
+        monto: 0,
+        metodos_pago: [],
+        observaciones_grupo: [],
+      };
+
+      mapaVentas.set(clave, agrupado);
+      resultado.push(agrupado);
+    }
+
+    const agrupado = mapaVentas.get(clave);
+    agrupado.monto = numeroSeguro(agrupado.monto) + numeroSeguro(movimiento.monto);
+
+    const metodo = normalizarMetodoPago(movimiento.metodo_pago);
+    if (metodo !== '—' && !agrupado.metodos_pago.includes(metodo)) {
+      agrupado.metodos_pago.push(metodo);
+    }
+
+    if (movimiento.observaciones && !agrupado.observaciones_grupo.includes(movimiento.observaciones)) {
+      agrupado.observaciones_grupo.push(movimiento.observaciones);
+    }
+
+    agrupado.metodo_pago = agrupado.metodos_pago.length > 1 ? 'MIXTO' : agrupado.metodos_pago[0] || movimiento.metodo_pago;
+    agrupado.observaciones = agrupado.observaciones_grupo.join(' | ') || movimiento.observaciones;
+  });
+
+  return resultado;
+};
+
+const formatearPagosVenta = (venta, formatoMoneda) => {
+  const pagos = venta?.pagos || [];
+
+  if (!pagos.length) {
+    return normalizarMetodoPago(venta?.metodo_pago);
+  }
+
+  if (pagos.length === 1 && pagos[0].metodo_pago === 'MIXTO') {
+    return 'MIXTO';
+  }
+
+  return pagos
+    .map((pago) => {
+      if (pago.monto === null || pago.monto === undefined || pago.monto === '') {
+        return pago.metodo_pago;
+      }
+
+      return `${pago.metodo_pago}: ${formatoMoneda(pago.monto)}`;
+    })
+    .join(' | ');
+};
+
+
+function ReporteCierreCajaImprimible({ reporte }) {
+  const formatoMoneda = (valor) => {
+    return Number(valor || 0).toLocaleString('es-MX', {
+      style: 'currency',
+      currency: 'MXN',
+    });
+  };
+
+  const formatoFecha = (fecha) => {
+    if (!fecha) return '—';
+
+    return new Date(fecha).toLocaleString('es-MX', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    });
+  };
+
+  const sesion = reporte?.sesion || {};
+  const resumen = reporte?.resumen || {};
+  const ventas = reporte?.ventas || [];
+  const productos = reporte?.productos || [];
+  const movimientos = reporte?.movimientos || [];
+
+  const ventasAgrupadas = agruparVentas(ventas);
+  const movimientosAgrupados = agruparMovimientosCaja(movimientos);
+  const ventasPuntos = Number(resumen.ventas_puntos || resumen.ventas_puntos_canjeados || 0);
+  const puntosGanados = Number(resumen.puntos_ganados || 0);
+
+  const salidasTotales =
+    Number(resumen.salidas_efectivo || 0) +
+    Number(resumen.gastos_efectivo || 0) +
+    Number(resumen.retiros_efectivo || 0) +
+    Number(resumen.pagos_proveedor_efectivo || 0);
+
+  const diferencia = Number(sesion.diferencia || 0);
+
+  return (
+    <div className="reporte-print-page bg-white text-slate-900 rounded-3xl border border-slate-200 shadow-sm overflow-hidden print:shadow-none print:border-0 print:rounded-none">
+      {/* ENCABEZADO */}
+      <div className="bg-gradient-to-r from-sky-700 to-sky-500 text-white px-8 py-7 print:bg-white print:text-slate-900 print:border-b-4 print:border-sky-700">
+        <div className="flex items-start justify-between gap-6">
+          <div>
+            <p className="text-sm font-semibold opacity-90 print:text-slate-500">
+              Farmacia Shaddai
+            </p>
+
+            <h1 className="text-3xl font-black mt-1 print:text-2xl">
+              Reporte de cierre de caja
+            </h1>
+
+            <p className="text-sm opacity-90 mt-2 print:text-slate-500">
+              Corte generado al finalizar la sesión de caja.
+            </p>
+          </div>
+
+          <div className="text-right">
+            <div className="inline-flex px-4 py-2 rounded-full bg-white/15 text-white font-black text-sm print:bg-sky-50 print:text-sky-700 print:border print:border-sky-100">
+              Sesión #{sesion.id_sesion || '—'}
+            </div>
+
+            <p className="text-xs mt-3 opacity-90 print:text-slate-500">
+              Fecha cierre
+            </p>
+
+            <p className="font-bold text-sm print:text-slate-800">
+              {formatoFecha(sesion.fecha_cierre)}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="p-8 space-y-8 print:p-0 print:pt-5 print:space-y-5">
+        {/* DATOS GENERALES */}
+        <section>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-black text-slate-800">
+              Datos de la sesión
+            </h2>
+
+            <span className="text-xs font-bold px-3 py-1 rounded-full bg-slate-100 text-slate-600">
+              CORTE DE CAJA
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 print:grid-cols-3 print:gap-2">
+            <InfoCard label="Sucursal" value={sesion.sucursal || '—'} />
+            <InfoCard label="Caja" value={sesion.caja || '—'} />
+
+            <InfoCard label="Fecha apertura" value={formatoFecha(sesion.fecha_apertura)} />
+            <InfoCard label="Fecha cierre" value={formatoFecha(sesion.fecha_cierre)} />
+          </div>
+        </section>
+
+        {/* RESUMEN PRINCIPAL */}
+        <section>
+          <h2 className="text-lg font-black text-slate-800 mb-4">
+            Resumen del corte
+          </h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4 print:grid-cols-3 print:gap-2">
+            <MetricCard
+              label="Monto inicial"
+              value={formatoMoneda(resumen.monto_inicial)}
+              tone="slate"
+            />
+
+            <MetricCard
+              label="Ventas efectivo"
+              value={formatoMoneda(resumen.ventas_efectivo)}
+              tone="sky"
+            />
+
+            <MetricCard
+              label="Ventas no efectivo"
+              value={formatoMoneda(resumen.ventas_no_efectivo)}
+              tone="indigo"
+            />
+
+            <MetricCard
+              label="Ventas puntos"
+              value={formatoMoneda(ventasPuntos)}
+              tone="amber"
+            />
+
+            <MetricCard
+              label="Puntos ganados"
+              value={puntosGanados.toFixed(2)}
+              tone="violet"
+            />
+
+            <MetricCard
+              label="Total vendido"
+              value={formatoMoneda(resumen.ventas_total)}
+              tone="emerald"
+            />
+          </div>
+        </section>
+
+        {/* CONCILIACIÓN */}
+        <section>
+          <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5 print:rounded-xl print:p-3">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-center print:grid-cols-5 print:gap-2">
+              <ResumenMonto
+                label="Entradas efectivo"
+                value={formatoMoneda(resumen.entradas_efectivo)}
+              />
+
+              <ResumenMonto
+                label="Salidas / gastos"
+                value={formatoMoneda(salidasTotales)}
+              />
+
+              <ResumenMonto
+                label="Esperado en caja"
+                value={formatoMoneda(resumen.monto_final_sistema)}
+              />
+
+              <ResumenMonto
+                label="Contado"
+                value={formatoMoneda(sesion.monto_final_real)}
+              />
+
+              <div
+                className={`rounded-2xl p-4 border print:p-2 ${diferencia === 0
+                  ? 'bg-emerald-50 border-emerald-100'
+                  : 'bg-red-50 border-red-100'
+                  }`}
+              >
+                <p className="text-xs font-black uppercase text-slate-500">
+                  Diferencia
+                </p>
+
+                <p
+                  className={`text-2xl font-black mt-1 print:text-lg ${diferencia === 0 ? 'text-emerald-700' : 'text-red-700'
+                    }`}
+                >
+                  {formatoMoneda(diferencia)}
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* VENTAS */}
+        <TablaReporte
+          titulo="Ventas realizadas"
+          columnas={['Folio', 'Fecha', 'Pagos', 'Total', 'Usuario']}
+          vacio="No hay ventas registradas."
+          filas={ventasAgrupadas.map((venta) => [
+            venta.folio || '—',
+            formatoFecha(venta.fecha_venta),
+            formatearPagosVenta(venta, formatoMoneda),
+            formatoMoneda(venta.total),
+            venta.usuario || '—',
+          ])}
+          rightColumns={[3]}
+        />
+
+        {/* PRODUCTOS */}
+        <TablaReporte
+          titulo="Productos vendidos"
+          columnas={['Producto', 'Cantidad', 'Total vendido']}
+          vacio="No hay productos vendidos."
+          filas={productos.map((producto) => [
+            producto.producto || '—',
+            producto.cantidad_total || 0,
+            formatoMoneda(producto.total_vendido),
+          ])}
+          rightColumns={[1, 2]}
+        />
+
+        {/* MOVIMIENTOS */}
+        <TablaReporte
+          titulo="Movimientos de caja"
+          columnas={['Fecha', 'Tipo', 'Concepto', 'Método', 'Monto']}
+          vacio="No hay movimientos registrados."
+          filas={movimientosAgrupados.map((movimiento) => [
+            formatoFecha(movimiento.fecha_movimiento),
+            movimiento.tipo_movimiento || '—',
+            movimiento.concepto || '—',
+            movimiento.metodo_pago || '—',
+            formatoMoneda(movimiento.monto),
+          ])}
+          rightColumns={[4]}
+        />
+
+        {/* TOTAL FINAL */}
+        <section className="rounded-3xl border-2 border-sky-100 bg-sky-50 p-5 print:rounded-xl print:p-3">
+          <h2 className="text-lg font-black text-slate-800 mb-4">
+            Resultado final del corte
+          </h2>
+
+          <div className="space-y-3">
+            <TotalRow label="Total vendido" value={formatoMoneda(resumen.ventas_total)} />
+            <TotalRow label="Total no efectivo" value={formatoMoneda(resumen.ventas_no_efectivo)} />
+            <TotalRow label="Ventas con puntos" value={formatoMoneda(ventasPuntos)} />
+            <TotalRow label="Puntos ganados" value={puntosGanados.toFixed(2)} />
+            <TotalRow label="Monto esperado en caja física" value={formatoMoneda(resumen.monto_final_sistema)} />
+            <TotalRow label="Monto contado" value={formatoMoneda(sesion.monto_final_real)} />
+
+            <div className="border-t border-sky-200 pt-3">
+              <TotalRow
+                label="Diferencia"
+                value={formatoMoneda(diferencia)}
+                strong
+                danger={diferencia !== 0}
+              />
+            </div>
+          </div>
+        </section>
+
+        {sesion.observaciones_cierre && (
+          <section>
+            <h2 className="text-lg font-black text-slate-800 mb-3">
+              Observaciones
+            </h2>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 whitespace-pre-wrap print:p-3">
+              {sesion.observaciones_cierre}
+            </div>
+          </section>
+        )}
+
+
+      </div>
+    </div>
+  );
+}
+
+function InfoCard({ label, value }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 print:p-2 print:rounded-xl">
+      <p className="text-xs font-black uppercase tracking-wide text-slate-400">
+        {label}
+      </p>
+      <p className="text-sm font-bold text-slate-800 mt-1 break-words print:text-xs">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function MetricCard({ label, value, tone = 'slate' }) {
+  const tones = {
+    slate: 'bg-slate-50 border-slate-200 text-slate-800',
+    sky: 'bg-sky-50 border-sky-100 text-sky-700',
+    indigo: 'bg-indigo-50 border-indigo-100 text-indigo-700',
+    emerald: 'bg-emerald-50 border-emerald-100 text-emerald-700',
+    amber: 'bg-amber-50 border-amber-100 text-amber-700',
+    violet: 'bg-violet-50 border-violet-100 text-violet-700',
+    red: 'bg-red-50 border-red-100 text-red-700',
+    blue: 'bg-blue-50 border-blue-100 text-blue-700',
+  };
+
+  return (
+    <div className={`rounded-3xl border p-5 print:p-2 print:rounded-xl ${tones[tone]}`}>
+      <p className="text-xs font-black uppercase tracking-wide opacity-70">
+        {label}
+      </p>
+      <p className="text-2xl font-black mt-2 print:text-base">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function ResumenMonto({ label, value }) {
+  return (
+    <div className="rounded-2xl bg-white border border-slate-200 p-4 print:p-2">
+      <p className="text-xs font-black uppercase text-slate-400">
+        {label}
+      </p>
+      <p className="text-lg font-black text-slate-800 mt-1 print:text-sm">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function TablaReporte({ titulo, columnas, filas, vacio, rightColumns = [] }) {
+  return (
+    <section>
+      <h2 className="text-lg font-black text-slate-800 mb-3">
+        {titulo}
+      </h2>
+
+      <div className="overflow-hidden rounded-2xl border border-slate-200 print:rounded-none">
+        <table className="w-full text-sm print:text-[10px]">
+          <thead className="bg-slate-100">
+            <tr>
+              {columnas.map((columna, index) => (
+                <th
+                  key={columna}
+                  className={`px-4 py-3 text-xs font-black uppercase tracking-wide text-slate-500 print:px-2 print:py-1 ${rightColumns.includes(index) ? 'text-right' : 'text-left'
+                    }`}
+                >
+                  {columna}
+                </th>
+              ))}
+            </tr>
+          </thead>
+
+          <tbody className="divide-y divide-slate-100">
+            {filas.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={columnas.length}
+                  className="px-4 py-6 text-center text-slate-500 print:py-3"
+                >
+                  {vacio}
+                </td>
+              </tr>
+            ) : (
+              filas.map((fila, rowIndex) => (
+                <tr key={rowIndex} className="bg-white">
+                  {fila.map((celda, colIndex) => (
+                    <td
+                      key={`${rowIndex}-${colIndex}`}
+                      className={`px-4 py-3 text-slate-700 print:px-2 print:py-1 ${rightColumns.includes(colIndex)
+                        ? 'text-right font-bold'
+                        : ''
+                        }`}
+                    >
+                      {celda}
+                    </td>
+                  ))}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function TotalRow({ label, value, strong = false, danger = false }) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <span className={`text-sm ${strong ? 'font-black' : 'font-semibold'} text-slate-700`}>
+        {label}
+      </span>
+
+      <strong
+        className={`${strong ? 'text-xl' : 'text-base'} ${danger ? 'text-red-700' : 'text-slate-900'
+          }`}
+      >
+        {value}
+      </strong>
+    </div>
+  );
+}
 export default function Caja() {
   const { usuario } = useAuth();
 
@@ -78,12 +702,19 @@ export default function Caja() {
   const [modalMovimiento, setModalMovimiento] = useState(false);
   const [modalCerrar, setModalCerrar] = useState(false);
   const [modalMovimientos, setModalMovimientos] = useState(false);
+  const [modalReporteCierre, setModalReporteCierre] = useState(false);
 
   const [montoInicial, setMontoInicial] = useState('');
   const [montoFinalReal, setMontoFinalReal] = useState('');
   const [observacionesCierre, setObservacionesCierre] = useState('');
   const [conteoEfectivo, setConteoEfectivo] = useState({});
   const [formMovimiento, setFormMovimiento] = useState(movimientoInicial);
+
+  const [reporteCierre, setReporteCierre] = useState(null);
+  const [cargandoReporteCierre, setCargandoReporteCierre] = useState(false);
+
+  const [cerrandoCaja, setCerrandoCaja] = useState(false);
+
 
   const formatoMoneda = (valor) => {
     return Number(valor || 0).toLocaleString('es-MX', {
@@ -111,6 +742,22 @@ export default function Caja() {
 
   const estadoAbierta = Boolean(sesionAbierta);
   const resumen = resumenCaja?.resumen;
+
+  const ventasEfectivo = Number(resumen?.ventas_efectivo || 0);
+  const ventasTarjeta = Number(resumen?.ventas_tarjeta || 0);
+  const ventasTransferencia = Number(resumen?.ventas_transferencia || 0);
+  const ventasPuntos = Number(resumen?.ventas_puntos || resumen?.ventas_puntos_canjeados || 0);
+  const puntosGanados = Number(resumen?.puntos_ganados || 0);
+
+  const totalNoEfectivo = ventasTarjeta + ventasTransferencia;
+  const totalVendido =
+    resumen?.ventas_total !== undefined && resumen?.ventas_total !== null
+      ? Number(resumen.ventas_total || 0)
+      : ventasEfectivo + totalNoEfectivo + ventasPuntos;
+  const movimientosCajaVista = useMemo(
+    () => agruparMovimientosCaja(movimientos),
+    [movimientos]
+  );
 
   const diferenciaActual =
     montoFinalReal === ''
@@ -254,6 +901,101 @@ export default function Caja() {
           text: 'No se pudieron cargar los movimientos.',
         });
       }
+    }
+  };
+
+  const cargarReporteCierre = async (idSesion) => {
+    if (!idSesion) return null;
+
+    try {
+      setCargandoReporteCierre(true);
+
+      const { data } = await api.get(`/caja/reporte-cierre?id_sesion=${idSesion}`);
+
+      if (data.ok) {
+        setReporteCierre(data);
+        return data;
+      }
+
+      return null;
+    } catch (error) {
+      console.error(error);
+
+      Swal.fire({
+        icon: 'error',
+        title: 'Reporte no disponible',
+        text:
+          error.response?.data?.mensaje ||
+          'La caja se cerró, pero no se pudo generar el reporte.',
+      });
+
+      return null;
+    } finally {
+      setCargandoReporteCierre(false);
+    }
+  };
+
+  const imprimirReporteCierre = async () => {
+    try {
+      const idReporte = reporteCierre?.reporte_pdf?.id_reporte;
+
+      if (!idReporte) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'PDF no disponible',
+          text: 'El reporte aún no tiene un PDF guardado para imprimir.',
+        });
+        return;
+      }
+
+      setCargandoReporteCierre(true);
+
+      const response = await api.get(
+        `/caja/reportes-cierre/${idReporte}/descargar`,
+        {
+          responseType: 'blob',
+        }
+      );
+
+      const blob = new Blob([response.data], {
+        type: 'application/pdf',
+      });
+
+      const url = window.URL.createObjectURL(blob);
+      const ventana = window.open(url, '_blank');
+
+      if (!ventana) {
+        window.URL.revokeObjectURL(url);
+
+        Swal.fire({
+          icon: 'warning',
+          title: 'Ventana bloqueada',
+          text: 'Permite ventanas emergentes para poder abrir el PDF.',
+        });
+
+        return;
+      }
+
+      setTimeout(() => {
+        ventana.focus();
+        ventana.print();
+      }, 800);
+
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+      }, 60000);
+    } catch (error) {
+      console.error(error);
+
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text:
+          error.response?.data?.mensaje ||
+          'No se pudo abrir el PDF para imprimir.',
+      });
+    } finally {
+      setCargandoReporteCierre(false);
     }
   };
 
@@ -430,11 +1172,12 @@ export default function Caja() {
       Swal.fire({
         icon: 'warning',
         title: 'Monto inválido',
-        text: 'El monto final contado no puede ser negativo.',
+        text: 'Captura el monto final contado con la calculadora de efectivo.',
       });
       return;
     }
 
+    const idSesionCierre = Number(sesionAbierta.id_sesion);
     const montoSistema = Number(resumenCaja?.resumen?.monto_final_sistema || 0);
     const diferencia = Number(montoFinalReal) - montoSistema;
 
@@ -442,12 +1185,16 @@ export default function Caja() {
       icon: diferencia === 0 ? 'question' : 'warning',
       title: '¿Cerrar caja?',
       html: `
-        <div style="text-align:left">
-          <p><b>Monto sistema:</b> ${formatoMoneda(montoSistema)}</p>
-          <p><b>Monto contado:</b> ${formatoMoneda(montoFinalReal)}</p>
-          <p><b>Diferencia:</b> ${formatoMoneda(diferencia)}</p>
-        </div>
-      `,
+      <div style="text-align:left">
+        <p><b>Monto sistema:</b> ${formatoMoneda(montoSistema)}</p>
+        <p><b>Monto contado:</b> ${formatoMoneda(montoFinalReal)}</p>
+        <p><b>Diferencia:</b> ${formatoMoneda(diferencia)}</p>
+        <hr style="margin:12px 0" />
+        <p style="font-size:13px;color:#64748b">
+          Al confirmar, se cerrará la caja y se generará el PDF del reporte.
+        </p>
+      </div>
+    `,
       showCancelButton: true,
       confirmButtonText: 'Sí, cerrar caja',
       cancelButtonText: 'Cancelar',
@@ -458,19 +1205,34 @@ export default function Caja() {
 
     try {
       setGuardando(true);
+      setCerrandoCaja(true);
+
+      Swal.fire({
+        title: 'Cerrando caja...',
+        html: `
+        <div style="text-align:center">
+          <p>Guardando el cierre y generando el reporte PDF.</p>
+          <p style="font-size:13px;color:#64748b;margin-top:8px">
+            Esto puede tardar unos segundos.
+          </p>
+        </div>
+      `,
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        showConfirmButton: false,
+        didOpen: () => {
+          Swal.showLoading();
+        },
+      });
 
       const { data } = await api.post('/caja/cerrar', {
-        id_sesion: Number(sesionAbierta.id_sesion),
+        id_sesion: idSesionCierre,
         monto_final_real: Number(montoFinalReal),
         observaciones: observacionesCierre || null,
       });
 
       if (data.ok) {
-        Swal.fire({
-          icon: 'success',
-          title: 'Caja cerrada',
-          text: data.mensaje,
-        });
+        const reporte = await cargarReporteCierre(idSesionCierre);
 
         setModalCerrar(false);
         setMontoFinalReal('');
@@ -480,7 +1242,22 @@ export default function Caja() {
         setResumenCaja(null);
         setMovimientos([]);
 
+        if (reporte) {
+          setModalReporteCierre(true);
+        }
+
         await cargarSesionAbierta();
+
+        Swal.fire({
+          icon: data.reporte_pdf ? 'success' : 'warning',
+          title: data.reporte_pdf ? 'Caja cerrada' : 'Caja cerrada con advertencia',
+          text:
+            data.advertencia_pdf ||
+            data.mensaje ||
+            'La caja fue cerrada correctamente.',
+          timer: 1600,
+          showConfirmButton: false,
+        });
       }
     } catch (error) {
       console.error(error);
@@ -492,6 +1269,7 @@ export default function Caja() {
       });
     } finally {
       setGuardando(false);
+      setCerrandoCaja(false);
     }
   };
 
@@ -525,10 +1303,9 @@ export default function Caja() {
 
     await cargarResumen();
 
-    const montoSistema = Number(resumenCaja?.resumen?.monto_final_sistema || 0);
-
     setConteoEfectivo({});
-    setMontoFinalReal(String(montoSistema));
+    setMontoFinalReal('');
+    setObservacionesCierre('');
     setModalCerrar(true);
   };
 
@@ -689,11 +1466,10 @@ export default function Caja() {
 
       <section className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-5">
         <div
-          className={`rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border min-w-0 ${
-            estadoAbierta
-              ? 'bg-sky-700 text-white border-sky-600'
-              : 'bg-slate-900 text-white border-slate-800'
-          }`}
+          className={`rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border min-w-0 ${estadoAbierta
+            ? 'bg-sky-700 text-white border-sky-600'
+            : 'bg-slate-900 text-white border-slate-800'
+            }`}
         >
           <div className="flex items-center justify-between gap-3">
             <div className="w-12 h-12 rounded-2xl bg-white/15 flex items-center justify-center shrink-0">
@@ -741,13 +1517,13 @@ export default function Caja() {
             <Calculator size={24} />
           </div>
 
-          <p className="text-sm text-slate-500 mt-5">Monto esperado</p>
+          <p className="text-sm text-slate-500 mt-5">Monto esperado en caja</p>
           <h3 className="text-2xl sm:text-3xl font-bold text-slate-800 mt-1 break-words">
             {formatoMoneda(resumen?.monto_final_sistema)}
           </h3>
 
           <p className="text-sm text-slate-400 mt-2">
-            Según movimientos registrados
+            Solo efectivo esperado
           </p>
         </div>
       </section>
@@ -756,8 +1532,11 @@ export default function Caja() {
         <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0">
           <p className="text-sm text-slate-500">Ventas efectivo</p>
           <h3 className="text-2xl font-bold text-sky-700 mt-1 break-words">
-            {formatoMoneda(resumen?.ventas_efectivo)}
+            {formatoMoneda(ventasEfectivo)}
           </h3>
+          <p className="text-xs text-slate-400 mt-2">
+            Entra a caja física
+          </p>
         </div>
 
         <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0">
@@ -772,18 +1551,73 @@ export default function Caja() {
           <h3 className="text-2xl font-bold text-red-700 mt-1 break-words">
             {formatoMoneda(
               Number(resumen?.salidas_efectivo || 0) +
-                Number(resumen?.gastos_efectivo || 0) +
-                Number(resumen?.retiros_efectivo || 0) +
-                Number(resumen?.pagos_proveedor_efectivo || 0)
+              Number(resumen?.gastos_efectivo || 0) +
+              Number(resumen?.retiros_efectivo || 0) +
+              Number(resumen?.pagos_proveedor_efectivo || 0)
             )}
           </h3>
         </div>
 
         <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0">
-          <p className="text-sm text-slate-500">Devoluciones</p>
+          <p className="text-sm text-slate-500">Devoluciones registradas</p>
           <h3 className="text-2xl font-bold text-amber-700 mt-1 break-words">
             {formatoMoneda(resumen?.devoluciones_efectivo)}
           </h3>
+          <p className="text-xs text-slate-400 mt-2">
+            Informativo, no afecta caja física
+          </p>
+        </div>
+      </section>
+
+      <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4 sm:gap-5">
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-violet-100 min-w-0">
+          <p className="text-sm text-slate-500">Ventas tarjeta</p>
+          <h3 className="text-2xl font-bold text-violet-700 mt-1 break-words">
+            {formatoMoneda(ventasTarjeta)}
+          </h3>
+          <p className="text-xs text-slate-400 mt-2">
+            No entra a caja física
+          </p>
+        </div>
+
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-emerald-100 min-w-0">
+          <p className="text-sm text-slate-500">Ventas transferencia</p>
+          <h3 className="text-2xl font-bold text-emerald-700 mt-1 break-words">
+            {formatoMoneda(ventasTransferencia)}
+          </h3>
+          <p className="text-xs text-slate-400 mt-2">
+            Pago fuera de efectivo
+          </p>
+        </div>
+
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-indigo-100 min-w-0">
+          <p className="text-sm text-slate-500">Total no efectivo</p>
+          <h3 className="text-2xl font-bold text-indigo-700 mt-1 break-words">
+            {formatoMoneda(totalNoEfectivo)}
+          </h3>
+          <p className="text-xs text-slate-400 mt-2">
+            Tarjeta + transferencia
+          </p>
+        </div>
+
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-amber-100 min-w-0">
+          <p className="text-sm text-slate-500">Ventas con puntos</p>
+          <h3 className="text-2xl font-bold text-amber-700 mt-1 break-words">
+            {formatoMoneda(ventasPuntos)}
+          </h3>
+          <p className="text-xs text-slate-400 mt-2">
+            Canje, no entra a caja física
+          </p>
+        </div>
+
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0">
+          <p className="text-sm text-slate-500">Total vendido</p>
+          <h3 className="text-2xl font-bold text-slate-800 mt-1 break-words">
+            {formatoMoneda(totalVendido)}
+          </h3>
+          <p className="text-xs text-slate-400 mt-2">
+            Efectivo + no efectivo + puntos
+          </p>
         </div>
       </section>
 
@@ -834,12 +1668,12 @@ export default function Caja() {
               <div className="rounded-2xl border border-slate-100 bg-slate-50 p-5 text-center text-slate-500">
                 No hay caja abierta.
               </div>
-            ) : movimientos.length === 0 ? (
+            ) : movimientosCajaVista.length === 0 ? (
               <div className="rounded-2xl border border-slate-100 bg-slate-50 p-5 text-center text-slate-500">
                 No hay movimientos registrados.
               </div>
             ) : (
-              movimientos.slice(0, 8).map((mov) => (
+              movimientosCajaVista.slice(0, 8).map((mov) => (
                 <div
                   key={mov.id_movimiento}
                   className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm"
@@ -862,9 +1696,9 @@ export default function Caja() {
                         {formatoFecha(mov.fecha_movimiento)}
                       </p>
 
-                      {mov.referencia && (
-                        <p className="mt-1 text-xs text-slate-400 break-words">
-                          Ref: {mov.referencia}
+                      {mov.observaciones && (
+                        <p className="mt-2 text-xs text-slate-500 break-words whitespace-pre-wrap">
+                          Obs: {mov.observaciones}
                         </p>
                       )}
                     </div>
@@ -922,14 +1756,14 @@ export default function Caja() {
                       No hay caja abierta.
                     </td>
                   </tr>
-                ) : movimientos.length === 0 ? (
+                ) : movimientosCajaVista.length === 0 ? (
                   <tr>
                     <td colSpan="6" className="px-4 py-10 text-center text-slate-500">
                       No hay movimientos registrados.
                     </td>
                   </tr>
                 ) : (
-                  movimientos.slice(0, 8).map((mov) => (
+                  movimientosCajaVista.slice(0, 8).map((mov) => (
                     <tr key={mov.id_movimiento} className="hover:bg-slate-50">
                       <td className="px-4 py-3 text-sm text-slate-600">
                         {formatoFecha(mov.fecha_movimiento)}
@@ -947,9 +1781,16 @@ export default function Caja() {
 
                       <td className="px-4 py-3 font-semibold text-slate-800">
                         {mov.concepto}
+
                         {mov.referencia && (
                           <p className="text-xs text-slate-400 mt-1">
                             Ref: {mov.referencia}
+                          </p>
+                        )}
+
+                        {mov.observaciones && (
+                          <p className="text-xs text-slate-500 mt-1 whitespace-pre-wrap">
+                            Obs: {mov.observaciones}
                           </p>
                         )}
                       </td>
@@ -973,6 +1814,23 @@ export default function Caja() {
           </div>
         </div>
       </section>
+
+      {cerrandoCaja && (
+        <div className="fixed inset-0 z-[9999] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center px-4">
+          <div className="bg-white rounded-3xl shadow-2xl p-7 w-full max-w-md text-center">
+            <div className="w-16 h-16 rounded-full border-4 border-sky-100 border-t-sky-700 animate-spin mx-auto" />
+
+            <h2 className="text-xl font-black text-slate-800 mt-5">
+              Cerrando caja
+            </h2>
+
+            <p className="text-sm text-slate-500 mt-2 leading-relaxed">
+              Estamos guardando el cierre y generando el PDF del reporte.
+              No cierres esta ventana.
+            </p>
+          </div>
+        </div>
+      )}
 
       {modalAbrir && (
         <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center px-3 sm:px-4 py-4 sm:py-8 overflow-y-auto">
@@ -1253,17 +2111,15 @@ export default function Caja() {
                   </div>
 
                   <div
-                    className={`rounded-2xl p-4 min-w-0 ${
-                      diferenciaActual === 0 ? 'bg-sky-50' : 'bg-red-50'
-                    }`}
+                    className={`rounded-2xl p-4 min-w-0 ${diferenciaActual === 0 ? 'bg-sky-50' : 'bg-red-50'
+                      }`}
                   >
                     <p className="text-sm text-slate-500">Diferencia</p>
                     <p
-                      className={`text-xl font-bold break-words ${
-                        diferenciaActual === 0
-                          ? 'text-sky-700'
-                          : 'text-red-700'
-                      }`}
+                      className={`text-xl font-bold break-words ${diferenciaActual === 0
+                        ? 'text-sky-700'
+                        : 'text-red-700'
+                        }`}
                     >
                       {formatoMoneda(diferenciaActual)}
                     </p>
@@ -1437,10 +2293,10 @@ export default function Caja() {
                     value={montoFinalReal}
                     onChange={(e) => setMontoFinalReal(e.target.value)}
                     className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
-                    placeholder="0.00"
+                    placeholder="Usa la calculadora de efectivo"
                   />
                   <p className="text-xs text-slate-500 mt-2">
-                    Puedes capturarlo manualmente o llenarlo con la calculadora de efectivo.
+                    Usa la calculadora de efectivo para llenar este monto con el total contado físicamente.
                   </p>
                 </div>
 
@@ -1639,6 +2495,60 @@ export default function Caja() {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalReporteCierre && (
+        <div className="print-root fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-start justify-center px-3 sm:px-6 py-6 overflow-y-auto print:static print:bg-white print:p-0 print:block">
+          <div className="w-full max-w-6xl bg-white rounded-3xl shadow-2xl overflow-hidden print:shadow-none print:rounded-none print:max-w-none">
+            <div className="no-print px-6 py-5 border-b border-slate-100 flex items-center justify-between gap-4 print:hidden">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center">
+                  <FileText size={24} />
+                </div>
+
+                <div>
+                  <h2 className="text-xl font-black text-slate-800">
+                    Reporte de cierre de caja
+                  </h2>
+                  <p className="text-sm text-slate-500">
+                    Revisa el corte e imprime o guarda el PDF.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setModalReporteCierre(false)}
+                className="w-11 h-11 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center"
+              >
+                <X size={22} />
+              </button>
+            </div>
+
+            <div className="no-print px-6 py-4 bg-slate-50 border-b border-slate-100 flex flex-col sm:flex-row justify-end gap-3 print:hidden">
+              <button
+                onClick={imprimirReporteCierre}
+                disabled={cargandoReporteCierre || !reporteCierre?.reporte_pdf?.id_reporte}
+                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold transition disabled:opacity-50"
+              >
+                <Printer size={19} />
+                {cargandoReporteCierre ? 'Abriendo PDF...' : 'Imprimir / Guardar PDF'}
+              </button>
+            </div>
+
+
+            <div className="bg-slate-100 p-6 print:bg-white print:p-0">
+              <div id="reporte-cierre-caja-print" className="mx-auto max-w-5xl print:max-w-none">
+                {reporteCierre ? (
+                  <ReporteCierreCajaImprimible reporte={reporteCierre} />
+                ) : (
+                  <div className="bg-white rounded-3xl p-10 text-center text-slate-500">
+                    No hay reporte disponible.
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

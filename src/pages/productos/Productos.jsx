@@ -9,7 +9,6 @@ import {
   RefreshCw,
   X,
   Save,
-  Coins,
 } from 'lucide-react';
 import api from '../../api/axios';
 
@@ -24,7 +23,6 @@ const formInicial = {
   es_controlado: false,
   precio_compra: '',
   precio_venta: '',
-  puntos_por_unidad: '',
   activo: true,
 };
 
@@ -112,7 +110,6 @@ export default function Productos() {
       es_controlado: Boolean(producto.es_controlado),
       precio_compra: producto.precio_compra || '',
       precio_venta: producto.precio_venta || '',
-      puntos_por_unidad: producto.puntos_por_unidad || '',
       activo: Boolean(producto.activo),
     });
 
@@ -163,15 +160,6 @@ export default function Productos() {
       return false;
     }
 
-    if (form.puntos_por_unidad !== '' && Number(form.puntos_por_unidad) < 0) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Puntos inválidos',
-        text: 'Los puntos por unidad no pueden ser negativos.',
-      });
-      return false;
-    }
-
     return true;
   };
 
@@ -194,9 +182,6 @@ export default function Productos() {
         es_controlado: form.es_controlado,
         precio_compra: form.precio_compra ? Number(form.precio_compra) : 0,
         precio_venta: Number(form.precio_venta),
-        puntos_por_unidad: form.puntos_por_unidad
-          ? Number(form.puntos_por_unidad)
-          : 0,
         activo: form.activo,
       };
 
@@ -286,15 +271,6 @@ export default function Productos() {
     });
   };
 
-  const formatoNumero = (valor) => {
-    const numero = Number(valor || 0);
-
-    return numero.toLocaleString('es-MX', {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
-    });
-  };
-
   return (
     <div className="space-y-6">
       <section className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
@@ -354,7 +330,7 @@ export default function Productos() {
 
       <section className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1200px]">
+          <table className="w-full min-w-[1100px]">
             <thead className="bg-slate-50 border-b border-slate-100">
               <tr>
                 <th className="px-5 py-4 text-left text-xs font-bold text-slate-500 uppercase">
@@ -378,9 +354,6 @@ export default function Productos() {
                 <th className="px-5 py-4 text-right text-xs font-bold text-slate-500 uppercase">
                   Venta
                 </th>
-                <th className="px-5 py-4 text-right text-xs font-bold text-slate-500 uppercase">
-                  Puntos
-                </th>
                 <th className="px-5 py-4 text-center text-xs font-bold text-slate-500 uppercase">
                   Estado
                 </th>
@@ -393,13 +366,13 @@ export default function Productos() {
             <tbody className="divide-y divide-slate-100">
               {cargando ? (
                 <tr>
-                  <td colSpan="10" className="px-5 py-10 text-center text-slate-500">
+                  <td colSpan="9" className="px-5 py-10 text-center text-slate-500">
                     Cargando productos...
                   </td>
                 </tr>
               ) : productos.length === 0 ? (
                 <tr>
-                  <td colSpan="10" className="px-5 py-10 text-center text-slate-500">
+                  <td colSpan="9" className="px-5 py-10 text-center text-slate-500">
                     No hay productos registrados.
                   </td>
                 </tr>
@@ -448,13 +421,6 @@ export default function Productos() {
 
                     <td className="px-5 py-4 text-right font-bold text-sky-700">
                       {formatoMoneda(producto.precio_venta)}
-                    </td>
-
-                    <td className="px-5 py-4 text-right">
-                      <span className="inline-flex items-center justify-end gap-1 text-sm font-bold text-amber-700">
-                        <Coins size={16} />
-                        {formatoNumero(producto.puntos_por_unidad)} pts
-                      </span>
                     </td>
 
                     <td className="px-5 py-4 text-center">
@@ -619,30 +585,6 @@ export default function Productos() {
                     className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
                     placeholder="0.00"
                   />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-2">
-                    Puntos por unidad
-                  </label>
-                  <div className="relative">
-                    <Coins
-                      className="absolute left-4 top-3.5 text-slate-400"
-                      size={20}
-                    />
-                    <input
-                      type="number"
-                      step="0.01"
-                      name="puntos_por_unidad"
-                      value={form.puntos_por_unidad}
-                      onChange={handleChange}
-                      className="w-full pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
-                      placeholder="Ej. 1, 3, 5"
-                    />
-                  </div>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Puntos que gana el cliente por cada unidad vendida.
-                  </p>
                 </div>
 
                 <div className="md:col-span-2">

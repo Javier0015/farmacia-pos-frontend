@@ -38,6 +38,8 @@ import HistorialSolicitudesLaboratorio from '../pages/doctorShaddai/HistorialSol
 
 import FilaEsperaPOS from '../pages/filaEspera/FilaEsperaPOS';
 
+import ReportesCierreCaja from '../pages/caja/ReportesCierreCaja';
+
 export default function AppRouter() {
   return (
     <BrowserRouter>
@@ -297,6 +299,15 @@ export default function AppRouter() {
             element={
               <RoleRoute modulo="doctor-shaddai-recetas">
                 <HistorialRecetas />
+              </RoleRoute>
+            }
+          />
+
+          <Route
+            path="reportes-cierre-caja"
+            element={
+              <RoleRoute modulo="reportes-cierre-caja">
+                <ReportesCierreCaja />
               </RoleRoute>
             }
           />

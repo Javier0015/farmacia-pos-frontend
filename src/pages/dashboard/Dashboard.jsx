@@ -8,12 +8,13 @@ import {
   Boxes,
   RefreshCw,
   ReceiptText,
-  Clock,
   Store,
   CalendarDays,
   CircleDollarSign,
   BadgeDollarSign,
   ChartNoAxesColumnIncreasing,
+  Download,
+  X,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -29,6 +30,7 @@ import {
   Legend,
 } from 'recharts';
 import Swal from 'sweetalert2';
+import * as XLSX from 'xlsx';
 import api from '../../api/axios';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -60,10 +62,22 @@ export default function Dashboard() {
   const [fechaInicio, setFechaInicio] = useState(primerDiaMes);
   const [fechaFin, setFechaFin] = useState(hoy);
 
+  const [modalGastosAbierto, setModalGastosAbierto] = useState(false);
+  const [busquedaGastos, setBusquedaGastos] = useState('');
+  const [paginaGastos, setPaginaGastos] = useState(1);
+  const [filasPorPaginaGastos, setFilasPorPaginaGastos] = useState(10);
+
+  const [modalGananciasAbierto, setModalGananciasAbierto] = useState(false);
+  const [busquedaGanancias, setBusquedaGanancias] = useState('');
+  const [paginaGanancias, setPaginaGanancias] = useState(1);
+  const [filasPorPaginaGanancias, setFilasPorPaginaGanancias] = useState(10);
+
   const resumen = dashboard?.resumen || {};
   const ultimasVentas = dashboard?.ultimas_ventas || [];
   const productosBajoStock = dashboard?.productos_bajo_stock || [];
   const productosCaducidadDetalle = dashboard?.productos_caducidad_detalle || [];
+  const gastosOperativosDetalle = dashboard?.gastos_operativos_detalle || [];
+  const gananciasProductosDetalle = dashboard?.ganancias_productos_detalle || [];
 
   const ventasPorMetodoPago = dashboard?.ventas_por_metodo_pago || [];
   const productosMasVendidos = dashboard?.productos_mas_vendidos || [];
@@ -74,6 +88,39 @@ export default function Dashboard() {
       (sucursal) => Number(sucursal.id_sucursal) === Number(idSucursal)
     );
   }, [sucursales, idSucursal]);
+
+  const formatoMoneda = (valor) => {
+    return Number(valor || 0).toLocaleString('es-MX', {
+      style: 'currency',
+      currency: 'MXN',
+    });
+  };
+
+  const formatoNumero = (valor) => {
+    return Number(valor || 0).toLocaleString('es-MX', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    });
+  };
+
+  const formatoFecha = (fecha) => {
+    if (!fecha) return '—';
+
+    return new Date(fecha).toLocaleString('es-MX', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    });
+  };
+
+  const formatoFechaSimple = (fecha) => {
+    if (!fecha) return '—';
+
+    return new Date(fecha).toLocaleDateString('es-MX', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+  };
 
   const cargarSucursales = async () => {
     try {
@@ -158,39 +205,6 @@ export default function Dashboard() {
     }
   }, [idSucursal]);
 
-  const formatoMoneda = (valor) => {
-    return Number(valor || 0).toLocaleString('es-MX', {
-      style: 'currency',
-      currency: 'MXN',
-    });
-  };
-
-  const formatoNumero = (valor) => {
-    return Number(valor || 0).toLocaleString('es-MX', {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
-    });
-  };
-
-  const formatoFecha = (fecha) => {
-    if (!fecha) return '—';
-
-    return new Date(fecha).toLocaleString('es-MX', {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    });
-  };
-
-  const formatoFechaSimple = (fecha) => {
-    if (!fecha) return '—';
-
-    return new Date(fecha).toLocaleDateString('es-MX', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
-  };
-
   const ventasPorMetodoGrafica = useMemo(() => {
     return ventasPorMetodoPago.map((item) => ({
       metodo: item.metodo || 'No especificado',
@@ -224,6 +238,102 @@ export default function Dashboard() {
       ganancia: Number(item.ganancia || 0),
     }));
   }, [categoriasMasVendidas]);
+
+  const gastosFiltrados = useMemo(() => {
+    const texto = busquedaGastos.trim().toLowerCase();
+
+    if (!texto) return gastosOperativosDetalle;
+
+    return gastosOperativosDetalle.filter((item) => {
+      return [
+        item.tipo,
+        item.concepto,
+        item.metodo_pago,
+        item.referencia,
+        item.observaciones,
+        item.usuario,
+        formatoFecha(item.fecha_movimiento),
+        formatoMoneda(item.monto),
+      ]
+        .join(' ')
+        .toLowerCase()
+        .includes(texto);
+    });
+  }, [gastosOperativosDetalle, busquedaGastos]);
+
+  const totalGastosFiltrados = useMemo(() => {
+    return gastosFiltrados.reduce(
+      (acc, item) => acc + Number(item.monto || 0),
+      0
+    );
+  }, [gastosFiltrados]);
+
+  const totalPaginasGastos = Math.max(
+    1,
+    Math.ceil(gastosFiltrados.length / filasPorPaginaGastos)
+  );
+
+  const gastosPaginados = useMemo(() => {
+    const inicio = (paginaGastos - 1) * filasPorPaginaGastos;
+    const fin = inicio + filasPorPaginaGastos;
+
+    return gastosFiltrados.slice(inicio, fin);
+  }, [gastosFiltrados, paginaGastos, filasPorPaginaGastos]);
+
+  const gananciasFiltradas = useMemo(() => {
+    const texto = busquedaGanancias.trim().toLowerCase();
+
+    if (!texto) return gananciasProductosDetalle;
+
+    return gananciasProductosDetalle.filter((item) => {
+      return [
+        item.producto,
+        formatoNumero(item.cantidad_vendida),
+        formatoMoneda(item.costo_compra_unitario),
+        formatoMoneda(item.precio_venta_promedio),
+        formatoMoneda(item.total_costo_compra),
+        formatoMoneda(item.total_vendido),
+        formatoMoneda(item.ganancia),
+        `${formatoNumero(item.margen_porcentaje)}%`,
+      ]
+        .join(' ')
+        .toLowerCase()
+        .includes(texto);
+    });
+  }, [gananciasProductosDetalle, busquedaGanancias]);
+
+  const totalGananciaFiltrada = useMemo(() => {
+    return gananciasFiltradas.reduce(
+      (acc, item) => acc + Number(item.ganancia || 0),
+      0
+    );
+  }, [gananciasFiltradas]);
+
+  const totalVendidoGananciaFiltrada = useMemo(() => {
+    return gananciasFiltradas.reduce(
+      (acc, item) => acc + Number(item.total_vendido || 0),
+      0
+    );
+  }, [gananciasFiltradas]);
+
+  const totalCostoGananciaFiltrada = useMemo(() => {
+    return gananciasFiltradas.reduce(
+      (acc, item) => acc + Number(item.total_costo_compra || 0),
+      0
+    );
+  }, [gananciasFiltradas]);
+
+  const totalPaginasGanancias = Math.max(
+    1,
+    Math.ceil(gananciasFiltradas.length / filasPorPaginaGanancias)
+  );
+
+  const gananciasPaginadas = useMemo(() => {
+    const inicio = (paginaGanancias - 1) * filasPorPaginaGanancias;
+    const fin = inicio + filasPorPaginaGanancias;
+
+    return gananciasFiltradas.slice(inicio, fin);
+  }, [gananciasFiltradas, paginaGanancias, filasPorPaginaGanancias]);
 
   const coloresGrafica = [
     '#0284c7',
@@ -312,15 +422,15 @@ export default function Dashboard() {
           dias <= 0
             ? '#dc2626'
             : dias <= 30
-            ? '#ea580c'
-            : '#ca8a04';
+              ? '#ea580c'
+              : '#ca8a04';
 
         const fondo =
           dias <= 0
             ? '#fee2e2'
             : dias <= 30
-            ? '#ffedd5'
-            : '#fef9c3';
+              ? '#ffedd5'
+              : '#fef9c3';
 
         const textoDias = dias <= 0 ? 'Vencido' : `${dias} día(s)`;
 
@@ -378,6 +488,109 @@ export default function Dashboard() {
     });
   };
 
+  const abrirModalGastosOperativos = () => {
+    setBusquedaGastos('');
+    setPaginaGastos(1);
+    setModalGastosAbierto(true);
+  };
+
+  const abrirModalGanancias = () => {
+    setBusquedaGanancias('');
+    setPaginaGanancias(1);
+    setModalGananciasAbierto(true);
+  };
+
+  const exportarGastosExcel = () => {
+    if (gastosFiltrados.length === 0) {
+      Swal.fire({
+        icon: 'info',
+        title: 'Sin datos',
+        text: 'No hay gastos operativos para exportar.',
+        confirmButtonColor: '#0284c7',
+      });
+      return;
+    }
+
+    const datosExcel = gastosFiltrados.map((item) => ({
+      Fecha: formatoFecha(item.fecha_movimiento),
+      Tipo: item.tipo || '',
+      Concepto: item.concepto || '',
+      Método: item.metodo_pago || '',
+      Monto: Number(item.monto || 0),
+      Referencia: item.referencia || '',
+      Observaciones: item.observaciones || '',
+      Usuario: item.usuario || '',
+    }));
+
+    datosExcel.push({
+      Fecha: '',
+      Tipo: '',
+      Concepto: '',
+      Método: 'TOTAL',
+      Monto: totalGastosFiltrados,
+      Referencia: '',
+      Observaciones: '',
+      Usuario: '',
+    });
+
+    const hoja = XLSX.utils.json_to_sheet(datosExcel);
+    const libro = XLSX.utils.book_new();
+
+    XLSX.utils.book_append_sheet(libro, hoja, 'Gastos operativos');
+
+    const nombreArchivo = `gastos_operativos_${fechaInicio}_al_${fechaFin}.xlsx`;
+
+    XLSX.writeFile(libro, nombreArchivo);
+  };
+
+  const exportarGananciasExcel = () => {
+    if (gananciasFiltradas.length === 0) {
+      Swal.fire({
+        icon: 'info',
+        title: 'Sin datos',
+        text: 'No hay productos para exportar.',
+        confirmButtonColor: '#0284c7',
+      });
+      return;
+    }
+
+    const margenGeneral =
+      totalVendidoGananciaFiltrada > 0
+        ? (totalGananciaFiltrada / totalVendidoGananciaFiltrada) * 100
+        : 0;
+
+    const datosExcel = gananciasFiltradas.map((item) => ({
+      Producto: item.producto || '',
+      'Cantidad vendida': Number(item.cantidad_vendida || 0),
+      'Costo compra unitario': Number(item.costo_compra_unitario || 0),
+      'Precio venta promedio': Number(item.precio_venta_promedio || 0),
+      'Total costo compra': Number(item.total_costo_compra || 0),
+      'Total vendido': Number(item.total_vendido || 0),
+      'Ganancia estimada': Number(item.ganancia || 0),
+      'Margen %': Number(item.margen_porcentaje || 0),
+    }));
+
+    datosExcel.push({
+      Producto: 'TOTAL',
+      'Cantidad vendida': '',
+      'Costo compra unitario': '',
+      'Precio venta promedio': '',
+      'Total costo compra': totalCostoGananciaFiltrada,
+      'Total vendido': totalVendidoGananciaFiltrada,
+      'Ganancia estimada': totalGananciaFiltrada,
+      'Margen %': margenGeneral,
+    });
+
+    const hoja = XLSX.utils.json_to_sheet(datosExcel);
+    const libro = XLSX.utils.book_new();
+
+    XLSX.utils.book_append_sheet(libro, hoja, 'Ganancias por producto');
+
+    const nombreArchivo = `ganancias_productos_${fechaInicio}_al_${fechaFin}.xlsx`;
+
+    XLSX.writeFile(libro, nombreArchivo);
+  };
+
   const cards = [
     {
       title: 'Total vendido',
@@ -390,8 +603,10 @@ export default function Dashboard() {
       title: 'Ganancia estimada',
       value: formatoMoneda(resumen.ganancia_total),
       icon: TrendingUp,
-      detail: 'Utilidad calculada por costo y precio de venta',
+      detail: 'Clic para ver utilidad por producto',
       color: 'emerald',
+      onClick: abrirModalGanancias,
+      clickable: true,
     },
     {
       title: 'Ticket promedio',
@@ -408,6 +623,15 @@ export default function Dashboard() {
         ? `${resumen.caja_actual?.caja || 'Caja abierta'}`
         : 'Sin caja abierta',
       color: resumen.caja_abierta ? 'blue' : 'slate',
+    },
+    {
+      title: 'Gastos operativos',
+      value: formatoMoneda(resumen.gastos_operativos),
+      icon: CircleDollarSign,
+      detail: `${resumen.total_gastos_operativos || 0} movimiento(s) en el periodo`,
+      color: Number(resumen.gastos_operativos || 0) > 0 ? 'red' : 'sky',
+      onClick: abrirModalGastosOperativos,
+      clickable: true,
     },
     {
       title: 'Bajo stock',
@@ -444,186 +668,251 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="w-full max-w-full overflow-hidden space-y-5 sm:space-y-6 pb-8">
-      <section className="rounded-2xl sm:rounded-3xl bg-gradient-to-r from-sky-700 to-cyan-700 text-white p-5 sm:p-6 lg:p-8 shadow-xl overflow-hidden">
-        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5 sm:gap-6">
-          <div className="min-w-0">
-            <p className="text-sky-100 font-semibold text-sm sm:text-base">
-              Bienvenido al sistema
-            </p>
+    <div className="w-full max-w-full overflow-hidden pb-10 space-y-6">
+      {/* ENCABEZADO */}
+      <section className="relative overflow-hidden rounded-[2rem] bg-slate-950 text-white shadow-xl">
+        <div className="absolute inset-0 bg-gradient-to-br from-sky-600/40 via-cyan-500/20 to-emerald-500/10" />
+        <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-sky-400/20 blur-3xl" />
+        <div className="absolute -left-20 bottom-0 h-64 w-64 rounded-full bg-cyan-400/10 blur-3xl" />
 
-            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mt-2 break-words">
-              Hola, {usuario?.nombre}
-            </h1>
+        <div className="relative p-5 sm:p-7 lg:p-8">
+          <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-6">
+            <div className="min-w-0">
+              <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs sm:text-sm font-bold text-sky-100 border border-white/10">
+                <Store size={15} />
+                Panel general de farmacia
+              </div>
 
-            <p className="text-sky-100 mt-3 max-w-2xl text-sm sm:text-base leading-relaxed">
-              Desde este panel podrás controlar ventas, inventario, cortes de caja,
-              sucursales y operaciones principales de la farmacia.
-            </p>
-          </div>
+              <h1 className="mt-4 text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight break-words">
+                Hola, {usuario?.nombre}
+              </h1>
 
-          <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 gap-3 w-full xl:w-auto">
-            <div className="rounded-2xl bg-white/15 p-4 min-w-0">
-              <BadgeDollarSign size={24} />
-              <p className="text-sm mt-2 text-sky-100">
-                Ganancia del periodo
-              </p>
-              <p className="font-bold break-words">
-                {formatoMoneda(resumen.ganancia_total)}
+              <p className="mt-3 max-w-3xl text-sm sm:text-base text-slate-200 leading-relaxed">
+                Consulta el rendimiento de ventas, caja, inventario, gastos operativos,
+                utilidad estimada y movimientos recientes por sucursal.
               </p>
             </div>
 
-            <div className="rounded-2xl bg-white/15 p-4 min-w-0">
-              <Boxes size={24} />
-              <p className="text-sm mt-2 text-sky-100">
-                Sucursales asignadas
-              </p>
-              <p className="font-bold">
-                {usuario?.sucursales?.length || 0}
-              </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full xl:w-auto">
+              <div className="rounded-3xl bg-white/10 border border-white/10 p-4 backdrop-blur-sm">
+                <p className="text-xs font-bold uppercase tracking-wide text-sky-100">
+                  Venta periodo
+                </p>
+                <p className="mt-2 text-xl font-black">
+                  {cargando ? '...' : formatoMoneda(resumen.total_vendido)}
+                </p>
+              </div>
+
+              <div className="rounded-3xl bg-white/10 border border-white/10 p-4 backdrop-blur-sm">
+                <p className="text-xs font-bold uppercase tracking-wide text-emerald-100">
+                  Ganancia
+                </p>
+                <p className="mt-2 text-xl font-black">
+                  {cargando ? '...' : formatoMoneda(resumen.ganancia_total)}
+                </p>
+              </div>
+
+              <div className="rounded-3xl bg-white/10 border border-white/10 p-4 backdrop-blur-sm">
+                <p className="text-xs font-bold uppercase tracking-wide text-cyan-100">
+                  Ventas
+                </p>
+                <p className="mt-2 text-xl font-black">
+                  {cargando ? '...' : resumen.total_ventas || 0}
+                </p>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-sm border border-slate-100 overflow-hidden">
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 items-end">
-          <div className="md:col-span-2 xl:col-span-2 min-w-0">
-            <label className="block text-sm font-bold text-slate-700 mb-2">
-              Sucursal
-            </label>
+      {/* FILTROS */}
+      <section className="bg-white rounded-[2rem] p-4 sm:p-5 shadow-sm border border-slate-100">
+        <div className="flex flex-col lg:flex-row lg:items-end gap-4">
+          <div className="flex-1 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            <div className="xl:col-span-2 min-w-0">
+              <label className="block text-sm font-black text-slate-700 mb-2">
+                Sucursal
+              </label>
 
-            {puedeCambiarSucursal ? (
-              <select
-                value={idSucursal}
-                onChange={(e) => setIdSucursal(e.target.value)}
-                className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
-              >
-                <option value="">Selecciona sucursal</option>
-                {sucursales.map((sucursal) => (
-                  <option key={sucursal.id_sucursal} value={sucursal.id_sucursal}>
-                    {sucursal.nombre}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <div className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 text-slate-700 font-semibold truncate">
-                {sucursalActual?.nombre || sucursales[0]?.nombre || 'Sucursal asignada'}
-              </div>
-            )}
-          </div>
+              {puedeCambiarSucursal ? (
+                <select
+                  value={idSucursal}
+                  onChange={(e) => setIdSucursal(e.target.value)}
+                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-white text-slate-700 font-semibold focus:outline-none focus:ring-2 focus:ring-sky-500"
+                >
+                  <option value="">Selecciona sucursal</option>
+                  {sucursales.map((sucursal) => (
+                    <option
+                      key={sucursal.id_sucursal}
+                      value={sucursal.id_sucursal}
+                    >
+                      {sucursal.nombre}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 text-slate-700 font-bold truncate">
+                  {sucursalActual?.nombre ||
+                    sucursales[0]?.nombre ||
+                    'Sucursal asignada'}
+                </div>
+              )}
+            </div>
 
-          <div className="min-w-0">
-            <label className="block text-sm font-bold text-slate-700 mb-2">
-              Fecha inicio
-            </label>
+            <div>
+              <label className="block text-sm font-black text-slate-700 mb-2">
+                Fecha inicio
+              </label>
+              <input
+                type="date"
+                value={fechaInicio}
+                onChange={(e) => setFechaInicio(e.target.value)}
+                className="w-full px-4 py-3 rounded-2xl border border-slate-200 text-slate-700 font-semibold focus:outline-none focus:ring-2 focus:ring-sky-500"
+              />
+            </div>
 
-            <input
-              type="date"
-              value={fechaInicio}
-              onChange={(e) => setFechaInicio(e.target.value)}
-              className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
-            />
-          </div>
-
-          <div className="min-w-0">
-            <label className="block text-sm font-bold text-slate-700 mb-2">
-              Fecha fin
-            </label>
-
-            <input
-              type="date"
-              value={fechaFin}
-              onChange={(e) => setFechaFin(e.target.value)}
-              className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
-            />
+            <div>
+              <label className="block text-sm font-black text-slate-700 mb-2">
+                Fecha fin
+              </label>
+              <input
+                type="date"
+                value={fechaFin}
+                onChange={(e) => setFechaFin(e.target.value)}
+                className="w-full px-4 py-3 rounded-2xl border border-slate-200 text-slate-700 font-semibold focus:outline-none focus:ring-2 focus:ring-sky-500"
+              />
+            </div>
           </div>
 
           <button
             onClick={cargarDashboard}
             disabled={!idSucursal || cargando}
-            className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-2xl bg-slate-950 hover:bg-slate-800 text-white font-black transition disabled:opacity-50"
           >
             <RefreshCw size={19} className={cargando ? 'animate-spin' : ''} />
-            Filtrar
+            Actualizar
           </button>
         </div>
 
-        <div className="mt-4 flex flex-col lg:flex-row lg:items-center gap-2 text-sm text-slate-500">
-          <div className="flex items-start sm:items-center gap-2 min-w-0">
-            <Store size={16} className="shrink-0 mt-0.5 sm:mt-0" />
-            <span className="break-words">
+        <div className="mt-4 flex flex-col sm:flex-row sm:items-center gap-3 text-sm text-slate-500">
+          <div className="inline-flex items-center gap-2">
+            <Store size={16} />
+            <span>
               {sucursalActual
-                ? `Mostrando datos de ${sucursalActual.nombre}`
-                : 'Selecciona una sucursal para ver datos reales'}
+                ? `Sucursal: ${sucursalActual.nombre}`
+                : 'Selecciona una sucursal'}
             </span>
           </div>
 
-          <span className="hidden lg:inline">•</span>
+          <span className="hidden sm:inline text-slate-300">•</span>
 
-          <div className="flex items-start sm:items-center gap-2 min-w-0">
-            <CalendarDays size={16} className="shrink-0 mt-0.5 sm:mt-0" />
-            <span className="break-words">
+          <div className="inline-flex items-center gap-2">
+            <CalendarDays size={16} />
+            <span>
               Periodo: {fechaInicio} al {fechaFin}
             </span>
           </div>
         </div>
       </section>
 
-      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6 gap-4 sm:gap-5">
+      {/* KPIS */}
+      <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-4">
         {cards.map((card) => {
           const Icon = card.icon;
 
+          const isPrincipal =
+            card.title === 'Total vendido' ||
+            card.title === 'Ganancia estimada' ||
+            card.title === 'Caja actual';
+
+          const spanClass =
+            card.title === 'Total vendido' || card.title === 'Ganancia estimada'
+              ? 'xl:col-span-3'
+              : card.title === 'Caja actual'
+                ? 'xl:col-span-4'
+                : 'xl:col-span-2';
+
+          const borderClass =
+            card.color === 'emerald'
+              ? 'hover:border-emerald-200'
+              : card.color === 'red'
+                ? 'hover:border-red-200'
+                : card.color === 'amber'
+                  ? 'hover:border-amber-200'
+                  : 'hover:border-sky-200';
+
           return (
-            <div
+            <button
               key={card.title}
+              type="button"
               onClick={card.onClick}
-              className={`bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100 transition min-w-0 ${
-                card.clickable
-                  ? 'cursor-pointer hover:-translate-y-1 hover:shadow-lg hover:border-sky-200'
-                  : ''
-              }`}
+              disabled={!card.clickable}
+              className={`text-left bg-white rounded-[1.7rem] p-5 sm:p-6 border border-slate-100 shadow-sm transition group min-w-0 ${spanClass} ${card.clickable
+                ? `hover:-translate-y-1 hover:shadow-xl ${borderClass} cursor-pointer`
+                : 'cursor-default'
+                }`}
             >
-              <div className="flex items-center justify-between">
+              <div className="flex items-start justify-between gap-4">
                 <div
                   className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${getColorClass(
                     card.color
                   )}`}
                 >
-                  <Icon size={24} />
+                  <Icon size={23} />
                 </div>
+
+                {card.clickable && (
+                  <span className="text-xs font-black text-sky-700 bg-sky-50 px-3 py-1 rounded-full opacity-0 group-hover:opacity-100 transition">
+                    Ver detalle
+                  </span>
+                )}
               </div>
 
-              <p className="text-sm text-slate-500 mt-5">
-                {card.title}
-              </p>
+              <div className={isPrincipal ? 'mt-8' : 'mt-5'}>
+                <p className="text-sm font-bold text-slate-500">
+                  {card.title}
+                </p>
 
-              <h3 className="text-2xl sm:text-3xl font-bold text-slate-800 mt-1 break-words">
-                {cargando ? '...' : card.value}
-              </h3>
+                <h3
+                  className={`mt-1 font-black text-slate-950 break-words ${isPrincipal
+                    ? 'text-3xl sm:text-4xl'
+                    : 'text-2xl sm:text-3xl'
+                    }`}
+                >
+                  {cargando ? '...' : card.value}
+                </h3>
 
-              <p className="text-sm text-slate-400 mt-2 leading-relaxed">
-                {card.detail}
-              </p>
-            </div>
+                <p className="mt-3 text-sm text-slate-400 leading-relaxed">
+                  {card.detail}
+                </p>
+              </div>
+            </button>
           );
         })}
       </section>
 
-      <section className="grid grid-cols-1 xl:grid-cols-3 gap-5 sm:gap-6">
-        <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-sm border border-slate-100 min-w-0 overflow-hidden">
-          <div>
-            <h3 className="text-lg font-bold text-slate-800">
-              Formas de pago
-            </h3>
-            <p className="text-sm text-slate-500">
-              Dinero recibido por método de pago.
-            </p>
+      {/* RESUMEN VISUAL */}
+      <section className="grid grid-cols-1 xl:grid-cols-12 gap-5">
+        {/* FORMAS DE PAGO */}
+        <div className="xl:col-span-4 bg-white rounded-[2rem] p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0 overflow-hidden">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-black text-slate-900">
+                Formas de pago
+              </h3>
+              <p className="text-sm text-slate-500 mt-1">
+                Distribución del dinero recibido.
+              </p>
+            </div>
+
+            <div className="w-11 h-11 rounded-2xl bg-sky-50 text-sky-700 flex items-center justify-center">
+              <CircleDollarSign size={22} />
+            </div>
           </div>
 
-          <div className="mt-6 h-72 sm:h-80 min-w-0">
+          <div className="mt-6 h-72">
             {ventasPorMetodoGrafica.length === 0 ? (
-              <div className="h-full rounded-2xl bg-slate-50 flex items-center justify-center text-slate-500 font-semibold text-center px-4">
+              <div className="h-full rounded-3xl bg-slate-50 flex items-center justify-center text-slate-500 font-bold text-center px-4">
                 No hay pagos registrados para graficar.
               </div>
             ) : (
@@ -635,8 +924,8 @@ export default function Dashboard() {
                     nameKey="metodo"
                     cx="50%"
                     cy="50%"
-                    innerRadius={45}
-                    outerRadius={85}
+                    innerRadius={52}
+                    outerRadius={88}
                     paddingAngle={4}
                   >
                     {ventasPorMetodoGrafica.map((entry, index) => (
@@ -655,24 +944,27 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="xl:col-span-2 bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-sm border border-slate-100 min-w-0 overflow-hidden">
-          <div className="flex items-start sm:items-center justify-between gap-4">
+        {/* PRODUCTOS MAS VENDIDOS */}
+        <div className="xl:col-span-8 bg-white rounded-[2rem] p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0 overflow-hidden">
+          <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
-              <h3 className="text-lg font-bold text-slate-800">
+              <h3 className="text-lg font-black text-slate-900">
                 Productos más vendidos
               </h3>
-              <p className="text-sm text-slate-500">
-                Productos con mayor movimiento en el periodo seleccionado.
+              <p className="text-sm text-slate-500 mt-1">
+                Ranking por cantidad vendida en el periodo.
               </p>
             </div>
 
-            <Package className="text-sky-600 shrink-0" />
+            <div className="w-11 h-11 rounded-2xl bg-sky-50 text-sky-700 flex items-center justify-center shrink-0">
+              <Package size={22} />
+            </div>
           </div>
 
           <div className="mt-6 overflow-x-auto">
-            <div className="h-80 min-w-[620px]">
+            <div className="h-80 min-w-[640px]">
               {productosMasVendidosGrafica.length === 0 ? (
-                <div className="h-full rounded-2xl bg-slate-50 flex items-center justify-center text-slate-500 font-semibold text-center px-4">
+                <div className="h-full rounded-3xl bg-slate-50 flex items-center justify-center text-slate-500 font-bold text-center px-4">
                   No hay productos vendidos en este periodo.
                 </div>
               ) : (
@@ -688,7 +980,7 @@ export default function Dashboard() {
                       type="category"
                       dataKey="producto"
                       tick={{ fontSize: 12 }}
-                      width={140}
+                      width={150}
                     />
                     <Tooltip
                       formatter={(value, name) => {
@@ -704,7 +996,7 @@ export default function Dashboard() {
                       dataKey="cantidad"
                       name="Cantidad vendida"
                       fill="#0284c7"
-                      radius={[0, 8, 8, 0]}
+                      radius={[0, 10, 10, 0]}
                     />
                   </BarChart>
                 </ResponsiveContainer>
@@ -714,24 +1006,27 @@ export default function Dashboard() {
         </div>
       </section>
 
-      <section className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-sm border border-slate-100 min-w-0 overflow-hidden">
-        <div className="flex items-start sm:items-center justify-between gap-4">
+      {/* CATEGORÍAS */}
+      <section className="bg-white rounded-[2rem] p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0 overflow-hidden">
+        <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <h3 className="text-lg font-bold text-slate-800">
+            <h3 className="text-lg font-black text-slate-900">
               Categorías más vendidas
             </h3>
-            <p className="text-sm text-slate-500">
-              Categorías que generan más ingresos y utilidad.
+            <p className="text-sm text-slate-500 mt-1">
+              Comparativa de ingresos y utilidad por categoría.
             </p>
           </div>
 
-          <ChartNoAxesColumnIncreasing className="text-sky-600 shrink-0" />
+          <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+            <ChartNoAxesColumnIncreasing size={22} />
+          </div>
         </div>
 
         <div className="mt-6 overflow-x-auto">
-          <div className="h-80 sm:h-96 min-w-[680px]">
+          <div className="h-80 sm:h-96 min-w-[720px]">
             {categoriasMasVendidasGrafica.length === 0 ? (
-              <div className="h-full rounded-2xl bg-slate-50 flex items-center justify-center text-slate-500 font-semibold text-center px-4">
+              <div className="h-full rounded-3xl bg-slate-50 flex items-center justify-center text-slate-500 font-bold text-center px-4">
                 No hay categorías vendidas en este periodo.
               </div>
             ) : (
@@ -751,13 +1046,13 @@ export default function Dashboard() {
                     dataKey="total"
                     name="Total vendido"
                     fill="#0284c7"
-                    radius={[8, 8, 0, 0]}
+                    radius={[10, 10, 0, 0]}
                   />
                   <Bar
                     dataKey="ganancia"
                     name="Ganancia"
                     fill="#10b981"
-                    radius={[8, 8, 0, 0]}
+                    radius={[10, 10, 0, 0]}
                   />
                 </BarChart>
               </ResponsiveContainer>
@@ -766,44 +1061,48 @@ export default function Dashboard() {
         </div>
       </section>
 
-      <section className="grid grid-cols-1 xl:grid-cols-3 gap-5 sm:gap-6">
-        <div className="xl:col-span-2 bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-sm border border-slate-100 min-w-0 overflow-hidden">
-          <div className="flex items-start sm:items-center justify-between gap-4">
+      {/* ÚLTIMAS VENTAS + BAJO STOCK */}
+      <section className="grid grid-cols-1 xl:grid-cols-12 gap-5">
+        {/* ÚLTIMAS VENTAS */}
+        <div className="xl:col-span-8 bg-white rounded-[2rem] p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0 overflow-hidden">
+          <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
-              <h3 className="text-lg font-bold text-slate-800">
+              <h3 className="text-lg font-black text-slate-900">
                 Últimas ventas
               </h3>
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-slate-500 mt-1">
                 Movimientos recientes del punto de venta.
               </p>
             </div>
 
-            <ReceiptText className="text-slate-400 shrink-0" />
+            <div className="w-11 h-11 rounded-2xl bg-slate-100 text-slate-600 flex items-center justify-center shrink-0">
+              <ReceiptText size={22} />
+            </div>
           </div>
 
-          {/* Vista móvil */}
+          {/* MÓVIL */}
           <div className="mt-5 space-y-3 md:hidden">
             {ultimasVentas.length === 0 ? (
-              <div className="rounded-2xl bg-slate-50 p-5 text-center text-slate-500 font-semibold">
+              <div className="rounded-3xl bg-slate-50 p-5 text-center text-slate-500 font-bold">
                 No hay ventas recientes.
               </div>
             ) : (
               ultimasVentas.map((venta) => (
                 <div
                   key={venta.id_venta}
-                  className="rounded-2xl border border-slate-100 bg-slate-50 p-4"
+                  className="rounded-3xl border border-slate-100 bg-slate-50 p-4"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="text-xs text-slate-500 font-bold uppercase">
+                      <p className="text-xs text-slate-500 font-black uppercase">
                         Folio
                       </p>
-                      <p className="font-bold text-slate-800 break-words">
+                      <p className="font-black text-slate-900 break-words">
                         {venta.folio}
                       </p>
                     </div>
 
-                    <p className="font-bold text-sky-700 text-right shrink-0">
+                    <p className="font-black text-sky-700 text-right shrink-0">
                       {formatoMoneda(venta.total)}
                     </p>
                   </div>
@@ -811,21 +1110,21 @@ export default function Dashboard() {
                   <div className="grid grid-cols-1 gap-2 mt-4 text-sm">
                     <div>
                       <span className="text-slate-500">Fecha: </span>
-                      <span className="font-semibold text-slate-700">
+                      <span className="font-bold text-slate-700">
                         {formatoFecha(venta.fecha_venta)}
                       </span>
                     </div>
 
                     <div>
                       <span className="text-slate-500">Método: </span>
-                      <span className="font-semibold text-slate-700">
+                      <span className="font-bold text-slate-700">
                         {venta.metodo_pago}
                       </span>
                     </div>
 
                     <div>
                       <span className="text-slate-500">Cajero: </span>
-                      <span className="font-semibold text-slate-700">
+                      <span className="font-bold text-slate-700">
                         {venta.usuario}
                       </span>
                     </div>
@@ -835,24 +1134,24 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* Vista escritorio/tablet */}
-          <div className="mt-5 overflow-x-auto hidden md:block">
-            <table className="w-full min-w-[700px]">
+          {/* DESKTOP */}
+          <div className="mt-5 overflow-x-auto hidden md:block rounded-3xl border border-slate-100">
+            <table className="w-full min-w-[760px]">
               <thead className="bg-slate-50 border-b border-slate-100">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+                  <th className="px-4 py-3 text-left text-xs font-black text-slate-500 uppercase">
                     Folio
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+                  <th className="px-4 py-3 text-left text-xs font-black text-slate-500 uppercase">
                     Fecha
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+                  <th className="px-4 py-3 text-left text-xs font-black text-slate-500 uppercase">
                     Método
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+                  <th className="px-4 py-3 text-left text-xs font-black text-slate-500 uppercase">
                     Cajero
                   </th>
-                  <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">
+                  <th className="px-4 py-3 text-right text-xs font-black text-slate-500 uppercase">
                     Total
                   </th>
                 </tr>
@@ -868,7 +1167,7 @@ export default function Dashboard() {
                 ) : (
                   ultimasVentas.map((venta) => (
                     <tr key={venta.id_venta} className="hover:bg-slate-50">
-                      <td className="px-4 py-3 font-bold text-slate-800">
+                      <td className="px-4 py-3 font-black text-slate-900">
                         {venta.folio}
                       </td>
                       <td className="px-4 py-3 text-sm text-slate-600">
@@ -880,7 +1179,7 @@ export default function Dashboard() {
                       <td className="px-4 py-3 text-sm text-slate-600">
                         {venta.usuario}
                       </td>
-                      <td className="px-4 py-3 text-right font-bold text-sky-700">
+                      <td className="px-4 py-3 text-right font-black text-sky-700">
                         {formatoMoneda(venta.total)}
                       </td>
                     </tr>
@@ -891,59 +1190,88 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-sm border border-slate-100 min-w-0 overflow-hidden">
-          <div className="flex items-start sm:items-center justify-between gap-4">
+        {/* BAJO STOCK */}
+        <div className="xl:col-span-4 bg-white rounded-[2rem] p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0 overflow-hidden">
+          <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
-              <h3 className="text-lg font-bold text-slate-800">
-                Productos bajo stock
+              <h3 className="text-lg font-black text-slate-900">
+                Bajo stock
               </h3>
-              <p className="text-sm text-slate-500">
-                Requieren revisión.
+              <p className="text-sm text-slate-500 mt-1">
+                Productos que requieren revisión.
               </p>
             </div>
 
-            <AlertTriangle className="text-amber-500 shrink-0" />
+            <div className="w-11 h-11 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+              <AlertTriangle size={22} />
+            </div>
           </div>
 
           <div className="mt-5 space-y-3">
             {productosBajoStock.length === 0 ? (
-              <div className="rounded-2xl bg-sky-50 p-4 text-sky-700 font-semibold text-sm">
+              <div className="rounded-3xl bg-sky-50 p-5 text-sky-700 font-bold text-sm">
                 No hay productos bajo stock.
               </div>
             ) : (
-              productosBajoStock.slice(0, 5).map((item) => (
-                <div
+              productosBajoStock.slice(0, 6).map((item) => (
+                <button
                   key={item.id_inventario}
-                  className="rounded-2xl bg-amber-50 border border-amber-100 p-4"
+                  type="button"
+                  onClick={abrirModalBajoStock}
+                  className="w-full text-left rounded-3xl bg-amber-50 border border-amber-100 p-4 hover:bg-amber-100 transition"
                 >
-                  <p className="font-bold text-slate-800 break-words">
+                  <p className="font-black text-slate-900 break-words">
                     {item.producto}
                   </p>
 
-                  <div className="mt-2 flex items-center justify-between gap-3 text-sm">
-                    <span className="text-slate-500">
-                      Stock actual
-                    </span>
-                    <span className="font-bold text-amber-700">
-                      {formatoNumero(item.stock_actual)}
-                    </span>
-                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                    <div className="rounded-2xl bg-white/70 p-3">
+                      <p className="text-xs text-slate-500 font-bold">
+                        Actual
+                      </p>
+                      <p className="font-black text-amber-700">
+                        {formatoNumero(item.stock_actual)}
+                      </p>
+                    </div>
 
-                  <div className="mt-1 flex items-center justify-between gap-3 text-sm">
-                    <span className="text-slate-500">
-                      Mínimo
-                    </span>
-                    <span className="font-bold text-slate-700">
-                      {formatoNumero(item.stock_minimo)}
-                    </span>
+                    <div className="rounded-2xl bg-white/70 p-3">
+                      <p className="text-xs text-slate-500 font-bold">
+                        Mínimo
+                      </p>
+                      <p className="font-black text-slate-700">
+                        {formatoNumero(item.stock_minimo)}
+                      </p>
+                    </div>
                   </div>
-                </div>
+                </button>
               ))
             )}
           </div>
+
+          {productosBajoStock.length > 6 && (
+            <button
+              type="button"
+              onClick={abrirModalBajoStock}
+              className="mt-4 w-full rounded-2xl bg-slate-950 hover:bg-slate-800 text-white font-black px-4 py-3 transition"
+            >
+              Ver todos
+            </button>
+          )}
         </div>
       </section>
 
+      {/* DEJA TUS MODALES ACTUALES ABAJO SIN CAMBIOS */}
+      {modalGastosAbierto && (
+        <div className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5">
+          {/* aquí deja exactamente tu modal de gastos actual */}
+        </div>
+      )}
+
+      {modalGananciasAbierto && (
+        <div className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5">
+          {/* aquí deja exactamente tu modal de ganancias actual */}
+        </div>
+      )}
     </div>
   );
 }

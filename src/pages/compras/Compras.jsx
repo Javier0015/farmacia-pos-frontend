@@ -35,6 +35,7 @@ const productoInicial = {
   descuento: '',
   lote: '',
   fecha_caducidad: '',
+  ubicacion: '',
   observaciones: '',
 };
 
@@ -594,6 +595,7 @@ export default function Compras() {
         !item.descuento &&
         !item.lote &&
         !item.fecha_caducidad &&
+        !item.ubicacion &&
         !item.observaciones;
 
       if (filaVacia) continue;
@@ -624,6 +626,15 @@ export default function Compras() {
         });
         return false;
       }
+
+      if (!item.ubicacion || !item.ubicacion.trim()) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Área obligatoria',
+          text: `Captura el área o ubicación del producto en la fila ${index + 1}.`,
+        });
+        return false;
+      }
     }
 
     if (resumenCompra.total <= 0 && Number(formCompra.monto_pagado || 0) > 0) {
@@ -640,16 +651,16 @@ export default function Compras() {
         icon: 'warning',
         title: 'Pago mayor al total',
         html: `
-          <p>El monto pagado no puede ser mayor al total de la compra.</p>
-          <div style="margin-top:12px;text-align:left;background:#f8fafc;border-radius:14px;padding:12px">
-            <b>Total de la compra:</b> ${formatoMoneda(resumenCompra.total)}<br/>
-            <b>Monto capturado:</b> ${formatoMoneda(formCompra.monto_pagado)}<br/>
-            <b>Diferencia:</b> ${formatoMoneda(Number(formCompra.monto_pagado || 0) - resumenCompra.total)}
-          </div>
-          <p style="margin-top:12px;color:#64748b;font-size:13px">
-            Corrige el monto pagado o revisa el total del ticket.
-          </p>
-        `,
+        <p>El monto pagado no puede ser mayor al total de la compra.</p>
+        <div style="margin-top:12px;text-align:left;background:#f8fafc;border-radius:14px;padding:12px">
+          <b>Total de la compra:</b> ${formatoMoneda(resumenCompra.total)}<br/>
+          <b>Monto capturado:</b> ${formatoMoneda(formCompra.monto_pagado)}<br/>
+          <b>Diferencia:</b> ${formatoMoneda(Number(formCompra.monto_pagado || 0) - resumenCompra.total)}
+        </div>
+        <p style="margin-top:12px;color:#64748b;font-size:13px">
+          Corrige el monto pagado o revisa el total del ticket.
+        </p>
+      `,
         confirmButtonText: 'Entendido',
       });
       return false;
@@ -699,6 +710,7 @@ export default function Compras() {
           descuento: Number(item.descuento || 0),
           lote: item.lote || null,
           fecha_caducidad: item.fecha_caducidad || null,
+          ubicacion: item.ubicacion || null,
           observaciones: item.observaciones || null,
         })),
       };
@@ -813,6 +825,7 @@ export default function Compras() {
             fecha_caducidad: item.fecha_caducidad
               ? item.fecha_caducidad.substring(0, 10)
               : '',
+            ubicacion: item.ubicacion || '',
             observaciones: item.observaciones || '',
           }))
         );
@@ -1388,22 +1401,22 @@ export default function Compras() {
                       <td className="px-5 py-4 align-middle text-right">
                         <div
                           className={`inline-flex flex-col items-end rounded-2xl px-3 py-2 ${Number(compra.saldo || 0) > 0
-                              ? 'bg-red-50'
-                              : 'bg-emerald-50'
+                            ? 'bg-red-50'
+                            : 'bg-emerald-50'
                             }`}
                         >
                           <span
                             className={`text-base font-black ${Number(compra.saldo || 0) > 0
-                                ? 'text-red-700'
-                                : 'text-emerald-700'
+                              ? 'text-red-700'
+                              : 'text-emerald-700'
                               }`}
                           >
                             {formatoMoneda(compra.saldo)}
                           </span>
                           <span
                             className={`text-xs ${Number(compra.saldo || 0) > 0
-                                ? 'text-red-600'
-                                : 'text-emerald-600'
+                              ? 'text-red-600'
+                              : 'text-emerald-600'
                               }`}
                           >
                             {Number(compra.saldo || 0) > 0 ? 'Pendiente' : 'Liquidado'}
@@ -1853,6 +1866,18 @@ export default function Compras() {
                                 value={item.fecha_caducidad}
                                 onChange={(e) => actualizarItem(index, 'fecha_caducidad', e.target.value)}
                                 className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
+                              />
+                            </div>
+
+                            <div className="md:col-span-3 min-w-0">
+                              <label className="block text-sm font-bold text-slate-700 mb-2">
+                                Área / ubicación
+                              </label>
+                              <input
+                                value={item.ubicacion}
+                                onChange={(e) => actualizarItem(index, 'ubicacion', e.target.value)}
+                                className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
+                                placeholder="Ej. Área 1, Área 2, Mostrador"
                               />
                             </div>
 

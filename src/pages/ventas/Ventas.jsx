@@ -13,6 +13,7 @@ import {
   CreditCard,
   Banknote,
   FileText,
+  Undo2,
 } from 'lucide-react';
 import api from '../../api/axios';
 import { useAuth } from '../../context/AuthContext';
@@ -29,6 +30,7 @@ export default function Ventas() {
 
   const [sucursales, setSucursales] = useState([]);
   const [ventas, setVentas] = useState([]);
+
   const [detalleVenta, setDetalleVenta] = useState(null);
   const [detalleProductos, setDetalleProductos] = useState([]);
   const [detalleLotes, setDetalleLotes] = useState([]);
@@ -39,30 +41,44 @@ export default function Ventas() {
 
   const [cargando, setCargando] = useState(false);
   const [cargandoDetalle, setCargandoDetalle] = useState(false);
+
   const [modalDetalle, setModalDetalle] = useState(false);
   const [modalTicket, setModalTicket] = useState(false);
+
+  const [modalDevolucion, setModalDevolucion] = useState(false);
+  const [ventaDevolucion, setVentaDevolucion] = useState(null);
+  const [devolucionProductos, setDevolucionProductos] = useState([]);
+  const [motivoDevolucion, setMotivoDevolucion] = useState('');
+  const [observacionesDevolucion, setObservacionesDevolucion] = useState('');
+  const [guardandoDevolucion, setGuardandoDevolucion] = useState(false);
 
   const sucursalActual = useMemo(() => {
     return sucursales.find((s) => Number(s.id_sucursal) === Number(idSucursal));
   }, [sucursales, idSucursal]);
 
   const resumen = useMemo(() => {
-    const totalVentas = ventas.length;
+    const ventasValidas = ventas.filter((venta) => venta.estado !== 'DEVUELTA');
 
-    const totalImporte = ventas.reduce((acc, venta) => {
+    const totalVentas = ventasValidas.length;
+
+    const totalImporte = ventasValidas.reduce((acc, venta) => {
       return acc + Number(venta.total || 0);
     }, 0);
 
-    const efectivo = ventas
+    const efectivo = ventasValidas
       .filter((v) => v.metodo_pago === 'EFECTIVO')
       .reduce((acc, venta) => acc + Number(venta.total || 0), 0);
 
-    const tarjeta = ventas
+    const tarjeta = ventasValidas
       .filter((v) => v.metodo_pago === 'TARJETA')
       .reduce((acc, venta) => acc + Number(venta.total || 0), 0);
 
-    const transferencia = ventas
+    const transferencia = ventasValidas
       .filter((v) => v.metodo_pago === 'TRANSFERENCIA')
+      .reduce((acc, venta) => acc + Number(venta.total || 0), 0);
+
+    const devoluciones = ventas
+      .filter((venta) => venta.estado === 'DEVUELTA')
       .reduce((acc, venta) => acc + Number(venta.total || 0), 0);
 
     return {
@@ -71,8 +87,30 @@ export default function Ventas() {
       efectivo,
       tarjeta,
       transferencia,
+      devoluciones,
     };
   }, [ventas]);
+
+  const totalEstimadoDevolucion = useMemo(() => {
+    if (!ventaDevolucion) return 0;
+
+    const subtotalSeleccionado = devolucionProductos.reduce((acc, producto) => {
+      const cantidad = Number(producto.cantidad_devolver || 0);
+      const cantidadVendida = Number(producto.cantidad || 0);
+      const subtotalProducto = Number(producto.subtotal || 0);
+
+      if (cantidad <= 0 || cantidadVendida <= 0) return acc;
+
+      const precioProporcional = subtotalProducto / cantidadVendida;
+      return acc + precioProporcional * cantidad;
+    }, 0);
+
+    const subtotalVenta = Number(ventaDevolucion.subtotal || 0);
+    const totalVenta = Number(ventaDevolucion.total || 0);
+    const factorTotal = subtotalVenta > 0 ? totalVenta / subtotalVenta : 1;
+
+    return Number((subtotalSeleccionado * factorTotal).toFixed(2));
+  }, [devolucionProductos, ventaDevolucion]);
 
   const formatoMoneda = (valor) => {
     return Number(valor || 0).toLocaleString('es-MX', {
@@ -101,6 +139,22 @@ export default function Ventas() {
     if (metodo === 'EFECTIVO') return <Banknote size={17} />;
     if (metodo === 'TARJETA') return <CreditCard size={17} />;
     return <FileText size={17} />;
+  };
+
+  const badgeEstado = (estado) => {
+    if (estado === 'COMPLETADA') {
+      return 'bg-sky-100 text-sky-700';
+    }
+
+    if (estado === 'DEVUELTA') {
+      return 'bg-red-100 text-red-700';
+    }
+
+    if (estado === 'DEVUELTA_PARCIAL') {
+      return 'bg-amber-100 text-amber-700';
+    }
+
+    return 'bg-slate-100 text-slate-600';
   };
 
   const cargarSucursales = async () => {
@@ -200,6 +254,154 @@ export default function Ventas() {
     setDetalleVenta(null);
     setDetalleProductos([]);
     setDetalleLotes([]);
+  };
+
+  const abrirDevolucionVenta = async (idVenta) => {
+    try {
+      setCargandoDetalle(true);
+
+      const { data } = await api.get(`/ventas/${idVenta}/devolucion-info`);
+
+      if (data.ok) {
+        setVentaDevolucion(data.venta);
+
+        const productosPreparados = (data.productos || []).map((producto) => ({
+          ...producto,
+          cantidad_devolver: '',
+        }));
+
+        setDevolucionProductos(productosPreparados);
+        setMotivoDevolucion('');
+        setObservacionesDevolucion('');
+        setModalDevolucion(true);
+      }
+    } catch (error) {
+      console.error(error);
+
+      Swal.fire({
+        icon: 'error',
+        title: 'No se pudo abrir devolución',
+        text:
+          error.response?.data?.mensaje ||
+          'No se pudo cargar la información de devolución.',
+      });
+    } finally {
+      setCargandoDetalle(false);
+    }
+  };
+
+  const cerrarModalDevolucion = () => {
+    setModalDevolucion(false);
+    setVentaDevolucion(null);
+    setDevolucionProductos([]);
+    setMotivoDevolucion('');
+    setObservacionesDevolucion('');
+  };
+
+  const cambiarCantidadDevolucion = (idDetalle, valor) => {
+    const cantidad = valor === '' ? '' : Math.max(Number(valor || 0), 0);
+
+    setDevolucionProductos((prev) =>
+      prev.map((producto) => {
+        if (Number(producto.id_detalle) !== Number(idDetalle)) {
+          return producto;
+        }
+
+        const disponible = Number(producto.cantidad_disponible_devolver || 0);
+        const cantidadFinal =
+          cantidad === '' ? '' : Math.min(Number(cantidad), disponible);
+
+        return {
+          ...producto,
+          cantidad_devolver: cantidadFinal,
+        };
+      })
+    );
+  };
+
+  const aplicarDevolucion = async () => {
+    if (!ventaDevolucion) return;
+
+    const productosSeleccionados = devolucionProductos
+      .filter((producto) => Number(producto.cantidad_devolver || 0) > 0)
+      .map((producto) => ({
+        id_detalle: producto.id_detalle,
+        cantidad: Number(producto.cantidad_devolver),
+      }));
+
+    if (productosSeleccionados.length === 0) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Sin productos',
+        text: 'Selecciona al menos un producto para devolver.',
+      });
+      return;
+    }
+
+    if (!motivoDevolucion.trim()) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Motivo obligatorio',
+        text: 'Ingresa el motivo de la devolución.',
+      });
+      return;
+    }
+
+    const confirmacion = await Swal.fire({
+      icon: 'warning',
+      title: '¿Aplicar devolución?',
+      html: `
+        <div style="text-align:left">
+          <p><b>Venta:</b> ${ventaDevolucion.folio}</p>
+          <p><b>Método original:</b> ${ventaDevolucion.metodo_pago}</p>
+          <p><b>Monto estimado:</b> ${formatoMoneda(totalEstimadoDevolucion)}</p>
+        </div>
+      `,
+      showCancelButton: true,
+      confirmButtonText: 'Sí, aplicar devolución',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#d97706',
+    });
+
+    if (!confirmacion.isConfirmed) return;
+
+    try {
+      setGuardandoDevolucion(true);
+
+      const { data } = await api.post(
+        `/ventas/${ventaDevolucion.id_venta}/devolver`,
+        {
+          motivo: motivoDevolucion.trim(),
+          observaciones: observacionesDevolucion.trim() || null,
+          productos: productosSeleccionados,
+        }
+      );
+
+      if (data.ok) {
+        Swal.fire({
+          icon: 'success',
+          title: 'Devolución aplicada',
+          text: data.mensaje,
+          timer: 1500,
+          showConfirmButton: false,
+        });
+
+        cerrarModalDevolucion();
+        await cargarVentas();
+      }
+    } catch (error) {
+      console.error(error);
+
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text:
+          error.response?.data?.mensaje ||
+          'No se pudo aplicar la devolución.',
+      });
+    } finally {
+      setGuardandoDevolucion(false);
+    }
   };
 
   const abrirTicket = () => {
@@ -354,7 +556,7 @@ export default function Ventas() {
                 Ventas
               </h1>
               <p className="text-sm sm:text-base text-slate-500 leading-relaxed">
-                Historial de ventas, detalle de productos y lotes descontados.
+                Historial de ventas, detalle de productos, lotes y devoluciones.
               </p>
             </div>
           </div>
@@ -451,7 +653,7 @@ export default function Ventas() {
           </p>
         </div>
 
-        <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0 sm:col-span-1 xl:col-span-1">
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0">
           <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-700 flex items-center justify-center">
             <Wallet size={24} />
           </div>
@@ -459,9 +661,7 @@ export default function Ventas() {
           <h3 className="text-2xl sm:text-3xl font-bold text-slate-800 mt-1 break-words">
             {formatoMoneda(resumen.totalImporte)}
           </h3>
-          <p className="text-sm text-slate-400 mt-2">
-            Importe acumulado
-          </p>
+          <p className="text-sm text-slate-400 mt-2">Importe acumulado</p>
         </div>
 
         <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0">
@@ -501,7 +701,7 @@ export default function Ventas() {
             Listado de ventas
           </h2>
           <p className="text-sm text-slate-500">
-            Consulta ventas, detalle de productos, pagos y lotes.
+            Consulta ventas, detalle de productos, pagos, lotes y devoluciones.
           </p>
         </div>
 
@@ -531,11 +731,9 @@ export default function Ventas() {
                   </div>
 
                   <span
-                    className={`text-xs font-bold px-3 py-1 rounded-full shrink-0 ${
-                      venta.estado === 'COMPLETADA'
-                        ? 'bg-sky-100 text-sky-700'
-                        : 'bg-slate-100 text-slate-600'
-                    }`}
+                    className={`text-xs font-bold px-3 py-1 rounded-full shrink-0 ${badgeEstado(
+                      venta.estado
+                    )}`}
                   >
                     {venta.estado}
                   </span>
@@ -604,13 +802,25 @@ export default function Ventas() {
                   </div>
                 </div>
 
-                <button
-                  onClick={() => verDetalleVenta(venta.id_venta)}
-                  className="mt-4 w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold transition"
-                >
-                  <Eye size={18} />
-                  Ver detalle
-                </button>
+                <div className="mt-4 grid grid-cols-1 gap-2">
+                  <button
+                    onClick={() => verDetalleVenta(venta.id_venta)}
+                    className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold transition"
+                  >
+                    <Eye size={18} />
+                    Ver detalle
+                  </button>
+
+                  {['COMPLETADA', 'DEVUELTA_PARCIAL'].includes(venta.estado) && (
+                    <button
+                      onClick={() => abrirDevolucionVenta(venta.id_venta)}
+                      className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-amber-50 text-amber-700 hover:bg-amber-100 font-bold transition"
+                    >
+                      <Undo2 size={18} />
+                      Devolver
+                    </button>
+                  )}
+                </div>
               </article>
             ))
           )}
@@ -684,7 +894,10 @@ export default function Ventas() {
 
                     <td className="px-5 py-4">
                       <div className="flex items-start gap-2">
-                        <Store size={17} className="text-slate-400 mt-0.5 shrink-0" />
+                        <Store
+                          size={17}
+                          className="text-slate-400 mt-0.5 shrink-0"
+                        />
                         <div className="min-w-0">
                           <p className="font-semibold text-slate-800">
                             {venta.sucursal}
@@ -721,24 +934,34 @@ export default function Ventas() {
 
                     <td className="px-5 py-4 text-center">
                       <span
-                        className={`text-xs font-bold px-3 py-1 rounded-full ${
-                          venta.estado === 'COMPLETADA'
-                            ? 'bg-sky-100 text-sky-700'
-                            : 'bg-slate-100 text-slate-600'
-                        }`}
+                        className={`text-xs font-bold px-3 py-1 rounded-full ${badgeEstado(
+                          venta.estado
+                        )}`}
                       >
                         {venta.estado}
                       </span>
                     </td>
 
                     <td className="px-5 py-4 text-center sticky right-0 bg-white shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.45)]">
-                      <button
-                        onClick={() => verDetalleVenta(venta.id_venta)}
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold transition"
-                      >
-                        <Eye size={17} />
-                        Ver
-                      </button>
+                      <div className="flex justify-center gap-2">
+                        <button
+                          onClick={() => verDetalleVenta(venta.id_venta)}
+                          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold transition"
+                        >
+                          <Eye size={17} />
+                          Ver
+                        </button>
+
+                        {['COMPLETADA', 'DEVUELTA_PARCIAL'].includes(venta.estado) && (
+                          <button
+                            onClick={() => abrirDevolucionVenta(venta.id_venta)}
+                            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-50 text-amber-700 hover:bg-amber-100 font-bold transition"
+                          >
+                            <Undo2 size={17} />
+                            Devolver
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -849,59 +1072,7 @@ export default function Ventas() {
                       </h3>
                     </div>
 
-                    <div className="md:hidden space-y-3">
-                      {detalleProductos.length === 0 ? (
-                        <div className="rounded-2xl bg-slate-50 p-5 text-center text-slate-500">
-                          No hay productos asociados.
-                        </div>
-                      ) : (
-                        detalleProductos.map((item) => (
-                          <div
-                            key={item.id_detalle}
-                            className="rounded-2xl border border-slate-100 p-4 bg-white"
-                          >
-                            <p className="font-bold text-slate-800 break-words">
-                              {item.producto}
-                            </p>
-                            <p className="text-xs text-slate-500 mt-1 break-words">
-                              Código: {item.codigo_barras || '—'}
-                            </p>
-
-                            <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
-                              <div className="rounded-xl bg-slate-50 p-3">
-                                <p className="text-xs text-slate-500">Cantidad</p>
-                                <p className="font-bold text-slate-800">
-                                  {formatoNumero(item.cantidad)}
-                                </p>
-                              </div>
-
-                              <div className="rounded-xl bg-slate-50 p-3">
-                                <p className="text-xs text-slate-500">Precio</p>
-                                <p className="font-bold text-slate-800">
-                                  {formatoMoneda(item.precio_unitario)}
-                                </p>
-                              </div>
-
-                              <div className="rounded-xl bg-red-50 p-3">
-                                <p className="text-xs text-red-700">Descuento</p>
-                                <p className="font-bold text-red-700">
-                                  -{formatoMoneda(item.descuento)}
-                                </p>
-                              </div>
-
-                              <div className="rounded-xl bg-sky-50 p-3">
-                                <p className="text-xs text-sky-700">Subtotal</p>
-                                <p className="font-bold text-sky-800">
-                                  {formatoMoneda(item.subtotal)}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-
-                    <div className="hidden md:block overflow-x-auto rounded-2xl border border-slate-100">
+                    <div className="overflow-x-auto rounded-2xl border border-slate-100">
                       <table className="w-full min-w-[850px]">
                         <thead className="bg-slate-50">
                           <tr>
@@ -927,28 +1098,39 @@ export default function Ventas() {
                         </thead>
 
                         <tbody className="divide-y divide-slate-100">
-                          {detalleProductos.map((item) => (
-                            <tr key={item.id_detalle}>
-                              <td className="px-4 py-3 font-bold text-slate-800">
-                                {item.producto}
-                              </td>
-                              <td className="px-4 py-3 text-slate-600">
-                                {item.codigo_barras || '—'}
-                              </td>
-                              <td className="px-4 py-3 text-right font-bold">
-                                {formatoNumero(item.cantidad)}
-                              </td>
-                              <td className="px-4 py-3 text-right">
-                                {formatoMoneda(item.precio_unitario)}
-                              </td>
-                              <td className="px-4 py-3 text-right text-red-600">
-                                -{formatoMoneda(item.descuento)}
-                              </td>
-                              <td className="px-4 py-3 text-right font-bold text-sky-700">
-                                {formatoMoneda(item.subtotal)}
+                          {detalleProductos.length === 0 ? (
+                            <tr>
+                              <td
+                                colSpan="6"
+                                className="px-4 py-8 text-center text-slate-500"
+                              >
+                                No hay productos asociados.
                               </td>
                             </tr>
-                          ))}
+                          ) : (
+                            detalleProductos.map((item) => (
+                              <tr key={item.id_detalle}>
+                                <td className="px-4 py-3 font-bold text-slate-800">
+                                  {item.producto}
+                                </td>
+                                <td className="px-4 py-3 text-slate-600">
+                                  {item.codigo_barras || '—'}
+                                </td>
+                                <td className="px-4 py-3 text-right font-bold">
+                                  {formatoNumero(item.cantidad)}
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                  {formatoMoneda(item.precio_unitario)}
+                                </td>
+                                <td className="px-4 py-3 text-right text-red-600">
+                                  -{formatoMoneda(item.descuento)}
+                                </td>
+                                <td className="px-4 py-3 text-right font-bold text-sky-700">
+                                  {formatoMoneda(item.subtotal)}
+                                </td>
+                              </tr>
+                            ))
+                          )}
                         </tbody>
                       </table>
                     </div>
@@ -967,114 +1149,75 @@ export default function Ventas() {
                         No hay lotes asociados a esta venta.
                       </div>
                     ) : (
-                      <>
-                        <div className="md:hidden space-y-3">
-                          {detalleLotes.map((lote) => (
-                            <div
-                              key={lote.id_movimiento}
-                              className="rounded-2xl border border-slate-100 p-4 bg-white"
-                            >
-                              <p className="font-bold text-slate-800 break-words">
-                                {lote.producto}
-                              </p>
-                              <p className="text-xs text-slate-500 mt-1">
-                                Lote: {lote.lote || '—'}
-                              </p>
-                              <p className="text-xs text-slate-500 mt-1">
-                                Caducidad:{' '}
-                                {lote.fecha_caducidad
-                                  ? new Date(
-                                      lote.fecha_caducidad
-                                    ).toLocaleDateString('es-MX')
-                                  : 'Sin fecha'}
-                              </p>
+                      <div className="overflow-x-auto rounded-2xl border border-slate-100">
+                        <table className="w-full min-w-[900px]">
+                          <thead className="bg-slate-50">
+                            <tr>
+                              <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+                                Producto
+                              </th>
+                              <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+                                Lote
+                              </th>
+                              <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+                                Caducidad
+                              </th>
+                              <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">
+                                Cantidad
+                              </th>
+                              <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">
+                                Stock anterior
+                              </th>
+                              <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">
+                                Stock nuevo
+                              </th>
+                            </tr>
+                          </thead>
 
-                              <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-                                <div className="rounded-xl bg-red-50 p-3">
-                                  <p className="text-xs text-red-700">Cantidad</p>
-                                  <p className="font-bold text-red-700">
-                                    {formatoNumero(lote.cantidad)}
-                                  </p>
-                                </div>
-
-                                <div className="rounded-xl bg-slate-50 p-3">
-                                  <p className="text-xs text-slate-500">Anterior</p>
-                                  <p className="font-bold text-slate-700">
-                                    {formatoNumero(lote.stock_anterior)}
-                                  </p>
-                                </div>
-
-                                <div className="rounded-xl bg-sky-50 p-3">
-                                  <p className="text-xs text-sky-700">Nuevo</p>
-                                  <p className="font-bold text-sky-800">
-                                    {formatoNumero(lote.stock_nuevo)}
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-
-                        <div className="hidden md:block overflow-x-auto rounded-2xl border border-slate-100">
-                          <table className="w-full min-w-[900px]">
-                            <thead className="bg-slate-50">
-                              <tr>
-                                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
-                                  Producto
-                                </th>
-                                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
-                                  Lote
-                                </th>
-                                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
-                                  Caducidad
-                                </th>
-                                <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">
-                                  Cantidad
-                                </th>
-                                <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">
-                                  Stock anterior
-                                </th>
-                                <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">
-                                  Stock nuevo
-                                </th>
+                          <tbody className="divide-y divide-slate-100">
+                            {detalleLotes.map((lote) => (
+                              <tr key={lote.id_movimiento}>
+                                <td className="px-4 py-3 font-bold text-slate-800">
+                                  {lote.producto}
+                                </td>
+                                <td className="px-4 py-3 text-slate-600">
+                                  {lote.lote || '—'}
+                                </td>
+                                <td className="px-4 py-3 text-slate-600">
+                                  {lote.fecha_caducidad
+                                    ? new Date(lote.fecha_caducidad).toLocaleDateString('es-MX')
+                                    : 'Sin fecha'}
+                                </td>
+                                <td className="px-4 py-3 text-right font-bold text-red-700">
+                                  {formatoNumero(lote.cantidad)}
+                                </td>
+                                <td className="px-4 py-3 text-right text-slate-600">
+                                  {formatoNumero(lote.stock_anterior)}
+                                </td>
+                                <td className="px-4 py-3 text-right text-sky-700 font-bold">
+                                  {formatoNumero(lote.stock_nuevo)}
+                                </td>
                               </tr>
-                            </thead>
-
-                            <tbody className="divide-y divide-slate-100">
-                              {detalleLotes.map((lote) => (
-                                <tr key={lote.id_movimiento}>
-                                  <td className="px-4 py-3 font-bold text-slate-800">
-                                    {lote.producto}
-                                  </td>
-                                  <td className="px-4 py-3 text-slate-600">
-                                    {lote.lote || '—'}
-                                  </td>
-                                  <td className="px-4 py-3 text-slate-600">
-                                    {lote.fecha_caducidad
-                                      ? new Date(
-                                          lote.fecha_caducidad
-                                        ).toLocaleDateString('es-MX')
-                                      : 'Sin fecha'}
-                                  </td>
-                                  <td className="px-4 py-3 text-right font-bold text-red-700">
-                                    {formatoNumero(lote.cantidad)}
-                                  </td>
-                                  <td className="px-4 py-3 text-right text-slate-600">
-                                    {formatoNumero(lote.stock_anterior)}
-                                  </td>
-                                  <td className="px-4 py-3 text-right text-sky-700 font-bold">
-                                    {formatoNumero(lote.stock_nuevo)}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     )}
                   </section>
 
-                  <section className="flex justify-end">
+                  <section className="flex flex-col sm:flex-row justify-end gap-3">
+                    {['COMPLETADA', 'DEVUELTA_PARCIAL'].includes(
+                      detalleVenta.estado
+                    ) && (
+                        <button
+                          onClick={() => abrirDevolucionVenta(detalleVenta.id_venta)}
+                          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-amber-600 hover:bg-amber-700 text-white font-bold transition"
+                        >
+                          <Undo2 size={19} />
+                          Devolver
+                        </button>
+                      )}
+
                     <button
                       onClick={abrirTicket}
                       className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition"
@@ -1085,6 +1228,223 @@ export default function Ventas() {
                   </section>
                 </div>
               ) : null}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalDevolucion && ventaDevolucion && (
+        <div className="fixed inset-0 z-[70] flex items-start sm:items-center justify-center px-3 sm:px-4 py-4 sm:py-8 overflow-y-auto">
+          <div
+            className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm"
+            onClick={cerrarModalDevolucion}
+          />
+
+          <div className="relative bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-5xl max-h-[92vh] overflow-hidden my-auto">
+            <div className="px-4 sm:px-6 py-5 border-b border-slate-100 flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h2 className="text-lg sm:text-xl font-bold text-slate-800">
+                  Devolución de venta
+                </h2>
+                <p className="text-sm text-slate-500 break-words">
+                  {ventaDevolucion.folio} · {ventaDevolucion.metodo_pago}
+                </p>
+              </div>
+
+              <button
+                onClick={cerrarModalDevolucion}
+                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center shrink-0"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-4 sm:p-6 overflow-y-auto max-h-[72vh] space-y-5">
+              <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                <div className="rounded-2xl bg-slate-50 p-4">
+                  <p className="text-sm text-slate-500">Total venta</p>
+                  <p className="text-xl font-bold text-slate-800">
+                    {formatoMoneda(ventaDevolucion.total)}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl bg-amber-50 p-4">
+                  <p className="text-sm text-amber-700">Monto a devolver</p>
+                  <p className="text-xl font-bold text-amber-800">
+                    {formatoMoneda(totalEstimadoDevolucion)}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl bg-blue-50 p-4">
+                  <p className="text-sm text-blue-700">Método original</p>
+                  <p className="text-xl font-bold text-blue-800">
+                    {ventaDevolucion.metodo_pago}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl bg-slate-50 p-4">
+                  <p className="text-sm text-slate-500">Ya devuelto</p>
+                  <p className="text-xl font-bold text-slate-800">
+                    {formatoMoneda(ventaDevolucion.monto_devuelto)}
+                  </p>
+                </div>
+              </section>
+
+              <section>
+                <h3 className="text-lg font-bold text-slate-800 mb-3">
+                  Productos disponibles para devolución
+                </h3>
+
+                <div className="overflow-x-auto rounded-2xl border border-slate-100">
+                  <table className="w-full min-w-[850px]">
+                    <thead className="bg-slate-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+                          Producto
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+                          Lote
+                        </th>
+                        <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">
+                          Vendido
+                        </th>
+                        <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">
+                          Ya devuelto
+                        </th>
+                        <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">
+                          Disponible
+                        </th>
+                        <th className="px-4 py-3 text-center text-xs font-bold text-slate-500 uppercase">
+                          A devolver
+                        </th>
+                      </tr>
+                    </thead>
+
+                    <tbody className="divide-y divide-slate-100">
+                      {devolucionProductos.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan="6"
+                            className="px-4 py-8 text-center text-slate-500"
+                          >
+                            No hay productos disponibles para devolución.
+                          </td>
+                        </tr>
+                      ) : (
+                        devolucionProductos.map((producto) => {
+                          const disponible = Number(
+                            producto.cantidad_disponible_devolver || 0
+                          );
+
+                          return (
+                            <tr key={producto.id_detalle}>
+                              <td className="px-4 py-3">
+                                <p className="font-bold text-slate-800">
+                                  {producto.producto}
+                                </p>
+                                <p className="text-xs text-slate-500">
+                                  Código: {producto.codigo_barras || '—'}
+                                </p>
+                              </td>
+
+                              <td className="px-4 py-3 text-slate-600">
+                                {producto.lote || 'Sin lote'}
+                              </td>
+
+                              <td className="px-4 py-3 text-right font-semibold">
+                                {formatoNumero(producto.cantidad)}
+                              </td>
+
+                              <td className="px-4 py-3 text-right font-semibold text-amber-700">
+                                {formatoNumero(producto.cantidad_devuelta)}
+                              </td>
+
+                              <td className="px-4 py-3 text-right font-bold text-sky-700">
+                                {formatoNumero(disponible)}
+                              </td>
+
+                              <td className="px-4 py-3 text-center">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max={disponible}
+                                  step="1"
+                                  disabled={disponible <= 0}
+                                  value={producto.cantidad_devolver}
+                                  onChange={(e) =>
+                                    cambiarCantidadDevolucion(
+                                      producto.id_detalle,
+                                      e.target.value
+                                    )
+                                  }
+                                  className="w-28 px-3 py-2 text-center rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500 disabled:bg-slate-100"
+                                  placeholder="0"
+                                />
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Motivo *
+                  </label>
+                  <textarea
+                    rows="3"
+                    value={motivoDevolucion}
+                    onChange={(e) => setMotivoDevolucion(e.target.value)}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none"
+                    placeholder="Ej. Cliente devolvió el producto"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Observaciones
+                  </label>
+                  <textarea
+                    rows="3"
+                    value={observacionesDevolucion}
+                    onChange={(e) => setObservacionesDevolucion(e.target.value)}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none"
+                    placeholder="Opcional"
+                  />
+                </div>
+              </section>
+
+              {ventaDevolucion.metodo_pago !== 'EFECTIVO' && (
+                <div className="rounded-2xl bg-blue-50 border border-blue-100 p-4 text-sm text-blue-800">
+                  Esta devolución corresponde a un pago por{' '}
+                  {ventaDevolucion.metodo_pago}. Se registrará para control, pero
+                  no debe disminuir el efectivo físico de caja.
+                </div>
+              )}
+            </div>
+
+            <div className="px-4 sm:px-6 py-5 border-t border-slate-100 flex flex-col sm:flex-row justify-end gap-3">
+              <button
+                type="button"
+                onClick={cerrarModalDevolucion}
+                className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition"
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="button"
+                onClick={aplicarDevolucion}
+                disabled={guardandoDevolucion || totalEstimadoDevolucion <= 0}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-amber-600 hover:bg-amber-700 text-white font-bold transition disabled:opacity-60"
+              >
+                <Undo2 size={19} />
+                {guardandoDevolucion ? 'Aplicando...' : 'Aplicar devolución'}
+              </button>
             </div>
           </div>
         </div>
@@ -1121,15 +1481,9 @@ export default function Ventas() {
                 <div id="ticket-print-area">
                   <div className="ticket">
                     <div className="center">
-                      <div className="title">
-                        FARMACIA SHADDAI
-                      </div>
-                      <div className="small">
-                        {detalleVenta.sucursal}
-                      </div>
-                      <div className="small">
-                        Punto de venta multi-sucursal
-                      </div>
+                      <div className="title">FARMACIA SHADDAI</div>
+                      <div className="small">{detalleVenta.sucursal}</div>
+                      <div className="small">Punto de venta multi-sucursal</div>
                     </div>
 
                     <div className="line"></div>
@@ -1142,7 +1496,9 @@ export default function Ventas() {
                         </tr>
                         <tr>
                           <td className="bold">Fecha:</td>
-                          <td className="right">{formatoFecha(detalleVenta.fecha_venta)}</td>
+                          <td className="right">
+                            {formatoFecha(detalleVenta.fecha_venta)}
+                          </td>
                         </tr>
                         <tr>
                           <td className="bold">Caja:</td>
@@ -1170,9 +1526,7 @@ export default function Ventas() {
                         {detalleProductos.map((item) => (
                           <tr key={item.id_detalle}>
                             <td>
-                              <div className="bold">
-                                {item.producto}
-                              </div>
+                              <div className="bold">{item.producto}</div>
                               <div className="small">
                                 {formatoNumero(item.cantidad)} x{' '}
                                 {formatoMoneda(item.precio_unitario)}
@@ -1195,19 +1549,27 @@ export default function Ventas() {
                       <tbody>
                         <tr>
                           <td>Subtotal:</td>
-                          <td className="right">{formatoMoneda(detalleVenta.subtotal)}</td>
+                          <td className="right">
+                            {formatoMoneda(detalleVenta.subtotal)}
+                          </td>
                         </tr>
                         <tr>
                           <td>Descuento:</td>
-                          <td className="right">-{formatoMoneda(detalleVenta.descuento)}</td>
+                          <td className="right">
+                            -{formatoMoneda(detalleVenta.descuento)}
+                          </td>
                         </tr>
                         <tr>
                           <td>Impuesto:</td>
-                          <td className="right">{formatoMoneda(detalleVenta.impuesto)}</td>
+                          <td className="right">
+                            {formatoMoneda(detalleVenta.impuesto)}
+                          </td>
                         </tr>
                         <tr>
                           <td className="total">TOTAL:</td>
-                          <td className="right total">{formatoMoneda(detalleVenta.total)}</td>
+                          <td className="right total">
+                            {formatoMoneda(detalleVenta.total)}
+                          </td>
                         </tr>
                       </tbody>
                     </table>
@@ -1222,7 +1584,9 @@ export default function Ventas() {
                         </tr>
                         <tr>
                           <td>Recibido:</td>
-                          <td className="right">{formatoMoneda(detalleVenta.monto_recibido)}</td>
+                          <td className="right">
+                            {formatoMoneda(detalleVenta.monto_recibido)}
+                          </td>
                         </tr>
                         <tr>
                           <td>Cambio:</td>
@@ -1235,17 +1599,13 @@ export default function Ventas() {
 
                     {detalleLotes.length > 0 && (
                       <>
-                        <div className="small bold">
-                          Lotes descontados:
-                        </div>
+                        <div className="small bold">Lotes descontados:</div>
 
                         <table>
                           <tbody>
                             {detalleLotes.map((lote) => (
                               <tr key={lote.id_movimiento}>
-                                <td className="small">
-                                  {lote.lote || 'SIN LOTE'}
-                                </td>
+                                <td className="small">{lote.lote || 'SIN LOTE'}</td>
                                 <td className="right small">
                                   {formatoNumero(lote.cantidad)}
                                 </td>
@@ -1258,9 +1618,7 @@ export default function Ventas() {
                       </>
                     )}
 
-                    <div className="center small">
-                      Gracias por su compra
-                    </div>
+                    <div className="center small">Gracias por su compra</div>
                     <div className="center small">
                       Este ticket no es comprobante fiscal
                     </div>

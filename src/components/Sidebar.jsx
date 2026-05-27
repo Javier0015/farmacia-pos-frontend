@@ -21,6 +21,7 @@ import {
   ClipboardCheck,
   HeartPulse,
   FlaskConical,
+  Files,
 } from 'lucide-react';
 
 import { useAuth } from '../context/AuthContext';
@@ -62,7 +63,7 @@ const links = [
     modulo: 'doctor-shaddai-fila-espera',
   },
 
-    {
+  {
     to: '/app/recetas',
     label: 'Recetas',
     icon: FileText,
@@ -117,6 +118,12 @@ const links = [
     label: 'Administrar cajas',
     icon: Wallet,
     modulo: 'cajas',
+  },
+  {
+    to: '/app/reportes-cierre-caja',
+    label: 'Reportes de cierre',
+    icon: Files,
+    modulo: 'reportes-cierre-caja',
   },
   {
     to: '/app/ventas',
@@ -274,19 +281,7 @@ export default function Sidebar({ modoMovil = false, onNavigate }) {
         })}
       </nav>
 
-      <div className="shrink-0 p-3 sm:p-4 border-t border-white/10">
-        <div className="rounded-2xl bg-white/5 p-4 min-w-0">
-          <p className="text-xs text-slate-400">Sesión activa</p>
 
-          <p className="text-sm font-semibold text-sky-300 truncate">
-            {usuario?.rol || 'Sin rol'}
-          </p>
-
-          <p className="text-xs text-slate-400 mt-1 truncate">
-            {usuario?.nombre || usuario?.usuario}
-          </p>
-        </div>
-      </div>
     </aside>
   );
 }

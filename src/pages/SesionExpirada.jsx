@@ -46,16 +46,19 @@ export default function SesionExpirada() {
                             Solo necesitas entrar nuevamente para continuar.
                         </p>
                     </div>
-
+<br /> <br />
                     <div className="space-y-4">
                         <div className="rounded-3xl bg-white/10 border border-white/10 p-5">
                             <p className="text-sm text-sky-100">
                                 Información protegida
                             </p>
+
                             <p className="text-2xl font-black mt-1">
                                 Ventas · Caja · Inventario
                             </p>
                         </div>
+                                                   
+                            <br />
 
                         <div className="rounded-3xl bg-white/10 border border-white/10 p-5">
                             <p className="text-sm text-sky-100">

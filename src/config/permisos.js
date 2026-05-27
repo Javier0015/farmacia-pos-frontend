@@ -20,6 +20,7 @@ export const permisosPorRol = {
     'ofertas',
     'catalogo-admin',
     'fila-espera',
+    'reportes-cierre-caja',
 
 /*    // Doctor Shaddai
     'doctor-shaddai-perfil',
@@ -43,6 +44,7 @@ export const permisosPorRol = {
     'alertas',
     'configuracion-puntos',
     'recetas-admin',
+    'reportes-cierre-caja',
   ],
 
   CAJERO: [
@@ -54,6 +56,11 @@ export const permisosPorRol = {
     'tarjetas-puntos',
     'recetas-admin',
     'fila-espera',
+    'productos',
+    'inventario',
+    'categorias',
+    'proveedores',
+    'compras',
   ],
 
   ALMACEN: [

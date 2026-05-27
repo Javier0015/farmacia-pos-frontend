@@ -806,7 +806,7 @@ export default function MainLayout() {
           <div className="min-w-0">
             <p className="text-sm text-slate-500">Sesión activa</p>
             <h2 className="text-lg font-bold text-slate-800 truncate">
-              {usuario?.nombre || usuario?.usuario || 'Usuario'}
+             Hola, {usuario?.nombre || usuario?.usuario || 'Usuario'}
             </h2>
           </div>
 

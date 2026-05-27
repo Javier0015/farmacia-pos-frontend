@@ -40,6 +40,20 @@ const ESTATUS_RECETA = {
   CANCELADA: 'Cancelada',
 };
 
+const PAGOS_MIXTOS_INICIALES = {
+  EFECTIVO: '',
+  TARJETA: '',
+  TRANSFERENCIA: '',
+  PUNTOS: '',
+};
+
+const METODOS_PAGO_POS = [
+  { id: 'EFECTIVO', label: 'Efectivo', icono: Banknote },
+  { id: 'TARJETA', label: 'Tarjeta', icono: CreditCard },
+  { id: 'TRANSFERENCIA', label: 'Transferencia', icono: Wallet },
+  { id: 'PUNTOS', label: 'Puntos', icono: Coins },
+];
+
 export default function POS() {
   const { usuario } = useAuth();
   const puedeCambiarSucursal = esSuperAdmin(usuario);
@@ -64,6 +78,8 @@ export default function POS() {
 
   const [metodoPago, setMetodoPago] = useState('EFECTIVO');
   const [montoRecibido, setMontoRecibido] = useState('');
+  const [pagoMixtoActivo, setPagoMixtoActivo] = useState(false);
+  const [pagosMixtos, setPagosMixtos] = useState(PAGOS_MIXTOS_INICIALES);
   const [cobrarImpuesto, setCobrarImpuesto] = useState(true);
 
   const [cargando, setCargando] = useState(false);
@@ -209,7 +225,7 @@ export default function POS() {
     const impuesto = cobrarImpuesto ? baseGravable * 0.16 : 0;
     const total = Math.max(baseGravable + impuesto, 0);
 
-    const esPagoConPuntos = metodoPago === 'PUNTOS';
+    const esPagoConPuntos = !pagoMixtoActivo && metodoPago === 'PUNTOS';
     const puntosEstimados =
       tarjetaPuntos && puntosClienteActivo && !esPagoConPuntos
         ? Number((total * (porcentajeClientePuntos / 100)).toFixed(2))
@@ -243,10 +259,82 @@ export default function POS() {
     cobrarImpuesto,
     montoRecibido,
     metodoPago,
+    pagoMixtoActivo,
     tarjetaPuntos,
     puntosClienteActivo,
     porcentajeClientePuntos,
   ]);
+
+  const resumenPagosMixtos = useMemo(() => {
+    const efectivo = Number(pagosMixtos.EFECTIVO || 0);
+    const tarjeta = Number(pagosMixtos.TARJETA || 0);
+    const transferencia = Number(pagosMixtos.TRANSFERENCIA || 0);
+    const puntos = Number(pagosMixtos.PUNTOS || 0);
+
+    const totalNoEfectivo = tarjeta + transferencia + puntos;
+    const totalPagado = efectivo + totalNoEfectivo;
+    const pendiente = Math.max(Number((resumen.total - totalPagado).toFixed(2)), 0);
+    const excedenteNoEfectivo = Math.max(Number((totalNoEfectivo - resumen.total).toFixed(2)), 0);
+    const pendienteAntesDeEfectivo = Math.max(Number((resumen.total - totalNoEfectivo).toFixed(2)), 0);
+    const cambio = Math.max(Number((efectivo - pendienteAntesDeEfectivo).toFixed(2)), 0);
+
+    const pagos = [
+      { metodo_pago: 'EFECTIVO', monto: efectivo },
+      { metodo_pago: 'TARJETA', monto: tarjeta },
+      { metodo_pago: 'TRANSFERENCIA', monto: transferencia },
+      { metodo_pago: 'PUNTOS', monto: puntos },
+    ].filter((pago) => Number(pago.monto || 0) > 0);
+
+    return {
+      efectivo,
+      tarjeta,
+      transferencia,
+      puntos,
+      totalNoEfectivo,
+      totalPagado,
+      pendiente,
+      excedenteNoEfectivo,
+      cambio,
+      pagos,
+    };
+  }, [pagosMixtos, resumen.total]);
+
+  const actualizarPagoMixto = (metodo, valor) => {
+    const valorLimpio = Number(valor || 0) < 0 ? '0' : valor;
+
+    if (metodo === 'PUNTOS' && valorLimpio && !tarjetaPuntos) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Tarjeta requerida',
+        text: 'Para usar puntos primero debes vincular una tarjeta de puntos.',
+      });
+      return;
+    }
+
+    setPagosMixtos((prev) => ({
+      ...prev,
+      [metodo]: valorLimpio,
+    }));
+  };
+
+  const alternarPagoMixto = () => {
+    setPagoMixtoActivo((activo) => {
+      const nuevoEstado = !activo;
+
+      if (nuevoEstado) {
+        setMetodoPago('EFECTIVO');
+        setMontoRecibido('');
+        setPagosMixtos({
+          ...PAGOS_MIXTOS_INICIALES,
+          EFECTIVO: resumen.total > 0 ? String(Number(resumen.total.toFixed(2))) : '',
+        });
+      } else {
+        setPagosMixtos(PAGOS_MIXTOS_INICIALES);
+      }
+
+      return nuevoEstado;
+    });
+  };
 
   const cargarConfiguracionPuntos = async () => {
     try {
@@ -396,6 +484,9 @@ export default function POS() {
       setTarjetaPuntos(null);
       setCodigoTarjeta('');
       setMetodoPago('EFECTIVO');
+      setMontoRecibido('');
+      setPagoMixtoActivo(false);
+      setPagosMixtos(PAGOS_MIXTOS_INICIALES);
       cargarCajas();
       cargarInventario();
       cargarRecetasPendientes();
@@ -743,6 +834,8 @@ export default function POS() {
     setDetallesRecetasCache({});
     setMetodoPago('EFECTIVO');
     setMontoRecibido('');
+    setPagoMixtoActivo(false);
+    setPagosMixtos(PAGOS_MIXTOS_INICIALES);
     setCobrarImpuesto(true);
     setVentaFinalizada(null);
     setTarjetaPuntos(null);
@@ -750,6 +843,8 @@ export default function POS() {
   };
 
   const seleccionarMetodoPago = (metodo) => {
+    if (pagoMixtoActivo) return;
+
     if (metodo === 'PUNTOS' && !tarjetaPuntos) {
       Swal.fire({
         icon: 'warning',
@@ -807,6 +902,7 @@ export default function POS() {
   const quitarTarjetaPuntos = () => {
     setTarjetaPuntos(null);
     setCodigoTarjeta('');
+    setPagosMixtos((prev) => ({ ...prev, PUNTOS: '' }));
     if (metodoPago === 'PUNTOS') setMetodoPago('EFECTIVO');
   };
 
@@ -917,30 +1013,91 @@ export default function POS() {
       return;
     }
 
-    if (metodoPago === 'EFECTIVO' && resumen.recibido < resumen.total) {
-      Swal.fire({ icon: 'warning', title: 'Monto insuficiente', text: 'El monto recibido no cubre el total de la venta.' });
-      return;
-    }
+    const pagosParaEnviar = pagoMixtoActivo ? resumenPagosMixtos.pagos : [];
+    const totalPagadoMixto = Number(resumenPagosMixtos.totalPagado.toFixed(2));
+    const cambioMixto = Number(resumenPagosMixtos.cambio.toFixed(2));
+    const totalAPagar = Number(resumen.total.toFixed(2));
 
-    if (metodoPago === 'PUNTOS' && !tarjetaPuntos) {
-      Swal.fire({ icon: 'warning', title: 'Tarjeta requerida', text: 'Para pagar con puntos primero debes vincular una tarjeta.' });
-      return;
-    }
+    if (pagoMixtoActivo) {
+      if (pagosParaEnviar.length === 0) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Pagos requeridos',
+          text: 'Captura al menos un método de pago para cobrar la venta.',
+        });
+        return;
+      }
 
-    if (metodoPago === 'PUNTOS' && Number(tarjetaPuntos?.puntos_actuales || 0) < Number(resumen.total || 0)) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Puntos insuficientes',
-        html: `
-          <div style="text-align:left">
-            <p><b>Cliente:</b> ${tarjetaPuntos?.nombre_cliente || '—'}</p>
-            <p><b>Puntos disponibles:</b> ${formatoNumero(tarjetaPuntos?.puntos_actuales || 0)}</p>
-            <p><b>Puntos requeridos:</b> ${formatoNumero(resumen.total)}</p>
-            <p><b>Faltan:</b> ${formatoNumero(resumen.puntosFaltantes)} puntos</p>
-          </div>
-        `,
-      });
-      return;
+      if (resumenPagosMixtos.excedenteNoEfectivo > 0) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Monto no válido',
+          text: 'Tarjeta, transferencia y puntos no pueden exceder el total de la venta. El excedente solo puede ser en efectivo para calcular cambio.',
+        });
+        return;
+      }
+
+      if (totalPagadoMixto < totalAPagar) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Pago incompleto',
+          text: `Faltan ${formatoMoneda(resumenPagosMixtos.pendiente)} para cubrir el total.`,
+        });
+        return;
+      }
+
+      if (resumenPagosMixtos.puntos > 0 && !tarjetaPuntos) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Tarjeta requerida',
+          text: 'Para usar puntos primero debes vincular una tarjeta.',
+        });
+        return;
+      }
+
+      if (
+        resumenPagosMixtos.puntos > 0 &&
+        Number(tarjetaPuntos?.puntos_actuales || 0) < resumenPagosMixtos.puntos
+      ) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Puntos insuficientes',
+          html: `
+            <div style="text-align:left">
+              <p><b>Cliente:</b> ${tarjetaPuntos?.nombre_cliente || '—'}</p>
+              <p><b>Puntos disponibles:</b> ${formatoNumero(tarjetaPuntos?.puntos_actuales || 0)}</p>
+              <p><b>Puntos a usar:</b> ${formatoNumero(resumenPagosMixtos.puntos)}</p>
+            </div>
+          `,
+        });
+        return;
+      }
+    } else {
+      if (metodoPago === 'EFECTIVO' && resumen.recibido < resumen.total) {
+        Swal.fire({ icon: 'warning', title: 'Monto insuficiente', text: 'El monto recibido no cubre el total de la venta.' });
+        return;
+      }
+
+      if (metodoPago === 'PUNTOS' && !tarjetaPuntos) {
+        Swal.fire({ icon: 'warning', title: 'Tarjeta requerida', text: 'Para pagar con puntos primero debes vincular una tarjeta.' });
+        return;
+      }
+
+      if (metodoPago === 'PUNTOS' && Number(tarjetaPuntos?.puntos_actuales || 0) < Number(resumen.total || 0)) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Puntos insuficientes',
+          html: `
+            <div style="text-align:left">
+              <p><b>Cliente:</b> ${tarjetaPuntos?.nombre_cliente || '—'}</p>
+              <p><b>Puntos disponibles:</b> ${formatoNumero(tarjetaPuntos?.puntos_actuales || 0)}</p>
+              <p><b>Puntos requeridos:</b> ${formatoNumero(resumen.total)}</p>
+              <p><b>Faltan:</b> ${formatoNumero(resumen.puntosFaltantes)} puntos</p>
+            </div>
+          `,
+        });
+        return;
+      }
     }
 
     const recetaAntesDeCobrar = recetaEnCarrito;
@@ -961,6 +1118,19 @@ export default function POS() {
       })
       : null;
 
+    const detallePagosHtml = pagoMixtoActivo
+      ? `
+        <hr style="margin:10px 0" />
+        <p><b>Pago mixto:</b></p>
+        ${pagosParaEnviar.map((pago) => `<p>${pago.metodo_pago}: <b>${formatoMoneda(pago.monto)}</b></p>`).join('')}
+        <p><b>Total pagado:</b> ${formatoMoneda(totalPagadoMixto)}</p>
+        <p><b>Cambio:</b> ${formatoMoneda(cambioMixto)}</p>
+      `
+      : `
+        <p><b>Método:</b> ${metodoPago === 'PUNTOS' ? 'Pagar con puntos' : metodoPago}</p>
+        ${metodoPago === 'EFECTIVO' ? `<p><b>Recibido:</b> ${formatoMoneda(resumen.recibido)}</p><p><b>Cambio:</b> ${formatoMoneda(resumen.cambio)}</p>` : ''}
+      `;
+
     const confirmacion = await Swal.fire({
       icon: 'question',
       title: '¿Cobrar venta?',
@@ -968,10 +1138,9 @@ export default function POS() {
         <div style="text-align:left">
           ${recetaAntesDeCobrar ? `<p><b>Receta:</b> ${recetaAntesDeCobrar.folio}</p><p><b>Paciente:</b> ${recetaAntesDeCobrar.paciente || 'N/A'}</p><p><b>Estatus al cobrar:</b> ${estatusRecetaFinal === 'SURTIDA' ? 'Surtida completamente' : 'Surtida parcialmente'}</p><hr style="margin:10px 0" />` : ''}
           <p><b>Total:</b> ${formatoMoneda(resumen.total)}</p>
-          <p><b>Método:</b> ${metodoPago === 'PUNTOS' ? 'Pagar con puntos' : metodoPago}</p>
           ${resumen.descuentoOfertas > 0 ? `<p><b>Descuento por ofertas:</b> -${formatoMoneda(resumen.descuentoOfertas)}</p>` : ''}
           <p><b>IVA:</b> ${cobrarImpuesto ? `Aplicado (${formatoMoneda(resumen.impuesto)})` : 'No aplicado'}</p>
-          ${metodoPago === 'EFECTIVO' ? `<p><b>Recibido:</b> ${formatoMoneda(resumen.recibido)}</p><p><b>Cambio:</b> ${formatoMoneda(resumen.cambio)}</p>` : ''}
+          ${detallePagosHtml}
         </div>
       `,
       showCancelButton: true,
@@ -985,13 +1154,21 @@ export default function POS() {
     try {
       setCobrando(true);
 
+      const metodoPagoFinal = pagoMixtoActivo ? 'MIXTO' : metodoPago;
+      const montoRecibidoFinal = pagoMixtoActivo
+        ? totalPagadoMixto
+        : metodoPago === 'EFECTIVO'
+          ? Number(montoRecibido || 0)
+          : resumen.total;
+
       const payload = {
         id_sucursal: Number(idSucursal),
         id_caja: Number(idCaja),
         id_sesion: Number(sesionAbierta.id_sesion),
         id_tarjeta_puntos: tarjetaPuntos ? Number(tarjetaPuntos.id_tarjeta) : null,
-        metodo_pago: metodoPago,
-        monto_recibido: metodoPago === 'EFECTIVO' ? Number(montoRecibido || 0) : resumen.total,
+        metodo_pago: metodoPagoFinal,
+        monto_recibido: montoRecibidoFinal,
+        pagos: pagoMixtoActivo ? pagosParaEnviar : undefined,
         descuento: 0,
         descuento_ofertas: Number(resumen.descuentoOfertas || 0),
         subtotal_sin_descuento: Number(resumen.subtotalSinDescuento || 0),
@@ -1038,8 +1215,13 @@ export default function POS() {
               : ''
             }
               <p><b>Total:</b> ${formatoMoneda(data.resumen?.total || 0)}</p>
-              <p><b>Método:</b> ${metodoPago === 'PUNTOS' ? 'Pagar con puntos' : metodoPago}</p>
-              ${metodoPago !== 'PUNTOS' ? `<p><b>Cambio:</b> ${formatoMoneda(data.resumen?.cambio || 0)}</p>` : ''}
+              <p><b>Método:</b> ${pagoMixtoActivo ? 'MIXTO' : metodoPago === 'PUNTOS' ? 'Pagar con puntos' : metodoPago}</p>
+              ${pagoMixtoActivo
+              ? `<p><b>Pagado:</b> ${formatoMoneda(totalPagadoMixto)}</p><p><b>Cambio:</b> ${formatoMoneda(cambioMixto)}</p>`
+              : metodoPago !== 'PUNTOS'
+                ? `<p><b>Cambio:</b> ${formatoMoneda(data.resumen?.cambio || 0)}</p>`
+                : ''
+            }
             </div>
           `,
           showCancelButton: true,
@@ -1056,6 +1238,8 @@ export default function POS() {
         setDetalleReceta([]);
         setRecetaSeleccionada(null);
         setMontoRecibido('');
+        setPagoMixtoActivo(false);
+        setPagosMixtos(PAGOS_MIXTOS_INICIALES);
         setCobrarImpuesto(true);
         setTarjetaPuntos(null);
         setCodigoTarjeta('');
@@ -1088,6 +1272,12 @@ export default function POS() {
     const venta = datosTicket.venta;
     const resumenVenta = datosTicket.resumen;
     const productosVenta = venta.productos || [];
+
+    const pagosTicket = Array.isArray(venta.pagos)
+      ? venta.pagos
+      : Array.isArray(datosTicket.pagos)
+        ? datosTicket.pagos
+        : [];
 
     const metodoPagoTicket = venta.metodo_pago === 'PUNTOS' ? 'PAGAR CON PUNTOS' : venta.metodo_pago || metodoPago || '—';
     const ventana = window.open('', '_blank', 'width=420,height=650');
@@ -1170,6 +1360,10 @@ export default function POS() {
             <table>
               <tbody>
                 <tr><td>Método:</td><td class="right">${metodoPagoTicket}</td></tr>
+                ${pagosTicket.length > 0
+                  ? pagosTicket.map((pago) => `<tr><td>${pago.metodo_pago}:</td><td class="right">${Number(pago.monto || 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}</td></tr>`).join('')
+                  : ''
+                }
                 <tr><td>Recibido:</td><td class="right">${Number(resumenVenta?.monto_recibido || 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}</td></tr>
                 <tr><td>Cambio:</td><td class="right">${Number(resumenVenta?.cambio || 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}</td></tr>
               </tbody>
@@ -1228,110 +1422,191 @@ export default function POS() {
   };
 
   return (
-    <div className="w-full max-w-full overflow-hidden space-y-5 sm:space-y-6 pb-8">
-      <section className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-sm border border-slate-100 overflow-hidden">
-        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5">
-          <div className="flex items-start sm:items-center gap-3 min-w-0">
-            <div className="w-12 h-12 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
-              <ShoppingCart size={25} />
+    <div className="min-h-screen w-full max-w-full overflow-hidden bg-slate-50 pb-8">
+      <section className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex min-w-0 items-start gap-4">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-3xl bg-sky-600 text-white shadow-lg shadow-sky-600/20">
+              <ShoppingCart size={28} />
             </div>
             <div className="min-w-0">
-              <h1 className="text-xl sm:text-2xl font-bold text-slate-800 break-words">Punto de venta</h1>
-              <p className="text-sm sm:text-base text-slate-500 leading-relaxed">Busca productos, arma el carrito y registra ventas reales.</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">
+                  Punto de venta
+                </h1>
+                <span className={`rounded-full px-3 py-1 text-xs font-black ${sesionAbierta ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                  {sesionAbierta ? 'Caja abierta' : 'Caja cerrada'}
+                </span>
+              </div>
+              <p className="mt-1 max-w-2xl text-sm text-slate-500 sm:text-base">
+                Flujo simple: configura caja, agrega productos o recetas y cobra la venta.
+              </p>
             </div>
           </div>
-          <button onClick={refrescarTodo} className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition">
-            <RefreshCw size={19} className={cargando ? 'animate-spin' : ''} />
-            Actualizar
-          </button>
+
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <button
+              type="button"
+              onClick={abrirModalRecetas}
+              disabled={!sesionAbierta}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-sky-50 px-5 py-3 text-sm font-black text-sky-700 ring-1 ring-sky-100 transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <ClipboardList size={18} />
+              Recetas pendientes
+              {recetasPendientes.length > 0 && (
+                <span className="rounded-full bg-sky-700 px-2 py-0.5 text-xs text-white">
+                  {recetasPendientes.length}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={refrescarTodo}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800"
+            >
+              <RefreshCw size={18} className={cargando ? 'animate-spin' : ''} />
+              Actualizar
+            </button>
+          </div>
         </div>
 
-        <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="min-w-0">
-            <label className="block text-sm font-bold text-slate-700 mb-2">Sucursal</label>
+        <div className="mt-6 grid grid-cols-1 gap-3 lg:grid-cols-3">
+          <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-900 text-xs font-black text-white">1</span>
+              <p className="text-sm font-black text-slate-800">Sucursal</p>
+            </div>
             {puedeCambiarSucursal ? (
-              <select value={idSucursal} onChange={(e) => setIdSucursal(e.target.value)} className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white">
+              <select
+                value={idSucursal}
+                onChange={(e) => setIdSucursal(e.target.value)}
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-sky-500"
+              >
                 <option value="">Selecciona sucursal</option>
                 {sucursales.map((sucursal) => (
-                  <option key={sucursal.id_sucursal} value={sucursal.id_sucursal}>{sucursal.nombre}</option>
+                  <option key={sucursal.id_sucursal} value={sucursal.id_sucursal}>
+                    {sucursal.nombre}
+                  </option>
                 ))}
               </select>
             ) : (
-              <div className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 text-slate-700 font-semibold truncate">
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700">
                 {sucursalActual?.nombre || sucursales[0]?.nombre || 'Sucursal asignada'}
               </div>
             )}
           </div>
 
-          <div className="min-w-0">
-            <label className="block text-sm font-bold text-slate-700 mb-2">Caja</label>
-            <select value={idCaja} onChange={(e) => setIdCaja(e.target.value)} className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white">
+          <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-900 text-xs font-black text-white">2</span>
+              <p className="text-sm font-black text-slate-800">Caja</p>
+            </div>
+            <select
+              value={idCaja}
+              onChange={(e) => setIdCaja(e.target.value)}
+              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-sky-500"
+            >
               <option value="">Selecciona caja</option>
               {cajas.map((caja) => (
-                <option key={caja.id_caja} value={caja.id_caja}>{caja.nombre}</option>
+                <option key={caja.id_caja} value={caja.id_caja}>
+                  {caja.nombre}
+                </option>
               ))}
             </select>
           </div>
 
-          <div className="min-w-0">
-            <label className="block text-sm font-bold text-slate-700 mb-2">Estado caja</label>
-            <div className={`px-4 py-3 rounded-2xl border font-bold truncate ${sesionAbierta ? 'bg-sky-50 border-sky-100 text-sky-700' : 'bg-red-50 border-red-100 text-red-700'}`}>
-              {sesionAbierta ? `ABIERTA · Sesión #${sesionAbierta.id_sesion}` : 'CERRADA'}
+          <div className={`rounded-3xl border p-4 ${sesionAbierta ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-50'}`}>
+            <div className="mb-3 flex items-center gap-2">
+              <span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-black text-white ${sesionAbierta ? 'bg-emerald-600' : 'bg-red-600'}`}>3</span>
+              <p className={`text-sm font-black ${sesionAbierta ? 'text-emerald-900' : 'text-red-900'}`}>Estado de operación</p>
+            </div>
+            <div className={`rounded-2xl bg-white px-4 py-3 text-sm font-black ${sesionAbierta ? 'text-emerald-700' : 'text-red-700'}`}>
+              {sesionAbierta ? `Lista para vender · Sesión #${sesionAbierta.id_sesion}` : 'Debes abrir caja antes de vender'}
             </div>
           </div>
         </div>
       </section>
 
       {!sesionAbierta && (
-        <section className="bg-amber-50 border border-amber-100 rounded-2xl sm:rounded-3xl p-4 sm:p-5 text-amber-800 flex items-start gap-3">
-          <Wallet size={24} className="shrink-0 mt-0.5" />
-          <div>
-            <p className="font-bold">Caja no abierta</p>
-            <p className="text-sm">Para vender, primero abre caja en el módulo Caja.</p>
+        <section className="mt-5 rounded-3xl border border-amber-200 bg-amber-50 p-4 text-amber-900 shadow-sm sm:p-5">
+          <div className="flex items-start gap-3">
+            <Wallet size={24} className="mt-0.5 shrink-0" />
+            <div>
+              <p className="font-black">Caja no abierta</p>
+              <p className="mt-1 text-sm">Abre una caja en el módulo Caja para habilitar agregar productos, recetas y cobrar.</p>
+            </div>
           </div>
         </section>
       )}
 
-      <section className="rounded-2xl sm:rounded-3xl border border-sky-100 bg-sky-50 p-4 sm:p-5 shadow-sm">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-3">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-sky-700 text-white shadow-lg shadow-sky-900/20">
-              <ClipboardList size={24} />
-            </div>
-            <div>
-              <h2 className="font-black text-slate-800">Recetas pendientes Doctor Shaddai</h2>
-              <p className="mt-1 text-sm text-slate-500">Busca una receta pendiente y agrega sus productos al carrito eligiendo lote.</p>
-              {recetasPendientes.length > 0 && (
-                <p className="mt-2 text-xs font-black text-sky-700">{recetasPendientes.length} receta(s) pendiente(s) por surtir</p>
-              )}
-              {recetaEnCarrito && (
-                <p className="mt-2 text-xs font-bold text-sky-700">Receta cargada: {recetaEnCarrito.folio} · {recetaEnCarrito.paciente || 'Paciente'}</p>
-              )}
-            </div>
-          </div>
-          <button type="button" onClick={abrirModalRecetas} disabled={!sesionAbierta} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-sky-700 px-5 py-3 text-sm font-bold text-white transition hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-50">
-            <ClipboardList size={18} />
-            Ver recetas
-          </button>
-        </div>
-      </section>
-
-      <section className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.4fr)_minmax(360px,1fr)] gap-5 sm:gap-6">
-        <div className="space-y-5 min-w-0">
-          <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-sm border border-slate-100">
-            <div className="flex flex-col md:flex-row gap-3">
-              <div className="relative flex-1 min-w-0">
-                <Search className="absolute left-4 top-3.5 text-slate-400" size={20} />
-                <input value={buscar} onChange={(e) => setBuscar(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') cargarInventario(); }} className="w-full min-w-0 pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500" placeholder="Buscar producto, código, laboratorio..." />
+      <section className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_430px]">
+        <div className="min-w-0 space-y-5">
+          <div className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+            <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="text-xs font-black uppercase tracking-wide text-sky-700">Paso 1</p>
+                <h2 className="text-xl font-black text-slate-900">Buscar y agregar productos</h2>
+                <p className="text-sm text-slate-500">Busca por nombre, código de barras, laboratorio o escanea el producto.</p>
               </div>
-              <button type="button" onClick={abrirEscanerProducto} className="w-full md:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition">
-                <Barcode size={19} />
+              {recetaEnCarrito && (
+                <div className="rounded-2xl border border-sky-100 bg-sky-50 px-4 py-3 text-sm text-sky-800">
+                  <p className="font-black">Receta cargada</p>
+                  <p className="text-xs">{recetaEnCarrito.folio} · {recetaEnCarrito.paciente || 'Paciente'}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto]">
+              <div className="relative min-w-0">
+                <Search className="absolute left-4 top-3.5 text-slate-400" size={20} />
+                <input
+                  value={buscar}
+                  onChange={(e) => setBuscar(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') cargarInventario(); }}
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-12 pr-4 text-sm font-semibold text-slate-700 outline-none transition focus:bg-white focus:ring-2 focus:ring-sky-500"
+                  placeholder="Ej. paracetamol, código, laboratorio..."
+                />
+              </div>
+              <button
+                type="button"
+                onClick={abrirEscanerProducto}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800"
+              >
+                <Barcode size={18} />
                 Escanear
               </button>
-              <button type="button" onClick={() => cargarInventario()} className="w-full md:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold transition">
-                <Search size={19} />
+              <button
+                type="button"
+                onClick={() => cargarInventario()}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-sky-700 px-5 py-3 text-sm font-black text-white transition hover:bg-sky-800"
+              >
+                <Search size={18} />
                 Buscar
               </button>
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+              <button
+                type="button"
+                onClick={abrirModalRecetas}
+                disabled={!sesionAbierta}
+                className="flex items-center justify-between rounded-2xl border border-sky-100 bg-sky-50 p-4 text-left transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <div>
+                  <p className="text-sm font-black text-sky-900">Surtir receta</p>
+                  <p className="text-xs text-sky-700">{recetasPendientes.length} pendiente(s)</p>
+                </div>
+                <ClipboardList className="text-sky-700" size={22} />
+              </button>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm font-black text-slate-800">Productos visibles</p>
+                <p className="text-2xl font-black text-slate-900">{formatoNumero(inventario.length)}</p>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm font-black text-slate-800">En carrito</p>
+                <p className="text-2xl font-black text-slate-900">{formatoNumero(carrito.length)}</p>
+              </div>
             </div>
           </div>
 
@@ -1363,6 +1638,11 @@ export default function POS() {
           seleccionarMetodoPago={seleccionarMetodoPago}
           montoRecibido={montoRecibido}
           setMontoRecibido={setMontoRecibido}
+          pagoMixtoActivo={pagoMixtoActivo}
+          alternarPagoMixto={alternarPagoMixto}
+          pagosMixtos={pagosMixtos}
+          actualizarPagoMixto={actualizarPagoMixto}
+          resumenPagosMixtos={resumenPagosMixtos}
           cobrarImpuesto={cobrarImpuesto}
           setCobrarImpuesto={setCobrarImpuesto}
           resumen={resumen}
@@ -1383,25 +1663,23 @@ export default function POS() {
       </section>
 
       {ventaFinalizada && (
-        <section className="rounded-2xl sm:rounded-3xl bg-emerald-50 border border-emerald-100 p-4 sm:p-5 text-emerald-800">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <section className="mt-5 rounded-3xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-900 shadow-sm sm:p-5">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div className="flex items-start gap-3">
-              <CheckCircle size={26} className="shrink-0 mt-0.5" />
+              <CheckCircle size={28} className="mt-0.5 shrink-0 text-emerald-700" />
               <div>
                 <p className="font-black">Última venta registrada</p>
-                <p className="text-sm">Folio: <span className="font-bold">{ventaFinalizada.venta?.folio}</span></p>
+                <p className="text-sm">Folio: <span className="font-black">{ventaFinalizada.venta?.folio}</span></p>
+                <p className="text-sm">Total: <span className="font-black">{formatoMoneda(ventaFinalizada.resumen?.total)}</span></p>
               </div>
             </div>
-            <div className="w-full md:w-auto md:text-right space-y-3">
-              <div>
-                <p className="text-sm text-emerald-700">Total</p>
-                <p className="text-2xl sm:text-3xl font-bold text-emerald-900 break-words">{formatoMoneda(ventaFinalizada.resumen?.total)}</p>
-                <p className="text-sm text-emerald-700">Cambio: {formatoMoneda(ventaFinalizada.resumen?.cambio)}</p>
-              </div>
-              <button onClick={() => imprimirTicketPOS()} className="w-full md:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition">
-                Imprimir ticket
-              </button>
-            </div>
+            <button
+              onClick={() => imprimirTicketPOS()}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800"
+            >
+              <ReceiptText size={18} />
+              Imprimir ticket
+            </button>
           </div>
         </section>
       )}
@@ -1448,6 +1726,7 @@ export default function POS() {
   );
 }
 
+
 function ProductosDisponibles({
   inventario,
   cargando,
@@ -1461,96 +1740,102 @@ function ProductosDisponibles({
   productoRequiereReceta,
   agregarAlCarrito,
 }) {
+  const PRODUCTOS_POR_PAGINA = 8;
+  const [paginaActual, setPaginaActual] = useState(1);
+
+  const totalProductos = inventario.length;
+  const totalPaginas = Math.max(Math.ceil(totalProductos / PRODUCTOS_POR_PAGINA), 1);
+  const inicio = (paginaActual - 1) * PRODUCTOS_POR_PAGINA;
+  const fin = inicio + PRODUCTOS_POR_PAGINA;
+  const productosPagina = inventario.slice(inicio, fin);
+
+  useEffect(() => {
+    setPaginaActual(1);
+  }, [inventario]);
+
+  const irPaginaAnterior = () => {
+    setPaginaActual((pagina) => Math.max(pagina - 1, 1));
+  };
+
+  const irPaginaSiguiente = () => {
+    setPaginaActual((pagina) => Math.min(pagina + 1, totalPaginas));
+  };
+
   return (
-    <div className="bg-white rounded-2xl sm:rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-      <div className="px-4 sm:px-6 py-5 border-b border-slate-100 flex items-start sm:items-center justify-between gap-4">
+    <div className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm">
+      <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
-          <h2 className="text-lg sm:text-xl font-bold text-slate-800">Productos disponibles</h2>
-          <p className="text-sm text-slate-500 truncate">{sucursalActual?.nombre || 'Sin sucursal seleccionada'}</p>
+          <p className="text-xs font-black uppercase tracking-wide text-sky-700">Paso 2</p>
+          <h2 className="text-xl font-black text-slate-900">Selecciona productos</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            {sucursalActual?.nombre || 'Sin sucursal seleccionada'} · Se muestran máximo {PRODUCTOS_POR_PAGINA} productos por página.
+          </p>
         </div>
-        <Package className="text-slate-400 shrink-0" />
+        <div className="flex flex-col gap-1 rounded-2xl bg-slate-50 px-4 py-3 text-sm font-black text-slate-700 sm:items-end">
+          <div className="flex items-center gap-2">
+            <Package size={18} />
+            {formatoNumero(totalProductos)} resultado(s)
+          </div>
+          {totalProductos > 0 && (
+            <span className="text-xs font-bold text-slate-500">
+              Mostrando {formatoNumero(inicio + 1)}-{formatoNumero(Math.min(fin, totalProductos))}
+            </span>
+          )}
+        </div>
       </div>
 
-      <div className="md:hidden p-4 space-y-3">
+      <div className="p-4 sm:p-5">
         {cargando ? (
-          <EstadoTabla texto="Cargando productos..." />
-        ) : inventario.length === 0 ? (
-          <EstadoTabla texto="No hay productos con stock disponible." />
+          <EstadoTabla icono={<Loader2 size={22} className="animate-spin" />} texto="Cargando productos..." />
+        ) : totalProductos === 0 ? (
+          <EstadoTabla icono={<Package size={22} />} texto="No hay productos con stock disponible." />
         ) : (
-          inventario.map((item) => (
-            <ProductoCard
-              key={item.id_inventario || item.id_producto}
-              item={item}
-              sesionAbierta={sesionAbierta}
-              formatoMoneda={formatoMoneda}
-              formatoNumero={formatoNumero}
-              formatoFechaCorta={formatoFechaCorta}
-              tieneOfertaActiva={tieneOfertaActiva}
-              esProductoControlado={esProductoControlado}
-              productoRequiereReceta={productoRequiereReceta}
-              agregarAlCarrito={agregarAlCarrito}
-            />
-          ))
-        )}
-      </div>
+          <>
+            <div className="grid grid-cols-1 gap-3 2xl:grid-cols-2">
+              {productosPagina.map((item) => (
+                <ProductoCard
+                  key={item.id_inventario || item.id_producto}
+                  item={item}
+                  sesionAbierta={sesionAbierta}
+                  formatoMoneda={formatoMoneda}
+                  formatoNumero={formatoNumero}
+                  formatoFechaCorta={formatoFechaCorta}
+                  tieneOfertaActiva={tieneOfertaActiva}
+                  esProductoControlado={esProductoControlado}
+                  productoRequiereReceta={productoRequiereReceta}
+                  agregarAlCarrito={agregarAlCarrito}
+                />
+              ))}
+            </div>
 
-      <div className="hidden md:block overflow-x-auto">
-        <table className="w-full min-w-[850px]">
-          <thead className="bg-slate-50 border-b border-slate-100">
-            <tr>
-              <th className="px-5 py-4 text-left text-xs font-bold text-slate-500 uppercase">Producto</th>
-              <th className="px-5 py-4 text-left text-xs font-bold text-slate-500 uppercase">Código</th>
-              <th className="px-5 py-4 text-right text-xs font-bold text-slate-500 uppercase">Stock</th>
-              <th className="px-5 py-4 text-right text-xs font-bold text-slate-500 uppercase">Precio</th>
-              <th className="px-5 py-4 text-center text-xs font-bold text-slate-500 uppercase">Acción</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {cargando ? (
-              <tr><td colSpan="5" className="px-5 py-10 text-center text-slate-500">Cargando productos...</td></tr>
-            ) : inventario.length === 0 ? (
-              <tr><td colSpan="5" className="px-5 py-10 text-center text-slate-500">No hay productos con stock disponible.</td></tr>
-            ) : (
-              inventario.map((item) => (
-                <tr key={item.id_inventario || item.id_producto} className="hover:bg-slate-50">
-                  <td className="px-5 py-4">
-                    <p className="font-bold text-slate-800">{item.producto || item.nombre}</p>
-                    <p className="text-xs text-slate-500 mt-1">{item.laboratorio || 'Sin laboratorio'} · {item.presentacion || 'Sin presentación'}</p>
-                    <EtiquetasProducto
-                      item={item}
-                      esProductoControlado={esProductoControlado}
-                      productoRequiereReceta={productoRequiereReceta}
-                      tieneOfertaActiva={tieneOfertaActiva}
-                      formatoNumero={formatoNumero}
-                    />
-                    {item.proxima_caducidad && (
-                      <p className="text-xs text-red-600 mt-1 font-semibold">Cad. próxima: {formatoFechaCorta(item.proxima_caducidad)}</p>
-                    )}
-                  </td>
-                  <td className="px-5 py-4 text-sm text-slate-600">{item.codigo_barras || '—'}</td>
-                  <td className="px-5 py-4 text-right font-bold text-slate-800">{formatoNumero(item.stock_actual)}</td>
-                  <td className="px-5 py-4 text-right">
-                    {tieneOfertaActiva(item) ? (
-                      <div>
-                        <p className="text-xs text-slate-400 line-through">{formatoMoneda(item.precio_venta)}</p>
-                        <p className="font-bold text-emerald-700">{formatoMoneda(item.precio_con_descuento)}</p>
-                        <p className="text-[11px] text-emerald-700 font-bold">Ahorras {formatoMoneda(item.descuento_unitario)}</p>
-                      </div>
-                    ) : (
-                      <p className="font-bold text-sky-700">{formatoMoneda(item.precio_venta)}</p>
-                    )}
-                  </td>
-                  <td className="px-5 py-4 text-center">
-                    <button onClick={() => agregarAlCarrito(item)} disabled={!sesionAbierta} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-sky-100 hover:bg-sky-200 text-sky-800 font-bold transition disabled:opacity-50">
-                      <Plus size={17} />
-                      Agregar
-                    </button>
-                  </td>
-                </tr>
-              ))
+            {totalProductos > PRODUCTOS_POR_PAGINA && (
+              <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm font-bold text-slate-600">
+                  Página <span className="text-slate-900">{paginaActual}</span> de <span className="text-slate-900">{totalPaginas}</span>
+                </p>
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={irPaginaAnterior}
+                    disabled={paginaActual === 1}
+                    className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none"
+                  >
+                    Anterior
+                  </button>
+                  <button
+                    type="button"
+                    onClick={irPaginaSiguiente}
+                    disabled={paginaActual === totalPaginas}
+                    className="flex-1 rounded-xl bg-sky-700 px-4 py-2 text-sm font-black text-white transition hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none"
+                  >
+                    Siguiente
+                  </button>
+                </div>
+              </div>
             )}
-          </tbody>
-        </table>
+          </>
+        )}
       </div>
     </div>
   );
@@ -1567,16 +1852,30 @@ function ProductoCard({
   productoRequiereReceta,
   agregarAlCarrito,
 }) {
+  const oferta = tieneOfertaActiva(item);
+  const precioFinal = oferta ? item.precio_con_descuento : item.precio_venta;
+
   return (
-    <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+    <article className="group rounded-3xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-sky-200 hover:shadow-md">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="font-bold text-slate-800 break-words">{item.producto || item.nombre}</p>
-          <p className="text-xs text-slate-500 mt-1 break-words">{item.laboratorio || 'Sin laboratorio'} · {item.presentacion || 'Sin presentación'}</p>
+          <h3 className="break-words text-base font-black leading-snug text-slate-900">
+            {item.producto || item.nombre}
+          </h3>
+          <p className="mt-1 break-words text-xs font-semibold text-slate-500">
+            {item.laboratorio || 'Sin laboratorio'} · {item.presentacion || 'Sin presentación'}
+          </p>
         </div>
-        <p className="font-bold text-sky-700 text-right shrink-0">
-          {tieneOfertaActiva(item) ? formatoMoneda(item.precio_con_descuento) : formatoMoneda(item.precio_venta)}
-        </p>
+        <div className="shrink-0 rounded-2xl bg-sky-50 px-3 py-2 text-right">
+          {oferta && (
+            <p className="text-[11px] font-bold text-slate-400 line-through">
+              {formatoMoneda(item.precio_venta)}
+            </p>
+          )}
+          <p className={`text-base font-black ${oferta ? 'text-emerald-700' : 'text-sky-700'}`}>
+            {formatoMoneda(precioFinal)}
+          </p>
+        </div>
       </div>
 
       <EtiquetasProducto
@@ -1587,36 +1886,57 @@ function ProductoCard({
         formatoNumero={formatoNumero}
       />
 
-      <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-        <div className="rounded-xl bg-slate-50 p-3">
-          <p className="text-xs text-slate-500">Código</p>
-          <p className="font-bold text-slate-700 truncate">{item.codigo_barras || '—'}</p>
+      <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
+        <div className="rounded-2xl bg-slate-50 p-3">
+          <p className="text-[11px] font-bold uppercase text-slate-400">Código</p>
+          <p className="mt-1 truncate font-black text-slate-800">{item.codigo_barras || '—'}</p>
         </div>
-        <div className="rounded-xl bg-slate-50 p-3 text-right">
-          <p className="text-xs text-slate-500">Stock</p>
-          <p className="font-bold text-slate-800">{formatoNumero(item.stock_actual)}</p>
+        <div className="rounded-2xl bg-slate-50 p-3 text-center">
+          <p className="text-[11px] font-bold uppercase text-slate-400">Stock</p>
+          <p className="mt-1 font-black text-slate-900">{formatoNumero(item.stock_actual)}</p>
+        </div>
+        <div className="rounded-2xl bg-slate-50 p-3 text-right">
+          <p className="text-[11px] font-bold uppercase text-slate-400">Caducidad</p>
+          <p className={`mt-1 truncate font-black ${item.proxima_caducidad ? 'text-red-600' : 'text-slate-700'}`}>
+            {item.proxima_caducidad ? formatoFechaCorta(item.proxima_caducidad) : '—'}
+          </p>
         </div>
       </div>
 
-      {item.proxima_caducidad && (
-        <p className="text-xs text-red-600 mt-3 font-semibold">Cad. próxima: {formatoFechaCorta(item.proxima_caducidad)}</p>
+      {oferta && (
+        <div className="mt-3 rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">
+          Ahorro por pieza: {formatoMoneda(item.descuento_unitario)}
+        </div>
       )}
 
-      <button onClick={() => agregarAlCarrito(item)} disabled={!sesionAbierta} className="mt-4 w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-sky-100 hover:bg-sky-200 text-sky-800 font-bold transition disabled:opacity-50">
-        <Plus size={17} />
-        Agregar
+      <button
+        onClick={() => agregarAlCarrito(item)}
+        disabled={!sesionAbierta}
+        className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-sky-700 px-4 py-3 text-sm font-black text-white transition hover:bg-sky-800 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
+      >
+        <Plus size={18} />
+        Elegir lote y agregar
       </button>
-    </div>
+    </article>
   );
 }
 
 function EtiquetasProducto({ item, esProductoControlado, productoRequiereReceta, tieneOfertaActiva, formatoNumero }) {
   return (
-    <div className="flex flex-wrap gap-1 mt-2">
-      {esProductoControlado(item) && <span className="text-[11px] font-bold px-2 py-1 rounded-full bg-red-100 text-red-700">Controlado</span>}
-      {productoRequiereReceta(item) && <span className="text-[11px] font-bold px-2 py-1 rounded-full bg-amber-100 text-amber-700">Requiere receta</span>}
+    <div className="mt-3 flex flex-wrap gap-1.5">
+      {esProductoControlado(item) && (
+        <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-1 text-[11px] font-black text-red-700">
+          <AlertTriangle size={12} />
+          Controlado
+        </span>
+      )}
+      {productoRequiereReceta(item) && (
+        <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-black text-amber-700">
+          Requiere receta
+        </span>
+      )}
       {tieneOfertaActiva(item) && (
-        <span className="text-[11px] font-bold px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 inline-flex items-center gap-1">
+        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-black text-emerald-700">
           <BadgePercent size={12} />
           Oferta -{formatoNumero(item.porcentaje_descuento)}%
         </span>
@@ -1625,8 +1945,15 @@ function EtiquetasProducto({ item, esProductoControlado, productoRequiereReceta,
   );
 }
 
-function EstadoTabla({ texto }) {
-  return <div className="rounded-2xl bg-slate-50 p-6 text-center text-slate-500 font-semibold">{texto}</div>;
+function EstadoTabla({ texto, icono = null }) {
+  return (
+    <div className="flex min-h-[220px] flex-col items-center justify-center rounded-3xl bg-slate-50 p-8 text-center text-slate-500">
+      <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-slate-400 shadow-sm">
+        {icono || <Package size={22} />}
+      </div>
+      <p className="font-black">{texto}</p>
+    </div>
+  );
 }
 
 function CarritoPOS({
@@ -1642,6 +1969,11 @@ function CarritoPOS({
   seleccionarMetodoPago,
   montoRecibido,
   setMontoRecibido,
+  pagoMixtoActivo,
+  alternarPagoMixto,
+  pagosMixtos,
+  actualizarPagoMixto,
+  resumenPagosMixtos,
   cobrarImpuesto,
   setCobrarImpuesto,
   resumen,
@@ -1660,217 +1992,378 @@ function CarritoPOS({
   recetaEnCarrito,
 }) {
   return (
-    <div className="bg-white rounded-2xl sm:rounded-3xl shadow-sm border border-slate-100 overflow-hidden h-fit xl:sticky xl:top-6 min-w-0">
-      <div className="px-4 sm:px-6 py-5 border-b border-slate-100 flex items-center justify-between gap-4">
-        <div className="min-w-0">
-          <h2 className="text-lg sm:text-xl font-bold text-slate-800">Carrito</h2>
-          <p className="text-sm text-slate-500">{carrito.length} producto(s)</p>
+    <aside className="min-w-0 overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm xl:sticky xl:top-5 xl:max-h-[calc(100vh-2.5rem)] xl:overflow-y-auto">
+      <div className="border-b border-slate-100 bg-slate-900 px-4 py-5 text-white sm:px-5">
+        <p className="text-xs font-black uppercase tracking-wide text-sky-200">Paso 3</p>
+        <div className="mt-1 flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-black">Cobrar venta</h2>
+            <p className="text-sm text-slate-300">{carrito.length} producto(s) en carrito</p>
+          </div>
+          <div className="rounded-2xl bg-white/10 p-3">
+            <ReceiptText size={24} />
+          </div>
         </div>
-        <ShoppingCart className="text-slate-400 shrink-0" />
       </div>
 
       {recetaEnCarrito && (
-        <div className="mx-4 sm:mx-5 mt-4 rounded-2xl border border-sky-100 bg-sky-50 p-4 text-sky-800">
+        <div className="mx-4 mt-4 rounded-3xl border border-sky-100 bg-sky-50 p-4 text-sky-900 sm:mx-5">
           <p className="text-sm font-black">Venta desde receta</p>
           <p className="mt-1 text-xs">Folio: <span className="font-bold">{recetaEnCarrito.folio}</span></p>
           <p className="text-xs">Paciente: <span className="font-bold">{recetaEnCarrito.paciente || 'N/A'}</span></p>
         </div>
       )}
 
-      <div className="p-4 sm:p-5 border-b border-slate-100 space-y-3">
-        <label className="block text-sm font-bold text-slate-700">Tarjeta de puntos</label>
-        {!tarjetaPuntos ? (
-          <div className="flex flex-col sm:flex-row gap-2">
-            <div className="relative flex-1 min-w-0">
-              <Barcode className="absolute left-4 top-3.5 text-slate-400" size={19} />
-              <input value={codigoTarjeta} onChange={(e) => setCodigoTarjeta(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') buscarTarjetaPuntos(); }} className="w-full min-w-0 pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500" placeholder="Escanear tarjeta o teléfono..." />
-            </div>
-            <button type="button" onClick={abrirEscanerTarjeta} className="w-full sm:w-auto px-4 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition flex items-center justify-center" title="Escanear tarjeta">
-              <Barcode size={19} />
-            </button>
-            <button type="button" onClick={() => buscarTarjetaPuntos()} disabled={buscandoTarjeta} className="w-full sm:w-auto px-4 py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold transition disabled:opacity-60 flex items-center justify-center">
-              {buscandoTarjeta ? <RefreshCw size={19} className="animate-spin" /> : <Search size={19} />}
-            </button>
-          </div>
-        ) : (
-          <div className="rounded-2xl bg-sky-50 border border-sky-100 p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="w-full min-w-0">
-                <div className="flex items-center gap-2 text-sky-800 font-bold break-words">
-                  <UserCheck size={19} className="shrink-0" />
-                  <span className="break-words">{tarjetaPuntos.nombre_cliente}</span>
-                </div>
-                <p className="text-xs text-sky-700 mt-1 break-words">{tarjetaPuntos.codigo_barras}</p>
-                <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
-                  <div className="rounded-xl bg-white/70 p-2">
-                    <p className="text-sky-700 text-xs">Puntos actuales</p>
-                    <p className="font-bold text-sky-900">{formatoNumero(tarjetaPuntos.puntos_actuales)}</p>
-                  </div>
-                  {metodoPago === 'PUNTOS' ? (
-                    <div className="rounded-xl bg-white/70 p-2">
-                      <p className="text-emerald-700 text-xs">Puntos a usar</p>
-                      <p className="font-bold text-emerald-700">{formatoNumero(resumen.puntosNecesarios)} pts</p>
-                      <p className={`text-[11px] mt-1 ${resumen.puedePagarConPuntos ? 'text-emerald-600' : 'text-red-600'}`}>
-                        {resumen.puedePagarConPuntos ? `Saldo después: ${formatoNumero(resumen.puntosDisponibles - resumen.puntosNecesarios)} pts` : `Faltan ${formatoNumero(resumen.puntosFaltantes)} pts`}
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="rounded-xl bg-white/70 p-2">
-                      <p className="text-amber-700 text-xs">Ganará por venta</p>
-                      <p className="font-bold text-amber-700">{formatoNumero(resumen.puntosEstimados)} pts</p>
-                      <p className="text-[11px] text-amber-600 mt-1">{puntosClienteActivo ? `${formatoNumero(porcentajeClientePuntos)}% del total` : 'Puntos desactivados'}</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-              <button onClick={quitarTarjetaPuntos} className="w-9 h-9 rounded-xl bg-white text-red-600 hover:bg-red-50 flex items-center justify-center transition shrink-0" title="Quitar tarjeta">
-                <X size={17} />
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="p-4 sm:p-5 space-y-3 max-h-[420px] xl:max-h-[360px] overflow-y-auto">
-        {carrito.length === 0 ? (
-          <div className="text-center py-10 text-slate-500">No hay productos en el carrito.</div>
-        ) : (
-          carrito.map((item) => (
-            <div key={item.key_carrito} className="rounded-2xl border border-slate-100 p-4">
-              <div className="flex justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-bold text-slate-800 break-words">{item.nombre}</p>
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    {item.controlado && <span className="text-[11px] font-bold px-2 py-1 rounded-full bg-red-100 text-red-700">Controlado</span>}
-                    {item.requiere_receta && <span className="text-[11px] font-bold px-2 py-1 rounded-full bg-amber-100 text-amber-700">Requiere receta</span>}
-                    {item.tiene_oferta && <span className="text-[11px] font-bold px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 inline-flex items-center gap-1"><BadgePercent size={12} />Oferta</span>}
-                    {item.id_receta_shaddai && <span className="text-[11px] font-bold px-2 py-1 rounded-full bg-sky-100 text-sky-700 inline-flex items-center gap-1"><FileText size={12} />Receta</span>}
-                  </div>
-                  <p className="text-xs text-slate-500 mt-2">
-                    Lote: <span className="font-bold text-slate-700">{item.lote || 'FEFO'}</span>{item.fecha_caducidad ? ` · Cad: ${formatoFechaCorta(item.fecha_caducidad)}` : ' · Sin caducidad'}
-                  </p>
-                  <p className="text-xs text-slate-500 mt-1">Stock lote: {formatoNumero(item.stock_actual)}</p>
-                  {item.tiene_oferta ? (
-                    <div className="mt-2">
-                      <p className="text-xs text-slate-400 line-through">{formatoMoneda(item.precio_original)}</p>
-                      <p className="text-sm font-bold text-emerald-700">{formatoMoneda(item.precio_venta)}</p>
-                      <p className="text-[11px] text-emerald-700 font-bold break-words">{item.oferta_nombre ? `${item.oferta_nombre} · ` : ''}-{formatoNumero(item.porcentaje_descuento)}%</p>
-                    </div>
-                  ) : (
-                    <p className="text-sm font-bold text-sky-700 mt-1">{formatoMoneda(item.precio_venta)}</p>
-                  )}
-                </div>
-                <button onClick={() => quitarDelCarrito(item.key_carrito)} className="w-9 h-9 rounded-xl bg-red-50 text-red-700 hover:bg-red-100 flex items-center justify-center transition shrink-0">
-                  <Trash2 size={17} />
-                </button>
-              </div>
-
-              <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <button onClick={() => disminuirCantidad(item.key_carrito)} className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center shrink-0"><Minus size={16} /></button>
-                  <input type="number" step="1" value={item.cantidad} onChange={(e) => cambiarCantidadManual(item.key_carrito, e.target.value)} className="w-full sm:w-20 text-center px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500" />
-                  <button onClick={() => aumentarCantidad(item.key_carrito)} className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center shrink-0"><Plus size={16} /></button>
-                </div>
-                <div className="text-left sm:text-right">
-                  <p className="font-bold text-slate-800">{formatoMoneda(Number(item.cantidad) * Number(item.precio_venta))}</p>
-                  {item.tiene_oferta && <p className="text-[11px] text-emerald-700 font-bold">Ahorras {formatoMoneda(Number(item.cantidad) * Number(item.descuento_unitario || 0))}</p>}
-                </div>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-
-      <div className="p-4 sm:p-5 border-t border-slate-100 space-y-4">
-        <div>
-          <label className="block text-sm font-bold text-slate-700 mb-2">IVA 16%</label>
-          <button type="button" onClick={() => setCobrarImpuesto((prev) => !prev)} className={`w-full px-4 py-3 rounded-2xl border font-bold transition ${cobrarImpuesto ? 'bg-sky-700 text-white border-sky-700 shadow-lg shadow-sky-900/20' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
-            {cobrarImpuesto ? 'IVA aplicado' : 'Sin IVA'}
-          </button>
-        </div>
-
-        <div>
-          <label className="block text-sm font-bold text-slate-700 mb-2">Método de pago</label>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {[
-              { value: 'EFECTIVO', label: 'Efectivo', icon: Banknote },
-              { value: 'TARJETA', label: 'Tarjeta', icon: CreditCard },
-              { value: 'TRANSFERENCIA', label: 'Transf.', icon: ReceiptText },
-              { value: 'PUNTOS', label: 'Puntos', icon: Coins },
-            ].map((metodo) => {
-              const Icon = metodo.icon;
-              return (
-                <button key={metodo.value} type="button" onClick={() => seleccionarMetodoPago(metodo.value)} className={`rounded-2xl px-3 py-3 font-bold text-sm flex flex-col items-center gap-1 border transition ${metodoPago === metodo.value ? metodo.value === 'PUNTOS' ? 'bg-emerald-700 text-white border-emerald-700' : 'bg-sky-700 text-white border-sky-700' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
-                  <Icon size={18} />
-                  {metodo.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {metodoPago === 'EFECTIVO' && (
+      <section className="border-b border-slate-100 p-4 sm:p-5">
+        <div className="mb-3 flex items-center justify-between gap-3">
           <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">Monto recibido</label>
-            <input type="number" step="0.01" value={montoRecibido} onChange={(e) => setMontoRecibido(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500" placeholder="0.00" />
+            <p className="text-sm font-black text-slate-900">Productos agregados</p>
+            <p className="text-xs font-semibold text-slate-500">Revisa cantidades y lotes antes de cobrar.</p>
           </div>
-        )}
-
-        {metodoPago === 'PUNTOS' && (
-          <div className={`rounded-2xl border p-4 ${tarjetaPuntos && resumen.puedePagarConPuntos ? 'bg-emerald-50 border-emerald-100 text-emerald-800' : 'bg-red-50 border-red-100 text-red-800'}`}>
-            <p className="font-bold">Pago con puntos</p>
-            {!tarjetaPuntos ? (
-              <p className="text-sm mt-1">Primero vincula una tarjeta de puntos.</p>
-            ) : (
-              <div className="text-sm mt-1 space-y-1">
-                <p>Disponible: <span className="font-bold">{formatoNumero(resumen.puntosDisponibles)} pts</span></p>
-                <p>Requerido: <span className="font-bold">{formatoNumero(resumen.puntosNecesarios)} pts</span></p>
-                {!resumen.puedePagarConPuntos && <p>Faltan: <span className="font-bold">{formatoNumero(resumen.puntosFaltantes)} pts</span></p>}
-              </div>
-            )}
-          </div>
-        )}
-
-        <div className="rounded-2xl sm:rounded-3xl bg-slate-50 p-4 sm:p-5 space-y-3">
-          <ResumenLinea label="Subtotal original" valor={formatoMoneda(resumen.subtotalSinDescuento)} />
-          {resumen.descuentoOfertas > 0 && <ResumenLinea label="Descuento por ofertas" valor={`-${formatoMoneda(resumen.descuentoOfertas)}`} className="text-emerald-700" />}
-          <ResumenLinea label="Subtotal" valor={formatoMoneda(resumen.subtotal)} />
-          <ResumenLinea label="IVA" valor={formatoMoneda(resumen.impuesto)} />
-          <div className="flex justify-between gap-3 text-xl sm:text-2xl font-black text-slate-900 border-t border-slate-200 pt-3">
-            <span>Total</span>
-            <span className="text-right">{formatoMoneda(resumen.total)}</span>
-          </div>
-          {metodoPago === 'EFECTIVO' && (
-            <div className="flex justify-between gap-3 text-sm sm:text-base text-slate-600">
-              <span>Cambio</span>
-              <span className={`font-bold text-right ${resumen.cambio < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{formatoMoneda(resumen.cambio)}</span>
-            </div>
+          {carrito.length > 0 && (
+            <button
+              type="button"
+              onClick={limpiarVenta}
+              className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-black text-slate-700 transition hover:bg-red-100 hover:text-red-700"
+            >
+              Limpiar
+            </button>
           )}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <button type="button" onClick={limpiarVenta} className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition">
-            <Trash2 size={18} />
-            Limpiar
-          </button>
-          <button type="button" onClick={cobrarVenta} disabled={cobrando || carrito.length === 0} className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition disabled:opacity-50 disabled:cursor-not-allowed">
-            {cobrando ? <RefreshCw size={18} className="animate-spin" /> : <CheckCircle size={18} />}
-            Cobrar
+        {carrito.length === 0 ? (
+          <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
+            <ShoppingCart className="mx-auto text-slate-400" size={30} />
+            <p className="mt-3 font-black text-slate-700">Carrito vacío</p>
+            <p className="mt-1 text-sm text-slate-500">Agrega productos desde la lista de la izquierda.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {carrito.map((item) => (
+              <div key={item.key_carrito} className="rounded-3xl border border-slate-200 bg-white p-3 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="break-words text-sm font-black text-slate-900">{item.nombre}</p>
+                    <p className="mt-1 text-xs font-semibold text-slate-500">
+                      {item.lote ? `Lote ${item.lote}` : 'Sin lote'} · Cad. {formatoFechaCorta(item.fecha_caducidad)}
+                    </p>
+                    <p className="mt-1 text-xs font-bold text-sky-700">
+                      {formatoMoneda(item.precio_venta)} c/u
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => quitarDelCarrito(item.key_carrito)}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-600 transition hover:bg-red-100"
+                    title="Quitar producto"
+                  >
+                    <Trash2 size={17} />
+                  </button>
+                </div>
+
+                <div className="mt-3 flex items-center justify-between gap-3">
+                  <div className="flex items-center rounded-2xl border border-slate-200 bg-slate-50 p-1">
+                    <button
+                      type="button"
+                      onClick={() => disminuirCantidad(item.key_carrito)}
+                      className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-slate-700 shadow-sm hover:bg-slate-100"
+                    >
+                      <Minus size={16} />
+                    </button>
+                    <input
+                      type="number"
+                      min="0"
+                      value={item.cantidad}
+                      onChange={(e) => cambiarCantidadManual(item.key_carrito, e.target.value)}
+                      className="h-9 w-16 bg-transparent text-center text-sm font-black text-slate-900 outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => aumentarCantidad(item.key_carrito)}
+                      className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-slate-700 shadow-sm hover:bg-slate-100"
+                    >
+                      <Plus size={16} />
+                    </button>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[11px] font-bold uppercase text-slate-400">Importe</p>
+                    <p className="text-base font-black text-slate-900">
+                      {formatoMoneda(Number(item.cantidad || 0) * Number(item.precio_venta || 0))}
+                    </p>
+                  </div>
+                </div>
+
+                {(item.controlado || item.requiere_receta || item.tiene_oferta) && (
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {item.controlado && <span className="rounded-full bg-red-100 px-2 py-1 text-[10px] font-black text-red-700">Controlado</span>}
+                    {item.requiere_receta && <span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-black text-amber-700">Receta</span>}
+                    {item.tiene_oferta && <span className="rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-black text-emerald-700">Oferta</span>}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="border-b border-slate-100 p-4 sm:p-5">
+        <div className="mb-3 flex items-center gap-2">
+          <UserCheck size={18} className="text-sky-700" />
+          <p className="text-sm font-black text-slate-900">Cliente / puntos</p>
+        </div>
+
+        {!tarjetaPuntos ? (
+          <div className="space-y-3">
+            <div className="relative">
+              <Barcode className="absolute left-4 top-3.5 text-slate-400" size={18} />
+              <input
+                value={codigoTarjeta}
+                onChange={(e) => setCodigoTarjeta(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') buscarTarjetaPuntos(); }}
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-4 text-sm font-semibold outline-none focus:bg-white focus:ring-2 focus:ring-sky-500"
+                placeholder="Tarjeta o teléfono del cliente"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => buscarTarjetaPuntos()}
+                disabled={buscandoTarjeta}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-sky-700 px-4 py-3 text-xs font-black text-white transition hover:bg-sky-800 disabled:opacity-60"
+              >
+                {buscandoTarjeta ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
+                Buscar
+              </button>
+              <button
+                type="button"
+                onClick={abrirEscanerTarjeta}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-100 px-4 py-3 text-xs font-black text-slate-700 transition hover:bg-slate-200"
+              >
+                <Barcode size={16} />
+                Escanear
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-3xl border border-emerald-100 bg-emerald-50 p-4 text-emerald-900">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-black">{tarjetaPuntos.nombre_cliente}</p>
+                <p className="mt-1 text-xs font-semibold text-emerald-700">{tarjetaPuntos.codigo_barras}</p>
+                <p className="mt-2 text-sm font-black">{formatoNumero(tarjetaPuntos.puntos_actuales)} puntos disponibles</p>
+              </div>
+              <button
+                type="button"
+                onClick={quitarTarjetaPuntos}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-emerald-800 shadow-sm hover:bg-emerald-100"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            {puntosClienteActivo && ((!pagoMixtoActivo && metodoPago !== 'PUNTOS') || (pagoMixtoActivo && resumenPagosMixtos.puntos <= 0)) && (
+              <p className="mt-3 rounded-2xl bg-white px-3 py-2 text-xs font-bold text-emerald-700">
+                Esta venta generaría {formatoNumero(resumen.puntosEstimados)} puntos ({formatoNumero(porcentajeClientePuntos)}%).
+              </p>
+            )}
+          </div>
+        )}
+      </section>
+
+      <section className="border-b border-slate-100 p-4 sm:p-5">
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl bg-slate-50 p-3">
+          <div>
+            <p className="text-sm font-black text-slate-900">Pago mixto</p>
+            <p className="text-xs font-semibold text-slate-500">
+              Actívalo para combinar efectivo, tarjeta, transferencia y puntos.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={alternarPagoMixto}
+            className={`relative h-8 w-14 shrink-0 rounded-full transition ${pagoMixtoActivo ? 'bg-sky-700' : 'bg-slate-300'}`}
+            title={pagoMixtoActivo ? 'Desactivar pago mixto' : 'Activar pago mixto'}
+          >
+            <span className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow transition ${pagoMixtoActivo ? 'left-7' : 'left-1'}`} />
           </button>
         </div>
-      </div>
+
+        {!pagoMixtoActivo ? (
+          <>
+            <p className="mb-3 text-sm font-black text-slate-900">Método de pago</p>
+            <div className="grid grid-cols-2 gap-2">
+              {METODOS_PAGO_POS.map((metodo) => {
+                const Icono = metodo.icono;
+                const activo = metodoPago === metodo.id;
+
+                return (
+                  <button
+                    key={metodo.id}
+                    type="button"
+                    onClick={() => seleccionarMetodoPago(metodo.id)}
+                    className={`flex items-center justify-center gap-2 rounded-2xl px-3 py-3 text-xs font-black transition ${
+                      activo
+                        ? 'bg-sky-700 text-white shadow-lg shadow-sky-700/20'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    <Icono size={16} />
+                    {metodo.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {metodoPago === 'EFECTIVO' && (
+              <div className="mt-4">
+                <label className="mb-2 block text-xs font-black uppercase tracking-wide text-slate-500">
+                  Monto recibido
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={montoRecibido}
+                  onChange={(e) => setMontoRecibido(e.target.value)}
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-lg font-black text-slate-900 outline-none focus:bg-white focus:ring-2 focus:ring-sky-500"
+                  placeholder="0.00"
+                />
+                <div className={`mt-3 rounded-2xl px-4 py-3 text-sm font-black ${resumen.cambio >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                  Cambio: {formatoMoneda(resumen.cambio)}
+                </div>
+              </div>
+            )}
+
+            {metodoPago === 'PUNTOS' && (
+              <div className={`mt-4 rounded-2xl px-4 py-3 text-sm font-black ${resumen.puedePagarConPuntos ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                {tarjetaPuntos
+                  ? resumen.puedePagarConPuntos
+                    ? `Puntos suficientes: ${formatoNumero(resumen.puntosDisponibles)}`
+                    : `Faltan ${formatoNumero(resumen.puntosFaltantes)} puntos`
+                  : 'Vincula una tarjeta para pagar con puntos'}
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="space-y-3">
+            <div className="rounded-2xl border border-sky-100 bg-sky-50 px-4 py-3">
+              <p className="text-sm font-black text-sky-900">Distribuye el pago</p>
+              <p className="mt-1 text-xs font-semibold text-sky-700">
+                Captura solo los métodos que usará el cliente. El cambio se calcula únicamente con efectivo.
+              </p>
+            </div>
+
+            {METODOS_PAGO_POS.map((metodo) => {
+              const Icono = metodo.icono;
+              const deshabilitado = metodo.id === 'PUNTOS' && !tarjetaPuntos;
+
+              return (
+                <div key={metodo.id} className={`rounded-2xl border p-3 ${deshabilitado ? 'border-slate-100 bg-slate-50 opacity-70' : 'border-slate-200 bg-white'}`}>
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <div className={`flex h-9 w-9 items-center justify-center rounded-xl ${metodo.id === 'EFECTIVO' ? 'bg-emerald-50 text-emerald-700' : metodo.id === 'TARJETA' ? 'bg-sky-50 text-sky-700' : metodo.id === 'TRANSFERENCIA' ? 'bg-violet-50 text-violet-700' : 'bg-amber-50 text-amber-700'}`}>
+                        <Icono size={17} />
+                      </div>
+                      <div>
+                        <p className="text-sm font-black text-slate-900">{metodo.label}</p>
+                        {metodo.id === 'PUNTOS' && (
+                          <p className="text-[11px] font-bold text-slate-500">
+                            {tarjetaPuntos ? `${formatoNumero(tarjetaPuntos.puntos_actuales)} puntos disponibles` : 'Vincula una tarjeta'}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    disabled={deshabilitado}
+                    value={pagosMixtos[metodo.id] || ''}
+                    onChange={(e) => actualizarPagoMixto(metodo.id, e.target.value)}
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base font-black text-slate-900 outline-none focus:bg-white focus:ring-2 focus:ring-sky-500 disabled:cursor-not-allowed disabled:bg-slate-100"
+                    placeholder="0.00"
+                  />
+                </div>
+              );
+            })}
+
+            <div className="space-y-2 rounded-3xl border border-slate-200 bg-slate-50 p-4">
+              <ResumenLinea label="Total pagado" valor={formatoMoneda(resumenPagosMixtos.totalPagado)} />
+              <ResumenLinea label="Pendiente" valor={formatoMoneda(resumenPagosMixtos.pendiente)} destacado={resumenPagosMixtos.pendiente > 0 ? 'red' : null} />
+              <ResumenLinea label="Cambio" valor={formatoMoneda(resumenPagosMixtos.cambio)} destacado="emerald" />
+              {resumenPagosMixtos.excedenteNoEfectivo > 0 && (
+                <div className="rounded-2xl bg-red-50 px-3 py-2 text-xs font-black text-red-700">
+                  Tarjeta, transferencia y puntos exceden el total por {formatoMoneda(resumenPagosMixtos.excedenteNoEfectivo)}.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section className="p-4 sm:p-5">
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl bg-slate-50 p-3">
+          <div>
+            <p className="text-sm font-black text-slate-900">Aplicar IVA 16%</p>
+            <p className="text-xs font-semibold text-slate-500">Puedes desactivarlo si la venta no lo requiere.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setCobrarImpuesto(!cobrarImpuesto)}
+            className={`relative h-8 w-14 rounded-full transition ${cobrarImpuesto ? 'bg-sky-700' : 'bg-slate-300'}`}
+          >
+            <span className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow transition ${cobrarImpuesto ? 'left-7' : 'left-1'}`} />
+          </button>
+        </div>
+
+        <div className="space-y-2 rounded-3xl border border-slate-200 bg-white p-4">
+          <ResumenLinea label="Subtotal" valor={formatoMoneda(resumen.subtotal)} />
+          {resumen.descuentoOfertas > 0 && (
+            <ResumenLinea label="Descuento ofertas" valor={`-${formatoMoneda(resumen.descuentoOfertas)}`} destacado="emerald" />
+          )}
+          <ResumenLinea label="IVA" valor={formatoMoneda(resumen.impuesto)} />
+          <div className="my-3 border-t border-dashed border-slate-200" />
+          <div className="flex items-end justify-between gap-4">
+            <div>
+              <p className="text-sm font-black text-slate-500">Total a cobrar</p>
+              <p className="text-xs font-semibold text-slate-400">MXN</p>
+            </div>
+            <p className="text-3xl font-black tracking-tight text-slate-900">
+              {formatoMoneda(resumen.total)}
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={cobrarVenta}
+          disabled={cobrando || carrito.length === 0}
+          className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-3xl bg-emerald-600 px-5 py-4 text-base font-black text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+        >
+          {cobrando ? <Loader2 size={21} className="animate-spin" /> : <CheckCircle size={21} />}
+          {cobrando ? 'Cobrando...' : 'Cobrar venta'}
+        </button>
+      </section>
+    </aside>
+  );
+}
+
+function ResumenLinea({ label, valor, destacado = null }) {
+  const color =
+    destacado === 'emerald'
+      ? 'text-emerald-700'
+      : destacado === 'red'
+        ? 'text-red-700'
+        : 'text-slate-900';
+
+  return (
+    <div className="flex items-center justify-between gap-3 text-sm">
+      <span className="font-bold text-slate-500">{label}</span>
+      <span className={`font-black ${color}`}>{valor}</span>
     </div>
   );
 }
 
-function ResumenLinea({ label, valor, className = 'text-slate-600' }) {
-  return (
-    <div className={`flex justify-between gap-3 text-sm sm:text-base ${className}`}>
-      <span>{label}</span>
-      <span className="font-bold text-right">{valor}</span>
-    </div>
-  );
-}
 
 function ModalLotesProducto({
   producto,

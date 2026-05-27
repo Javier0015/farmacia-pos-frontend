@@ -25,6 +25,7 @@ import {
 const formAsignarInicial = {
   id_sucursal: '',
   id_producto: '',
+  id_proveedor: '',
   stock_inicial: '',
   stock_minimo: '',
   ubicacion: '',
@@ -37,6 +38,7 @@ const formAsignarInicial = {
 const formMovimientoInicial = {
   id_sucursal: '',
   id_producto: '',
+  id_proveedor: '',
   id_lote: '',
   tipo_movimiento: 'ENTRADA',
   cantidad: '',
@@ -91,6 +93,7 @@ export default function Inventario() {
 
   const [sucursales, setSucursales] = useState([]);
   const [productos, setProductos] = useState([]);
+  const [proveedores, setProveedores] = useState([]);
   const [inventario, setInventario] = useState([]);
   const [movimientos, setMovimientos] = useState([]);
   const [bajoStock, setBajoStock] = useState([]);
@@ -101,6 +104,9 @@ export default function Inventario() {
 
   const [idSucursal, setIdSucursal] = useState('');
   const [buscar, setBuscar] = useState('');
+
+  const [fechaInicio, setFechaInicio] = useState('');
+  const [fechaFin, setFechaFin] = useState('');
 
   const [cargando, setCargando] = useState(false);
   const [cargandoMovimientos, setCargandoMovimientos] = useState(false);
@@ -230,6 +236,24 @@ export default function Inventario() {
     }
   };
 
+  const cargarProveedores = async () => {
+    try {
+      const { data } = await api.get('/proveedores?activos=true');
+
+      if (data.ok) {
+        setProveedores(data.proveedores || []);
+      }
+    } catch (error) {
+      console.error(error);
+
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'No se pudieron cargar los proveedores.',
+      });
+    }
+  };
+
   const cargarInventario = async () => {
     if (!idSucursal) return;
 
@@ -263,6 +287,14 @@ export default function Inventario() {
     }
   };
 
+  const buscarInventarioYMovimientos = async () => {
+    await cargarInventario();
+
+    if (modalMovimientos) {
+      await cargarMovimientos();
+    }
+  };
+
   const cargarBajoStock = async () => {
     if (!idSucursal) return;
 
@@ -279,14 +311,31 @@ export default function Inventario() {
     }
   };
 
+  useEffect(() => {
+  if (modalMovimientos) {
+    cargarMovimientos();
+  }
+}, [fechaInicio, fechaFin]);
+
   const cargarMovimientos = async () => {
     if (!idSucursal) return;
 
     try {
       setCargandoMovimientos(true);
 
+      const params = new URLSearchParams();
+      params.append('sucursal', idSucursal);
+
+      if (fechaInicio) {
+        params.append('fecha_inicio', fechaInicio);
+      }
+
+      if (fechaFin) {
+        params.append('fecha_fin', fechaFin);
+      }
+
       const { data } = await api.get(
-        `/inventario/movimientos?sucursal=${idSucursal}`
+        `/inventario/movimientos?${params.toString()}`
       );
 
       if (data.ok) {
@@ -301,6 +350,57 @@ export default function Inventario() {
         text: 'No se pudieron cargar los movimientos de inventario.',
       });
     } finally {
+      setCargandoMovimientos(false);
+    }
+  };
+
+  const limpiarFiltros = async () => {
+    setBuscar('');
+    setFechaInicio('');
+    setFechaFin('');
+
+    if (!idSucursal) return;
+
+    try {
+      setCargando(true);
+
+      const paramsInventario = new URLSearchParams();
+      paramsInventario.append('sucursal', idSucursal);
+
+      const { data } = await api.get(
+        `/inventario?${paramsInventario.toString()}`
+      );
+
+      if (data.ok) {
+        setInventario(data.inventario || []);
+      }
+
+      if (modalMovimientos) {
+        setCargandoMovimientos(true);
+
+        const paramsMovimientos = new URLSearchParams();
+        paramsMovimientos.append('sucursal', idSucursal);
+
+        const movimientosResponse = await api.get(
+          `/inventario/movimientos?${paramsMovimientos.toString()}`
+        );
+
+        if (movimientosResponse.data.ok) {
+          setMovimientos(movimientosResponse.data.movimientos || []);
+        }
+      }
+    } catch (error) {
+      console.error(error);
+
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text:
+          error.response?.data?.mensaje ||
+          'No se pudieron limpiar los filtros.',
+      });
+    } finally {
+      setCargando(false);
       setCargandoMovimientos(false);
     }
   };
@@ -363,6 +463,7 @@ export default function Inventario() {
     if (usuario) {
       cargarSucursales();
       cargarProductos();
+      cargarProveedores();
     }
   }, [usuario]);
 
@@ -447,6 +548,7 @@ export default function Inventario() {
       id_sucursal: idSucursal,
       id_producto: loteItem.id_producto || productoInventario?.id_producto || '',
       id_lote: loteItem.id_lote || '',
+      id_proveedor: loteItem.id_proveedor || '',
       tipo_movimiento: tipo,
       cantidad: loteItem.stock_actual || '',
       stock_minimo: productoInventario?.stock_minimo || '',
@@ -523,6 +625,7 @@ export default function Inventario() {
 
       if (name === 'id_producto') {
         cambios.id_lote = '';
+        cambios.id_proveedor = '';
         cambios.cantidad = '';
         cambios.lote = '';
         cambios.fecha_caducidad = '';
@@ -531,6 +634,7 @@ export default function Inventario() {
 
       if (name === 'tipo_movimiento') {
         cambios.id_lote = '';
+        cambios.id_proveedor = '';
         cambios.cantidad = '';
         cambios.lote = '';
         cambios.fecha_caducidad = '';
@@ -543,6 +647,7 @@ export default function Inventario() {
         );
 
         if (loteSeleccionado) {
+          cambios.id_proveedor = loteSeleccionado.id_proveedor || '';
           cambios.lote = loteSeleccionado.lote || '';
           cambios.fecha_caducidad = loteSeleccionado.fecha_caducidad
             ? String(loteSeleccionado.fecha_caducidad).slice(0, 10)
@@ -553,6 +658,7 @@ export default function Inventario() {
             cambios.cantidad = loteSeleccionado.stock_actual || '';
           }
         } else {
+          cambios.id_proveedor = '';
           cambios.lote = '';
           cambios.fecha_caducidad = '';
           cambios.precio_compra = '';
@@ -593,6 +699,9 @@ export default function Inventario() {
       const payload = {
         id_sucursal: Number(formAsignar.id_sucursal),
         id_producto: Number(formAsignar.id_producto),
+        id_proveedor: formAsignar.id_proveedor
+          ? Number(formAsignar.id_proveedor)
+          : null,
         stock_inicial: Number(formAsignar.stock_inicial || 0),
         stock_minimo: Number(formAsignar.stock_minimo || 0),
         ubicacion: formAsignar.ubicacion || null,
@@ -676,6 +785,9 @@ export default function Inventario() {
       const payload = {
         id_sucursal: Number(formMovimiento.id_sucursal),
         id_producto: Number(formMovimiento.id_producto),
+        id_proveedor: formMovimiento.id_proveedor
+          ? Number(formMovimiento.id_proveedor)
+          : null,
         id_lote: formMovimiento.id_lote
           ? Number(formMovimiento.id_lote)
           : undefined,
@@ -733,11 +845,10 @@ export default function Inventario() {
         <div style="text-align:left">
           <p><b>Producto:</b> ${item.producto}</p>
           <p><b>Lote:</b> ${item.lote}</p>
-          <p><b>Caducidad:</b> ${
-            item.fecha_caducidad
-              ? new Date(item.fecha_caducidad).toLocaleDateString('es-MX')
-              : 'Sin fecha'
-          }</p>
+          <p><b>Caducidad:</b> ${item.fecha_caducidad
+          ? new Date(item.fecha_caducidad).toLocaleDateString('es-MX')
+          : 'Sin fecha'
+        }</p>
           <p><b>Stock a dar de baja:</b> ${formatoNumero(item.stock_actual)}</p>
         </div>
       `,
@@ -787,6 +898,10 @@ export default function Inventario() {
       });
     }
   };
+
+  const requiereProveedorMovimiento = movimientosPermitenNuevoLote.includes(
+    formMovimiento.tipo_movimiento
+  );
 
   return (
     <div className="w-full max-w-full overflow-hidden space-y-5 sm:space-y-6 pb-8">
@@ -842,7 +957,7 @@ export default function Inventario() {
           </div>
         </div>
 
-        <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="mt-6 grid grid-cols-1 md:grid-cols-5 gap-4">
           <div className="min-w-0">
             <label className="block text-sm font-bold text-slate-700 mb-2">
               Sucursal
@@ -873,7 +988,31 @@ export default function Inventario() {
             )}
           </div>
 
-          <div className="md:col-span-3 min-w-0">
+          <div className="min-w-0">
+            <label className="block text-sm font-bold text-slate-700 mb-2">
+              Fecha inicio
+            </label>
+            <input
+              type="date"
+              value={fechaInicio}
+              onChange={(e) => setFechaInicio(e.target.value)}
+              className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
+            />
+          </div>
+
+          <div className="min-w-0">
+            <label className="block text-sm font-bold text-slate-700 mb-2">
+              Fecha fin
+            </label>
+            <input
+              type="date"
+              value={fechaFin}
+              onChange={(e) => setFechaFin(e.target.value)}
+              className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
+            />
+          </div>
+
+          <div className="md:col-span-2 min-w-0">
             <label className="block text-sm font-bold text-slate-700 mb-2">
               Buscar
             </label>
@@ -887,7 +1026,7 @@ export default function Inventario() {
                   value={buscar}
                   onChange={(e) => setBuscar(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') cargarInventario();
+                    if (e.key === 'Enter') buscarInventarioYMovimientos();
                   }}
                   className="w-full min-w-0 pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
                   placeholder="Buscar por producto, código, laboratorio o presentación..."
@@ -895,18 +1034,27 @@ export default function Inventario() {
               </div>
 
               <button
-                onClick={cargarInventario}
+                 onClick={buscarInventarioYMovimientos}
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition"
               >
                 <RefreshCw size={19} className={cargando ? 'animate-spin' : ''} />
                 Buscar
               </button>
+
+              <button
+                type="button"
+                onClick={limpiarFiltros}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition"
+              >
+                Limpiar
+              </button>
+
             </div>
           </div>
         </div>
       </section>
 
-      <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-5">
+      <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-2 gap-4 sm:gap-5">
         <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0">
           <div className="w-12 h-12 rounded-2xl bg-sky-50 text-sky-700 flex items-center justify-center">
             <Package size={24} />
@@ -935,31 +1083,7 @@ export default function Inventario() {
           </p>
         </div>
 
-        <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0">
-          <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-700 flex items-center justify-center">
-            <Warehouse size={24} />
-          </div>
-          <p className="text-sm text-slate-500 mt-5">Valor de compra</p>
-          <h3 className="text-2xl sm:text-3xl font-bold text-slate-800 mt-1 break-words">
-            {formatoMoneda(resumen.valorInventario)}
-          </h3>
-          <p className="text-sm text-slate-400 mt-2">
-            Estimado por stock actual
-          </p>
-        </div>
-
-        <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-100 min-w-0">
-          <div className="w-12 h-12 rounded-2xl bg-violet-50 text-violet-700 flex items-center justify-center">
-            <Boxes size={24} />
-          </div>
-          <p className="text-sm text-slate-500 mt-5">Valor de venta</p>
-          <h3 className="text-2xl sm:text-3xl font-bold text-slate-800 mt-1 break-words">
-            {formatoMoneda(resumen.valorVentaEstimado)}
-          </h3>
-          <p className="text-sm text-slate-400 mt-2">
-            Estimado por precio venta
-          </p>
-        </div>
+       
       </section>
 
       <section className="bg-white rounded-2xl sm:rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
@@ -985,11 +1109,10 @@ export default function Inventario() {
             inventario.map((item) => (
               <article
                 key={item.id_inventario}
-                className={`rounded-2xl border p-4 shadow-sm ${
-                  item.bajo_stock
-                    ? 'bg-amber-50/60 border-amber-100'
-                    : 'bg-white border-slate-100'
-                }`}
+                className={`rounded-2xl border p-4 shadow-sm ${item.bajo_stock
+                  ? 'bg-amber-50/60 border-amber-100'
+                  : 'bg-white border-slate-100'
+                  }`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -1062,9 +1185,8 @@ export default function Inventario() {
                   <p className="text-xs text-slate-500">Próxima caducidad</p>
                   {item.proxima_caducidad ? (
                     <p
-                      className={`font-bold ${
-                        item.caducidad_proxima ? 'text-red-700' : 'text-slate-700'
-                      }`}
+                      className={`font-bold ${item.caducidad_proxima ? 'text-red-700' : 'text-slate-700'
+                        }`}
                     >
                       {new Date(item.proxima_caducidad).toLocaleDateString('es-MX')}
                     </p>
@@ -1196,11 +1318,10 @@ export default function Inventario() {
                     <td className="px-5 py-4 text-sm">
                       {item.proxima_caducidad ? (
                         <span
-                          className={`font-bold ${
-                            item.caducidad_proxima
-                              ? 'text-red-700'
-                              : 'text-slate-700'
-                          }`}
+                          className={`font-bold ${item.caducidad_proxima
+                            ? 'text-red-700'
+                            : 'text-slate-700'
+                            }`}
                         >
                           {new Date(item.proxima_caducidad).toLocaleDateString(
                             'es-MX'
@@ -1334,6 +1455,28 @@ export default function Inventario() {
                       esta sucursal.
                     </p>
                   )}
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Proveedor
+                  </label>
+                  <select
+                    name="id_proveedor"
+                    value={formAsignar.id_proveedor}
+                    onChange={handleAsignarChange}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
+                  >
+                    <option value="">Sin proveedor / Inventario inicial</option>
+                    {proveedores.map((proveedor) => (
+                      <option
+                        key={proveedor.id_proveedor}
+                        value={proveedor.id_proveedor}
+                      >
+                        {proveedor.nombre}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
@@ -1523,6 +1666,30 @@ export default function Inventario() {
                   </select>
                 </div>
 
+                {requiereProveedorMovimiento && (
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 mb-2">
+                      Proveedor
+                    </label>
+                    <select
+                      name="id_proveedor"
+                      value={formMovimiento.id_proveedor}
+                      onChange={handleMovimientoChange}
+                      className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
+                    >
+                      <option value="">Sin proveedor</option>
+                      {proveedores.map((proveedor) => (
+                        <option
+                          key={proveedor.id_proveedor}
+                          value={proveedor.id_proveedor}
+                        >
+                          {proveedor.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
                 {movimientosConLoteExistente.includes(formMovimiento.tipo_movimiento) && (
                   <div>
                     <label className="block text-sm font-bold text-slate-700 mb-2">
@@ -1554,8 +1721,8 @@ export default function Inventario() {
                             {formatoNumero(loteItem.stock_actual)} · Cad:{' '}
                             {loteItem.fecha_caducidad
                               ? new Date(loteItem.fecha_caducidad).toLocaleDateString(
-                                  'es-MX'
-                                )
+                                'es-MX'
+                              )
                               : 'Sin fecha'}
                           </option>
                         ))}
@@ -1578,6 +1745,11 @@ export default function Inventario() {
                           Lote seleccionado: {formMovimiento.lote || '—'}
                         </p>
                         <p className="text-slate-500 mt-1">
+                          Proveedor:{' '}
+                          <span className="font-semibold text-slate-700">
+                            {proveedores.find((p) => Number(p.id_proveedor) === Number(formMovimiento.id_proveedor))?.nombre || 'Sin proveedor'}
+                          </span>
+                          <br />
                           Caducidad:{' '}
                           <span className="font-semibold text-slate-700">
                             {formMovimiento.fecha_caducidad
@@ -1765,7 +1937,7 @@ export default function Inventario() {
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[1050px]">
+                  <table className="w-full min-w-[1250px]">
                     <thead className="bg-slate-50 border-b border-slate-100">
                       <tr>
                         <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
@@ -1779,6 +1951,12 @@ export default function Inventario() {
                         </th>
                         <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">
                           Precio compra
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+                          Proveedor
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+                          Compra
                         </th>
                         <th className="px-4 py-3 text-center text-xs font-bold text-slate-500 uppercase">
                           Estado
@@ -1802,8 +1980,8 @@ export default function Inventario() {
                           <td className="px-4 py-3 text-slate-600">
                             {loteItem.fecha_caducidad
                               ? new Date(loteItem.fecha_caducidad).toLocaleDateString(
-                                  'es-MX'
-                                )
+                                'es-MX'
+                              )
                               : 'Sin fecha'}
                           </td>
 
@@ -1813,6 +1991,14 @@ export default function Inventario() {
 
                           <td className="px-4 py-3 text-right text-slate-600">
                             {formatoMoneda(loteItem.precio_compra)}
+                          </td>
+
+                          <td className="px-4 py-3 text-slate-600">
+                            {loteItem.proveedor || 'Sin proveedor'}
+                          </td>
+
+                          <td className="px-4 py-3 text-slate-600">
+                            {loteItem.folio_compra || '—'}
                           </td>
 
                           <td className="px-4 py-3 text-center">
@@ -1893,7 +2079,7 @@ export default function Inventario() {
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[900px]">
+                  <table className="w-full min-w-[1050px]">
                     <thead className="bg-slate-50 border-b border-slate-100">
                       <tr>
                         <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
@@ -1901,6 +2087,9 @@ export default function Inventario() {
                         </th>
                         <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
                           Lote
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+                          Proveedor
                         </th>
                         <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
                           Caducidad
@@ -1928,11 +2117,15 @@ export default function Inventario() {
                             {item.lote}
                           </td>
 
+                          <td className="px-4 py-3 text-slate-600">
+                            {item.proveedor || 'Sin proveedor'}
+                          </td>
+
                           <td className="px-4 py-3 font-bold text-red-700">
                             {item.fecha_caducidad
                               ? new Date(item.fecha_caducidad).toLocaleDateString(
-                                  'es-MX'
-                                )
+                                'es-MX'
+                              )
                               : 'Sin fecha'}
                           </td>
 
@@ -2091,7 +2284,7 @@ export default function Inventario() {
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[1000px]">
+                  <table className="w-full min-w-[1150px]">
                     <thead className="bg-slate-50 border-b border-slate-100">
                       <tr>
                         <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
@@ -2114,6 +2307,9 @@ export default function Inventario() {
                         </th>
                         <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
                           Referencia
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+                          Proveedor
                         </th>
                         <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
                           Usuario
@@ -2146,6 +2342,9 @@ export default function Inventario() {
                           </td>
                           <td className="px-4 py-3 text-slate-600">
                             {mov.referencia || '—'}
+                          </td>
+                          <td className="px-4 py-3 text-slate-600">
+                            {mov.proveedor || '—'}
                           </td>
                           <td className="px-4 py-3 text-slate-600">
                             {mov.usuario || '—'}

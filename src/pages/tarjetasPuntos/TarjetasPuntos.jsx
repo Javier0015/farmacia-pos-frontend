@@ -17,9 +17,14 @@ import {
   Coins,
   History,
   Printer,
-  CreditCard,
+  Gift,
+  TicketPercent,
+  ShieldCheck,
+  Star,
+  ShoppingBag,
 } from 'lucide-react';
 import api from '../../api/axios';
+import logoShaddai from '../../assets/logoShaddai.png';
 
 const formInicial = {
   codigo_barras: '',
@@ -407,7 +412,7 @@ export default function TarjetasPuntos() {
       return;
     }
 
-    const ventana = window.open('', '_blank', 'width=620,height=620');
+    const ventana = window.open('', '_blank', 'width=720,height=900');
 
     ventana.document.write(`
       <html>
@@ -428,7 +433,7 @@ export default function TarjetasPuntos() {
             }
 
             body {
-              padding-top: 32px;
+              padding-top: 24px;
             }
 
             .print-wrapper {
@@ -438,131 +443,295 @@ export default function TarjetasPuntos() {
               align-items: flex-start;
             }
 
-            .tarjeta-print {
-              width: 430px;
-              height: 295px;
+            .print-stack {
+              width: 520px;
+              display: flex;
+              flex-direction: column;
+              gap: 28px;
+            }
+
+            .tarjeta-frente,
+            .tarjeta-reverso {
+              width: 520px;
+              height: 335px;
               border-radius: 24px;
-              background: linear-gradient(135deg, #047857, #0f766e);
-              color: white;
-              padding: 24px;
-              position: relative;
               overflow: hidden;
+              position: relative;
+              color: #ffffff;
+              background: linear-gradient(135deg, #003b66 0%, #004f86 42%, #01233f 100%);
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
+              box-shadow: 0 20px 40px rgba(15, 23, 42, 0.22);
             }
 
-            .circle-a {
+            .tarjeta-frente {
+              padding: 25px;
+            }
+
+            .tarjeta-reverso {
+              padding: 0;
+            }
+
+            .decor-soft {
               position: absolute;
-              right: -45px;
-              top: -45px;
-              width: 150px;
-              height: 150px;
+              right: 80px;
+              top: -80px;
+              width: 260px;
+              height: 260px;
               border-radius: 999px;
-              background: rgba(255,255,255,0.13);
+              background: rgba(255,255,255,0.045);
             }
 
-            .circle-b {
+            .decor-dots {
               position: absolute;
-              left: -50px;
-              bottom: -45px;
-              width: 145px;
-              height: 145px;
-              border-radius: 999px;
-              background: rgba(255,255,255,0.12);
+              right: 38px;
+              top: 112px;
+              width: 78px;
+              height: 100px;
+              opacity: 0.18;
+              background-image: radial-gradient(#7dd3fc 2px, transparent 2px);
+              background-size: 16px 16px;
             }
 
-            .content {
+            .front-content,
+            .back-content {
               position: relative;
-              z-index: 2;
+              z-index: 3;
               height: 100%;
             }
 
-            .header {
+            .front-header {
               display: flex;
               justify-content: space-between;
               align-items: flex-start;
+              gap: 18px;
             }
 
-            .brand-row {
+            .brand-wrap {
+              display: flex;
+              align-items: center;
+              gap: 15px;
+            }
+
+            .logo-card {
+              width: 66px;
+              height: 66px;
+              border-radius: 18px;
+              background: rgba(255,255,255,0.98);
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              padding: 8px;
+              box-shadow: 0 12px 24px rgba(0,0,0,0.16);
+            }
+
+            .logo-card img {
+              width: 100%;
+              height: 100%;
+              object-fit: contain;
+              display: block;
+            }
+
+            .brand-title {
+              font-size: 30px;
+              font-weight: 900;
+              line-height: 0.98;
+              margin: 0;
+              letter-spacing: -0.8px;
+            }
+
+            .brand-subtitle {
+              margin: 9px 0 0;
+              font-size: 11px;
+              font-weight: 900;
+              letter-spacing: 4px;
+              color: #6ee7b7;
+              text-transform: uppercase;
+            }
+
+            .cliente-badge {
               display: flex;
               align-items: center;
               gap: 10px;
-            }
-
-            .brand {
-              font-size: 24px;
+              padding: 12px 16px;
+              border-radius: 999px;
+              background: linear-gradient(135deg, #059669, #047857);
+              color: #ffffff;
+              font-size: 14px;
               font-weight: 800;
-              line-height: 1.05;
-              margin: 0;
+              line-height: 1.1;
+              box-shadow: 0 12px 22px rgba(0,0,0,0.16);
             }
 
-            .subtitle {
-              font-size: 13px;
-              color: #d1fae5;
-              margin-top: 8px;
-              margin-bottom: 0;
+            .cliente-section {
+              margin-top: 32px;
             }
 
-            .badge {
+            .section-label {
+              display: flex;
+              align-items: center;
+              gap: 8px;
               font-size: 12px;
-              color: #d1fae5;
-              font-weight: 700;
-              text-align: right;
-              max-width: 90px;
-              line-height: 1.25;
-            }
-
-            .cliente-box {
-              margin-top: 22px;
-              margin-bottom: 10px;
-            }
-
-            .cliente-label {
-              font-size: 12px;
-              color: #d1fae5;
-              margin: 0 0 4px 0;
-            }
-
-            .cliente {
-              font-size: 20px;
-              font-weight: 800;
+              font-weight: 900;
+              letter-spacing: 2px;
+              color: #bfdbfe;
               text-transform: uppercase;
+              margin: 0 0 10px;
+            }
+
+            .cliente-nombre {
+              font-size: 27px;
+              font-weight: 900;
+              line-height: 1;
+              text-transform: uppercase;
+              letter-spacing: 2px;
+              margin: 0;
               white-space: nowrap;
               overflow: hidden;
               text-overflow: ellipsis;
-              max-width: 370px;
-              margin: 0;
+              max-width: 430px;
             }
 
-            .barcode-box {
-              background: white;
-              border-radius: 14px;
-              padding: 8px 10px 7px;
-              text-align: center;
-              margin-top: 12px;
-              min-height: 82px;
+            .points-line {
+              display: flex;
+              align-items: center;
+              gap: 9px;
+              margin-top: 15px;
+              font-size: 15px;
+              font-weight: 700;
+              color: #ffffff;
             }
 
-            .barcode-box svg {
-              width: 100%;
-              max-width: 330px;
-              height: 48px;
-              display: block;
-              margin: 0 auto;
+            .points-line strong {
+              color: #86efac;
             }
 
-            .codigo {
-              color: #111827;
+           .barcode-panel {
+  position: absolute;
+  left: 25px;
+  right: 25px;
+  bottom: 22px;
+  height: 82px;
+  background: rgba(255,255,255,0.97);
+  border-radius: 17px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 26px;
+  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.22);
+}
+
+.barcode-main {
+  width: 100%;
+  text-align: center;
+}
+
+            .back-top {
+              display: grid;
+              grid-template-columns: 1fr 1.15fr;
+              gap: 24px;
+              padding: 28px 33px 20px;
+              height: 248px;
+            }
+
+            .back-title {
               font-size: 12px;
-              font-weight: 800;
-              letter-spacing: 2px;
-              margin: 4px 0 0 0;
-              line-height: 1;
+              font-weight: 900;
+              letter-spacing: 3px;
+              color: #6ee7b7;
+              text-transform: uppercase;
+              margin: 0 0 18px;
+            }
+
+            .benefit-list {
+              display: flex;
+              flex-direction: column;
+              gap: 15px;
+            }
+
+            .benefit-item {
+              display: flex;
+              align-items: center;
+              gap: 13px;
+              color: #ffffff;
+              font-size: 17px;
+              font-weight: 700;
+              line-height: 1.15;
+            }
+
+            .benefit-icon {
+              width: 43px;
+              height: 43px;
+              border-radius: 999px;
+              background: linear-gradient(135deg, #10b981, #047857);
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              color: #ffffff;
+              flex-shrink: 0;
+            }
+
+            .how-box {
+              background: rgba(2, 132, 199, 0.24);
+              border: 1px solid rgba(125, 211, 252, 0.16);
+              border-radius: 18px;
+              padding: 14px;
+              display: flex;
+              align-items: center;
+              gap: 13px;
+              color: #ffffff;
+              font-size: 14px;
+              font-weight: 700;
+              line-height: 1.35;
+            }
+
+            .how-box-icon {
+              width: 46px;
+              height: 46px;
+              border-radius: 999px;
+              background: linear-gradient(135deg, #10b981, #047857);
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              flex-shrink: 0;
+            }
+
+            .back-note {
+              margin-top: 14px;
+              font-size: 13.5px;
+              line-height: 1.3;
+              color: #e0f2fe;
+              font-weight: 600;
+            }
+
+            .back-bottom {
+              height: 87px;
+              background: rgba(0, 25, 48, 0.45);
+              display: flex;
+              align-items: center;
+              gap: 14px;
+              padding: 16px 33px;
+              color: #ffffff;
+            }
+
+            .shield-icon {
+              width: 42px;
+              height: 42px;
+              flex-shrink: 0;
+              color: #e0f2fe;
+            }
+
+            .back-bottom p {
+              margin: 0;
+              font-size: 13.5px;
+              line-height: 1.3;
+              font-weight: 600;
+              color: #f8fafc;
             }
 
             @page {
               size: auto;
-              margin: 12mm 0 0 0;
+              margin: 10mm 0 0 0;
             }
 
             @media print {
@@ -573,13 +742,15 @@ export default function TarjetasPuntos() {
               }
 
               .print-wrapper {
-                padding-top: 18mm !important;
+                padding-top: 12mm !important;
               }
 
-              .tarjeta-print {
+              .tarjeta-frente,
+              .tarjeta-reverso {
                 box-shadow: none !important;
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
+                page-break-inside: avoid;
               }
             }
           </style>
@@ -742,11 +913,10 @@ export default function TarjetasPuntos() {
                   </div>
 
                   <span
-                    className={`text-xs font-bold px-3 py-1 rounded-full shrink-0 ${
-                      tarjeta.activo
-                        ? 'bg-sky-100 text-sky-700'
-                        : 'bg-slate-200 text-slate-600'
-                    }`}
+                    className={`text-xs font-bold px-3 py-1 rounded-full shrink-0 ${tarjeta.activo
+                      ? 'bg-sky-100 text-sky-700'
+                      : 'bg-slate-200 text-slate-600'
+                      }`}
                   >
                     {tarjeta.activo ? 'Activa' : 'Inactiva'}
                   </span>
@@ -941,11 +1111,10 @@ export default function TarjetasPuntos() {
 
                     <td className="px-5 py-4 text-center">
                       <span
-                        className={`text-xs font-bold px-3 py-1 rounded-full ${
-                          tarjeta.activo
-                            ? 'bg-sky-100 text-sky-700'
-                            : 'bg-slate-200 text-slate-600'
-                        }`}
+                        className={`text-xs font-bold px-3 py-1 rounded-full ${tarjeta.activo
+                          ? 'bg-sky-100 text-sky-700'
+                          : 'bg-slate-200 text-slate-600'
+                          }`}
                       >
                         {tarjeta.activo ? 'Activa' : 'Inactiva'}
                       </span>
@@ -1085,7 +1254,8 @@ export default function TarjetasPuntos() {
                         value={form.puntos_iniciales}
                         onChange={handleChange}
                         className="w-full pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
-                        placeholder="0"
+                        placeholder="El cliente iniciara con 0 puntos."
+                        disabled
                       />
                     </div>
                   </div>
@@ -1181,7 +1351,7 @@ export default function TarjetasPuntos() {
             onClick={cerrarTarjetaImprimir}
           />
 
-          <div className="relative bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden my-auto">
+          <div className="relative bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden my-auto">
             <div className="px-4 sm:px-6 py-5 border-b border-slate-100 flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <h2 className="text-lg sm:text-xl font-bold text-slate-800">
@@ -1201,187 +1371,518 @@ export default function TarjetasPuntos() {
             </div>
 
             <div className="p-4 sm:p-6 bg-slate-100 overflow-x-auto">
-              <div className="min-w-[430px] flex justify-center">
+              <div className="min-w-[520px] flex justify-center">
                 <div id="tarjeta-puntos-print">
                   <div
-                    className="tarjeta-print"
+                    className="print-stack"
                     style={{
-                      width: '430px',
-                      height: '295px',
-                      borderRadius: '24px',
-                      background: 'linear-gradient(135deg, #047857, #0f766e)',
-                      color: 'white',
-                      padding: '24px',
-                      position: 'relative',
-                      overflow: 'hidden',
-                      boxShadow: '0 24px 50px rgba(15, 23, 42, 0.25)',
+                      width: '520px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '28px',
                     }}
                   >
                     <div
-                      className="circle-a"
+                      className="tarjeta-frente"
                       style={{
-                        position: 'absolute',
-                        right: '-45px',
-                        top: '-45px',
-                        width: '150px',
-                        height: '150px',
-                        borderRadius: '999px',
-                        background: 'rgba(255,255,255,0.13)',
-                      }}
-                    />
-
-                    <div
-                      className="circle-b"
-                      style={{
-                        position: 'absolute',
-                        left: '-50px',
-                        bottom: '-45px',
-                        width: '145px',
-                        height: '145px',
-                        borderRadius: '999px',
-                        background: 'rgba(255,255,255,0.12)',
-                      }}
-                    />
-
-                    <div
-                      className="content"
-                      style={{
+                        width: '520px',
+                        height: '335px',
+                        borderRadius: '24px',
+                        overflow: 'hidden',
                         position: 'relative',
-                        zIndex: 2,
-                        height: '100%',
+                        color: '#ffffff',
+                        background:
+                          'linear-gradient(135deg, #003b66 0%, #004f86 42%, #01233f 100%)',
+                        padding: '25px',
+                        boxShadow: '0 20px 40px rgba(15, 23, 42, 0.22)',
                       }}
                     >
                       <div
-                        className="header"
+                        className="decor-soft"
                         style={{
-                          display: 'flex',
-                          alignItems: 'flex-start',
-                          justifyContent: 'space-between',
-                          gap: '12px',
+                          position: 'absolute',
+                          right: '80px',
+                          top: '-80px',
+                          width: '260px',
+                          height: '260px',
+                          borderRadius: '999px',
+                          background: 'rgba(255,255,255,0.045)',
+                        }}
+                      />
+
+                      <div
+                        className="decor-dots"
+                        style={{
+                          position: 'absolute',
+                          right: '38px',
+                          top: '112px',
+                          width: '78px',
+                          height: '100px',
+                          opacity: 0.18,
+                          backgroundImage:
+                            'radial-gradient(#7dd3fc 2px, transparent 2px)',
+                          backgroundSize: '16px 16px',
+                        }}
+                      />
+
+                      <div
+                        className="front-content"
+                        style={{
+                          position: 'relative',
+                          zIndex: 3,
+                          height: '100%',
                         }}
                       >
-                        <div>
+                        <div
+                          className="front-header"
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'flex-start',
+                            gap: '18px',
+                          }}
+                        >
                           <div
-                            className="brand-row"
+                            className="brand-wrap"
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '15px',
+                            }}
+                          >
+                            <div
+                              className="logo-card"
+                              style={{
+                                width: '66px',
+                                height: '66px',
+                                borderRadius: '18px',
+                                background: 'rgba(255,255,255,0.98)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                padding: '8px',
+                                boxShadow: '0 12px 24px rgba(0,0,0,0.16)',
+                              }}
+                            >
+                              <img
+                                src={logoShaddai}
+                                alt="Farmacia Shaddai"
+                                style={{
+                                  width: '100%',
+                                  height: '100%',
+                                  objectFit: 'contain',
+                                  display: 'block',
+                                }}
+                              />
+                            </div>
+
+                            <div>
+                              <h3
+                                className="brand-title"
+                                style={{
+                                  fontSize: '30px',
+                                  fontWeight: 900,
+                                  lineHeight: 0.98,
+                                  margin: 0,
+                                  letterSpacing: '-0.8px',
+                                }}
+                              >
+                                Farmacia<br />Shaddai
+                              </h3>
+
+                              <p
+                                className="brand-subtitle"
+                                style={{
+                                  marginTop: '9px',
+                                  marginBottom: 0,
+                                  fontSize: '11px',
+                                  fontWeight: 900,
+                                  letterSpacing: '4px',
+                                  color: '#6ee7b7',
+                                  textTransform: 'uppercase',
+                                }}
+                              >
+                                Shaddai Club
+                              </p>
+                            </div>
+                          </div>
+
+                          <div
+                            className="cliente-badge"
                             style={{
                               display: 'flex',
                               alignItems: 'center',
                               gap: '10px',
+                              padding: '12px 16px',
+                              borderRadius: '999px',
+                              background: 'linear-gradient(135deg, #059669, #047857)',
+                              color: '#ffffff',
+                              fontSize: '14px',
+                              fontWeight: 800,
+                              lineHeight: 1.1,
+                              boxShadow: '0 12px 22px rgba(0,0,0,0.16)',
                             }}
                           >
-                            <CreditCard size={30} />
-
-                            <h3
-                              className="brand"
-                              style={{
-                                fontSize: '24px',
-                                fontWeight: 800,
-                                lineHeight: 1.05,
-                                margin: 0,
-                              }}
-                            >
-                              Farmacia<br />Shaddai
-                            </h3>
+                            <Star size={24} />
+                            <span>
+                              Cliente<br />frecuente
+                            </span>
                           </div>
-
-                          <p
-                            className="subtitle"
-                            style={{
-                              fontSize: '13px',
-                              color: '#d1fae5',
-                              marginTop: '8px',
-                              marginBottom: 0,
-                            }}
-                          >
-                            Tarjeta de puntos
-                          </p>
                         </div>
 
                         <div
-                          className="badge"
+                          className="cliente-section"
                           style={{
-                            fontSize: '12px',
-                            color: '#d1fae5',
-                            fontWeight: 700,
-                            textAlign: 'right',
-                            maxWidth: '90px',
-                            lineHeight: 1.25,
+                            marginTop: '32px',
                           }}
                         >
-                          Cliente frecuente
+                          <p
+                            className="section-label"
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              fontSize: '12px',
+                              fontWeight: 900,
+                              letterSpacing: '2px',
+                              color: '#bfdbfe',
+                              textTransform: 'uppercase',
+                              marginTop: 0,
+                              marginBottom: '10px',
+                            }}
+                          >
+                            <User size={18} />
+                            Cliente
+                          </p>
+
+                          <p
+                            className="cliente-nombre"
+                            style={{
+                              fontSize: '27px',
+                              fontWeight: 900,
+                              lineHeight: 1,
+                              textTransform: 'uppercase',
+                              letterSpacing: '2px',
+                              margin: 0,
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              maxWidth: '430px',
+                            }}
+                          >
+                            {tarjetaImprimir.nombre_cliente}
+                          </p>
+
+                          <div
+                            className="points-line"
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '9px',
+                              marginTop: '15px',
+                              fontSize: '15px',
+                              fontWeight: 700,
+                              color: '#ffffff',
+                            }}
+                          >
+                            <BadgePercent size={19} />
+                            Acumula{' '}
+                            <strong style={{ color: '#86efac' }}>
+                              puntos
+                            </strong>{' '}
+                            por cada compra
+                          </div>
+                        </div>
+
+                        <div
+                          className="barcode-panel"
+                          style={{
+                            position: 'absolute',
+                            left: '25px',
+                            right: '25px',
+                            bottom: '22px',
+                            height: '82px',
+                            background: 'rgba(255,255,255,0.97)',
+                            borderRadius: '17px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            padding: '12px 26px',
+                            boxShadow: '0 16px 30px rgba(15, 23, 42, 0.22)',
+                          }}
+                        >
+                          <div
+                            className="barcode-main"
+                            style={{
+                              width: '100%',
+                              textAlign: 'center',
+                            }}
+                          >
+                            <Barcode
+                              value={tarjetaImprimir.codigo_barras}
+                              format="CODE128"
+                              height={42}
+                              width={1.25}
+                              displayValue={false}
+                              margin={0}
+                            />
+
+                            <p
+                              className="codigo"
+                              style={{
+                                color: '#0f172a',
+                                fontSize: '12px',
+                                fontWeight: 900,
+                                letterSpacing: '4px',
+                                marginTop: '5px',
+                                marginBottom: 0,
+                                lineHeight: 1,
+                              }}
+                            >
+                              {tarjetaImprimir.codigo_barras}
+                            </p>
+                          </div>
                         </div>
                       </div>
+                    </div>
+
+                    <div
+                      className="tarjeta-reverso"
+                      style={{
+                        width: '520px',
+                        height: '335px',
+                        borderRadius: '24px',
+                        overflow: 'hidden',
+                        position: 'relative',
+                        color: '#ffffff',
+                        background:
+                          'linear-gradient(135deg, #003b66 0%, #004f86 42%, #01233f 100%)',
+                        boxShadow: '0 20px 40px rgba(15, 23, 42, 0.22)',
+                      }}
+                    >
+                      <div
+                        className="decor-soft"
+                        style={{
+                          position: 'absolute',
+                          right: '80px',
+                          top: '-80px',
+                          width: '260px',
+                          height: '260px',
+                          borderRadius: '999px',
+                          background: 'rgba(255,255,255,0.045)',
+                        }}
+                      />
 
                       <div
-                        className="cliente-box"
+                        className="back-content"
                         style={{
-                          marginTop: '22px',
-                          marginBottom: '10px',
+                          position: 'relative',
+                          zIndex: 3,
+                          height: '100%',
                         }}
                       >
-                        <p
-                          className="cliente-label"
+                        <div
+                          className="back-top"
                           style={{
-                            fontSize: '12px',
-                            color: '#d1fae5',
-                            marginBottom: '4px',
-                            marginTop: 0,
+                            display: 'grid',
+                            gridTemplateColumns: '1fr 1.15fr',
+                            gap: '24px',
+                            padding: '32px 33px 18px',
+                            height: '238px',
                           }}
                         >
-                          Cliente
-                        </p>
+                          <div>
+                            <p
+                              className="back-title"
+                              style={{
+                                fontSize: '12px',
+                                fontWeight: 900,
+                                letterSpacing: '3px',
+                                color: '#6ee7b7',
+                                textTransform: 'uppercase',
+                                marginTop: 0,
+                                marginBottom: '18px',
+                              }}
+                            >
+                              Beneficios
+                            </p>
 
-                        <p
-                          className="cliente"
+                            <div
+                              className="benefit-list"
+                              style={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '15px',
+                              }}
+                            >
+                              <div
+                                className="benefit-item"
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '13px',
+                                  color: '#ffffff',
+                                  fontSize: '17px',
+                                  fontWeight: 700,
+                                  lineHeight: 1.15,
+                                }}
+                              >
+                                <div
+                                  className="benefit-icon"
+                                  style={{
+                                    width: '43px',
+                                    height: '43px',
+                                    borderRadius: '999px',
+                                    background:
+                                      'linear-gradient(135deg, #10b981, #047857)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    color: '#ffffff',
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  <TicketPercent size={23} />
+                                </div>
+                                <span>
+                                  Descuentos<br />exclusivos
+                                </span>
+                              </div>
+
+                              <div
+                                className="benefit-item"
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '13px',
+                                  color: '#ffffff',
+                                  fontSize: '17px',
+                                  fontWeight: 700,
+                                  lineHeight: 1.15,
+                                }}
+                              >
+                                <div
+                                  className="benefit-icon"
+                                  style={{
+                                    width: '43px',
+                                    height: '43px',
+                                    borderRadius: '999px',
+                                    background:
+                                      'linear-gradient(135deg, #10b981, #047857)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    color: '#ffffff',
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  <Gift size={23} />
+                                </div>
+                                <span>
+                                  Promociones<br />especiales
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div>
+                            
+                                  <br />
+                            <div
+                              className="how-box"
+                              style={{
+                                background: 'rgba(2, 132, 199, 0.24)',
+                                border: '1px solid rgba(125, 211, 252, 0.16)',
+                                borderRadius: '18px',
+                                padding: '14px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '13px',
+                                color: '#ffffff',
+                                fontSize: '14px',
+                                fontWeight: 700,
+                                lineHeight: 1.35,
+                              }}
+                            >
+                              <div
+                                className="how-box-icon"
+                                style={{
+                                  width: '46px',
+                                  height: '46px',
+                                  borderRadius: '999px',
+                                  background:
+                                    'linear-gradient(135deg, #10b981, #047857)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  flexShrink: 0,
+                                }}
+                              >
+                                <ShoppingBag size={24} />
+                              </div>
+
+                              <span>
+                                Acumula puntos al realizar tus compras en Farmacia Shaddai.
+                              </span>
+                              <br />
+                            </div>
+                            <br />
+
+<p
+                              className="back-title"
+                              style={{
+                                fontSize: '12px',
+                                fontWeight: 900,
+                                letterSpacing: '3px',
+                                color: '#6ee7b7',
+                                textTransform: 'uppercase',
+                                marginTop: 0,
+                                marginBottom: '18px',
+                              }}
+                            >
+                            {/*hola */}   
+                            </p>
+
+
+                          </div>
+                        </div>
+
+                        <div
+                          className="back-bottom"
                           style={{
-                            fontSize: '20px',
-                            fontWeight: 800,
-                            textTransform: 'uppercase',
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            maxWidth: '370px',
-                            margin: 0,
+                            height: '97px',
+                            background: 'rgba(0, 25, 48, 0.45)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '14px',
+                            padding: '18px 33px',
+                            color: '#ffffff',
                           }}
                         >
-                          {tarjetaImprimir.nombre_cliente}
-                        </p>
-                      </div>
+                          <ShieldCheck
+                            className="shield-icon"
+                            size={42}
+                            style={{
+                              width: '42px',
+                              height: '42px',
+                              flexShrink: 0,
+                              color: '#e0f2fe',
+                            }}
+                          />
 
-                      <div
-                        className="barcode-box"
-                        style={{
-                          background: 'white',
-                          borderRadius: '14px',
-                          padding: '8px 10px 7px',
-                          textAlign: 'center',
-                          marginTop: '12px',
-                          minHeight: '82px',
-                        }}
-                      >
-                        <Barcode
-                          value={tarjetaImprimir.codigo_barras}
-                          format="CODE128"
-                          height={42}
-                          width={1.25}
-                          displayValue={false}
-                          margin={0}
-                        />
-
-                        <p
-                          className="codigo"
-                          style={{
-                            color: '#111827',
-                            fontSize: '12px',
-                            fontWeight: 800,
-                            letterSpacing: '2px',
-                            marginTop: '4px',
-                            marginBottom: 0,
-                            lineHeight: 1,
-                          }}
-                        >
-                          {tarjetaImprimir.codigo_barras}
-                        </p>
+                          <p
+                            style={{
+                              margin: 0,
+                              fontSize: '13.5px',
+                              lineHeight: 1.3,
+                              fontWeight: 600,
+                              color: '#f8fafc',
+                            }}
+                          >
+                            Esta tarjeta es personal e intransferible.
+                            Preséntala en cada compra para acumular puntos.
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </div>
