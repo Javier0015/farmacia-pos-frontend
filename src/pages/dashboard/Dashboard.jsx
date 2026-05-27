@@ -1260,16 +1260,411 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* DEJA TUS MODALES ACTUALES ABAJO SIN CAMBIOS */}
+      {/* MODAL GASTOS OPERATIVOS */}
       {modalGastosAbierto && (
         <div className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5">
-          {/* aquí deja exactamente tu modal de gastos actual */}
+          <div className="w-full max-w-7xl max-h-[92vh] overflow-hidden bg-white rounded-[2rem] shadow-2xl border border-slate-200">
+            <div className="flex items-start justify-between gap-4 p-5 sm:p-6 border-b border-slate-100">
+              <div className="min-w-0">
+                <div className="inline-flex items-center gap-2 rounded-full bg-red-50 text-red-700 px-3 py-1 text-xs font-black uppercase tracking-wide">
+                  <CircleDollarSign size={15} />
+                  Gastos operativos
+                </div>
+                <h2 className="mt-3 text-xl sm:text-2xl font-black text-slate-900">
+                  Detalle de gastos operativos
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Movimientos registrados del {fechaInicio} al {fechaFin}.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setModalGastosAbierto(false)}
+                className="w-11 h-11 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center shrink-0 transition"
+                aria-label="Cerrar modal de gastos operativos"
+              >
+                <X size={21} />
+              </button>
+            </div>
+
+            <div className="p-5 sm:p-6 overflow-auto max-h-[76vh]">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+                <div className="rounded-3xl bg-red-50 border border-red-100 p-4">
+                  <p className="text-xs font-black text-red-700 uppercase tracking-wide">
+                    Total filtrado
+                  </p>
+                  <p className="mt-2 text-2xl sm:text-3xl font-black text-red-700">
+                    {formatoMoneda(totalGastosFiltrados)}
+                  </p>
+                </div>
+
+                <div className="rounded-3xl bg-slate-50 border border-slate-100 p-4">
+                  <p className="text-xs font-black text-slate-500 uppercase tracking-wide">
+                    Registros
+                  </p>
+                  <p className="mt-2 text-2xl sm:text-3xl font-black text-slate-900">
+                    {gastosFiltrados.length}
+                  </p>
+                </div>
+
+                <div className="rounded-3xl bg-sky-50 border border-sky-100 p-4">
+                  <p className="text-xs font-black text-sky-700 uppercase tracking-wide">
+                    Sucursal
+                  </p>
+                  <p className="mt-2 text-base font-black text-sky-800 truncate">
+                    {sucursalActual?.nombre || 'Sucursal seleccionada'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mb-5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+                <div className="flex flex-col sm:flex-row gap-3 flex-1">
+                  <input
+                    type="text"
+                    value={busquedaGastos}
+                    onChange={(e) => {
+                      setBusquedaGastos(e.target.value);
+                      setPaginaGastos(1);
+                    }}
+                    placeholder="Buscar por concepto, método, usuario, referencia..."
+                    className="w-full lg:max-w-xl px-4 py-3 rounded-2xl border border-slate-200 bg-white text-slate-700 font-semibold focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  />
+
+                  <select
+                    value={filasPorPaginaGastos}
+                    onChange={(e) => {
+                      setFilasPorPaginaGastos(Number(e.target.value));
+                      setPaginaGastos(1);
+                    }}
+                    className="px-4 py-3 rounded-2xl border border-slate-200 bg-white text-slate-700 font-bold focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  >
+                    <option value={10}>10 filas</option>
+                    <option value={25}>25 filas</option>
+                    <option value={50}>50 filas</option>
+                    <option value={100}>100 filas</option>
+                  </select>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={exportarGastosExcel}
+                  className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black transition"
+                >
+                  <Download size={18} />
+                  Exportar Excel
+                </button>
+              </div>
+
+              <div className="overflow-x-auto rounded-3xl border border-slate-100">
+                <table className="w-full min-w-[1100px]">
+                  <thead className="bg-slate-50 border-b border-slate-100">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-black text-slate-500 uppercase">
+                        Fecha
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-black text-slate-500 uppercase">
+                        Tipo
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-black text-slate-500 uppercase">
+                        Concepto
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-black text-slate-500 uppercase">
+                        Método
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-black text-slate-500 uppercase">
+                        Monto
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-black text-slate-500 uppercase">
+                        Referencia
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-black text-slate-500 uppercase">
+                        Usuario
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-black text-slate-500 uppercase">
+                        Observaciones
+                      </th>
+                    </tr>
+                  </thead>
+
+                  <tbody className="divide-y divide-slate-100">
+                    {gastosPaginados.length === 0 ? (
+                      <tr>
+                        <td colSpan="8" className="px-4 py-12 text-center text-slate-500 font-bold">
+                          No hay gastos operativos para mostrar.
+                        </td>
+                      </tr>
+                    ) : (
+                      gastosPaginados.map((item, index) => (
+                        <tr key={`${item.id_movimiento || item.id || index}`} className="hover:bg-slate-50 transition">
+                          <td className="px-4 py-3 text-sm text-slate-600 whitespace-nowrap">
+                            {formatoFecha(item.fecha_movimiento)}
+                          </td>
+                          <td className="px-4 py-3 text-sm font-bold text-slate-700">
+                            {item.tipo || '—'}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-slate-700 font-semibold">
+                            {item.concepto || '—'}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-slate-600">
+                            {item.metodo_pago || '—'}
+                          </td>
+                          <td className="px-4 py-3 text-right font-black text-red-600 whitespace-nowrap">
+                            {formatoMoneda(item.monto)}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-slate-600">
+                            {item.referencia || '—'}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-slate-600">
+                            {item.usuario || '—'}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-slate-500 max-w-xs truncate">
+                            {item.observaciones || '—'}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mt-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <p className="text-sm font-bold text-slate-500">
+                  Mostrando {gastosPaginados.length} de {gastosFiltrados.length} registro(s)
+                </p>
+
+                <div className="flex items-center justify-between sm:justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setPaginaGastos((pagina) => Math.max(1, pagina - 1))}
+                    disabled={paginaGastos <= 1}
+                    className="px-4 py-2 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-black transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Anterior
+                  </button>
+
+                  <span className="text-sm font-black text-slate-600">
+                    Página {paginaGastos} de {totalPaginasGastos}
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPaginaGastos((pagina) => Math.min(totalPaginasGastos, pagina + 1))
+                    }
+                    disabled={paginaGastos >= totalPaginasGastos}
+                    className="px-4 py-2 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-black transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Siguiente
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
+      {/* MODAL GANANCIAS POR PRODUCTO */}
       {modalGananciasAbierto && (
         <div className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5">
-          {/* aquí deja exactamente tu modal de ganancias actual */}
+          <div className="w-full max-w-7xl max-h-[92vh] overflow-hidden bg-white rounded-[2rem] shadow-2xl border border-slate-200">
+            <div className="flex items-start justify-between gap-4 p-5 sm:p-6 border-b border-slate-100">
+              <div className="min-w-0">
+                <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 text-emerald-700 px-3 py-1 text-xs font-black uppercase tracking-wide">
+                  <TrendingUp size={15} />
+                  Ganancia estimada
+                </div>
+                <h2 className="mt-3 text-xl sm:text-2xl font-black text-slate-900">
+                  Utilidad por producto
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Comparativa de costo, venta, margen y utilidad del {fechaInicio} al {fechaFin}.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setModalGananciasAbierto(false)}
+                className="w-11 h-11 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center shrink-0 transition"
+                aria-label="Cerrar modal de ganancias"
+              >
+                <X size={21} />
+              </button>
+            </div>
+
+            <div className="p-5 sm:p-6 overflow-auto max-h-[76vh]">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+                <div className="rounded-3xl bg-emerald-50 border border-emerald-100 p-4">
+                  <p className="text-xs font-black text-emerald-700 uppercase tracking-wide">
+                    Ganancia filtrada
+                  </p>
+                  <p className="mt-2 text-2xl sm:text-3xl font-black text-emerald-700">
+                    {formatoMoneda(totalGananciaFiltrada)}
+                  </p>
+                </div>
+
+                <div className="rounded-3xl bg-sky-50 border border-sky-100 p-4">
+                  <p className="text-xs font-black text-sky-700 uppercase tracking-wide">
+                    Total vendido
+                  </p>
+                  <p className="mt-2 text-2xl sm:text-3xl font-black text-sky-700">
+                    {formatoMoneda(totalVendidoGananciaFiltrada)}
+                  </p>
+                </div>
+
+                <div className="rounded-3xl bg-slate-50 border border-slate-100 p-4">
+                  <p className="text-xs font-black text-slate-500 uppercase tracking-wide">
+                    Costo estimado
+                  </p>
+                  <p className="mt-2 text-2xl sm:text-3xl font-black text-slate-900">
+                    {formatoMoneda(totalCostoGananciaFiltrada)}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mb-5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+                <div className="flex flex-col sm:flex-row gap-3 flex-1">
+                  <input
+                    type="text"
+                    value={busquedaGanancias}
+                    onChange={(e) => {
+                      setBusquedaGanancias(e.target.value);
+                      setPaginaGanancias(1);
+                    }}
+                    placeholder="Buscar producto..."
+                    className="w-full lg:max-w-xl px-4 py-3 rounded-2xl border border-slate-200 bg-white text-slate-700 font-semibold focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  />
+
+                  <select
+                    value={filasPorPaginaGanancias}
+                    onChange={(e) => {
+                      setFilasPorPaginaGanancias(Number(e.target.value));
+                      setPaginaGanancias(1);
+                    }}
+                    className="px-4 py-3 rounded-2xl border border-slate-200 bg-white text-slate-700 font-bold focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  >
+                    <option value={10}>10 filas</option>
+                    <option value={25}>25 filas</option>
+                    <option value={50}>50 filas</option>
+                    <option value={100}>100 filas</option>
+                  </select>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={exportarGananciasExcel}
+                  className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black transition"
+                >
+                  <Download size={18} />
+                  Exportar Excel
+                </button>
+              </div>
+
+              <div className="overflow-x-auto rounded-3xl border border-slate-100">
+                <table className="w-full min-w-[1200px]">
+                  <thead className="bg-slate-50 border-b border-slate-100">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-black text-slate-500 uppercase">
+                        Producto
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-black text-slate-500 uppercase">
+                        Cantidad
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-black text-slate-500 uppercase">
+                        Costo unitario
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-black text-slate-500 uppercase">
+                        Venta promedio
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-black text-slate-500 uppercase">
+                        Total costo
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-black text-slate-500 uppercase">
+                        Total vendido
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-black text-slate-500 uppercase">
+                        Ganancia
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-black text-slate-500 uppercase">
+                        Margen
+                      </th>
+                    </tr>
+                  </thead>
+
+                  <tbody className="divide-y divide-slate-100">
+                    {gananciasPaginadas.length === 0 ? (
+                      <tr>
+                        <td colSpan="8" className="px-4 py-12 text-center text-slate-500 font-bold">
+                          No hay productos vendidos para mostrar.
+                        </td>
+                      </tr>
+                    ) : (
+                      gananciasPaginadas.map((item, index) => (
+                        <tr key={`${item.id_producto || index}`} className="hover:bg-slate-50 transition">
+                          <td className="px-4 py-3 font-bold text-slate-800 min-w-[260px]">
+                            {item.producto || '—'}
+                          </td>
+                          <td className="px-4 py-3 text-right text-slate-600 whitespace-nowrap">
+                            {formatoNumero(item.cantidad_vendida)}
+                          </td>
+                          <td className="px-4 py-3 text-right text-slate-600 whitespace-nowrap">
+                            {formatoMoneda(item.costo_compra_unitario)}
+                          </td>
+                          <td className="px-4 py-3 text-right text-slate-600 whitespace-nowrap">
+                            {formatoMoneda(item.precio_venta_promedio)}
+                          </td>
+                          <td className="px-4 py-3 text-right text-slate-600 whitespace-nowrap">
+                            {formatoMoneda(item.total_costo_compra)}
+                          </td>
+                          <td className="px-4 py-3 text-right text-sky-700 font-black whitespace-nowrap">
+                            {formatoMoneda(item.total_vendido)}
+                          </td>
+                          <td className="px-4 py-3 text-right text-emerald-700 font-black whitespace-nowrap">
+                            {formatoMoneda(item.ganancia)}
+                          </td>
+                          <td className="px-4 py-3 text-right text-slate-700 font-black whitespace-nowrap">
+                            {formatoNumero(item.margen_porcentaje)}%
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mt-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <p className="text-sm font-bold text-slate-500">
+                  Mostrando {gananciasPaginadas.length} de {gananciasFiltradas.length} producto(s)
+                </p>
+
+                <div className="flex items-center justify-between sm:justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setPaginaGanancias((pagina) => Math.max(1, pagina - 1))}
+                    disabled={paginaGanancias <= 1}
+                    className="px-4 py-2 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-black transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Anterior
+                  </button>
+
+                  <span className="text-sm font-black text-slate-600">
+                    Página {paginaGanancias} de {totalPaginasGanancias}
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPaginaGanancias((pagina) => Math.min(totalPaginasGanancias, pagina + 1))
+                    }
+                    disabled={paginaGanancias >= totalPaginasGanancias}
+                    className="px-4 py-2 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-black transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Siguiente
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
