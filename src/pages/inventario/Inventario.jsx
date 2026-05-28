@@ -58,7 +58,6 @@ const tiposMovimiento = [
   { value: 'AJUSTE_NEGATIVO', label: 'Ajuste negativo', tipo: 'salida' },
   { value: 'MERMA', label: 'Merma', tipo: 'salida' },
   { value: 'CADUCIDAD', label: 'Caducidad', tipo: 'salida' },
-  { value: 'DEVOLUCION_CLIENTE', label: 'Devolución cliente', tipo: 'entrada' },
   { value: 'DEVOLUCION_PROVEEDOR', label: 'Devolución proveedor', tipo: 'salida' },
 ];
 
