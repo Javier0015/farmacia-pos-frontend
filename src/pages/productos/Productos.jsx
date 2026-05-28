@@ -30,6 +30,8 @@ export default function Productos() {
   const [productos, setProductos] = useState([]);
   const [categorias, setCategorias] = useState([]);
   const [buscar, setBuscar] = useState('');
+  const [busquedaCategoria, setBusquedaCategoria] = useState('');
+  const [mostrarCategorias, setMostrarCategorias] = useState(false);
   const [cargando, setCargando] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [modalAbierto, setModalAbierto] = useState(false);
@@ -90,6 +92,8 @@ export default function Productos() {
 
   const abrirNuevo = () => {
     setForm(formInicial);
+    setBusquedaCategoria('');
+    setMostrarCategorias(false);
     setModoEdicion(false);
     setProductoEditando(null);
     setModalAbierto(true);
@@ -98,6 +102,9 @@ export default function Productos() {
   const abrirEditar = (producto) => {
     setProductoEditando(producto);
     setModoEdicion(true);
+
+    setBusquedaCategoria(producto.categoria || '');
+    setMostrarCategorias(false);
 
     setForm({
       codigo_barras: producto.codigo_barras || '',
@@ -113,6 +120,9 @@ export default function Productos() {
       activo: Boolean(producto.activo),
     });
 
+    setBusquedaCategoria(producto.categoria || '');
+    setMostrarCategorias(false);
+
     setModalAbierto(true);
   };
 
@@ -121,6 +131,8 @@ export default function Productos() {
     setModoEdicion(false);
     setProductoEditando(null);
     setForm(formInicial);
+    setBusquedaCategoria('');
+    setMostrarCategorias(false);
   };
 
   const handleChange = (e) => {
@@ -269,6 +281,26 @@ export default function Productos() {
       style: 'currency',
       currency: 'MXN',
     });
+  };
+
+  const categoriaSeleccionada = categorias.find(
+    (cat) => Number(cat.id_categoria) === Number(form.id_categoria)
+  );
+
+  const categoriasFiltradas = categorias.filter((cat) =>
+    cat.nombre
+      ?.toLowerCase()
+      .includes(busquedaCategoria.trim().toLowerCase())
+  );
+
+  const seleccionarCategoria = (cat) => {
+    setForm({
+      ...form,
+      id_categoria: cat ? cat.id_categoria : '',
+    });
+
+    setBusquedaCategoria(cat ? cat.nombre : '');
+    setMostrarCategorias(false);
   };
 
   return (
@@ -425,11 +457,10 @@ export default function Productos() {
 
                     <td className="px-5 py-4 text-center">
                       <span
-                        className={`text-xs font-bold px-3 py-1 rounded-full ${
-                          producto.activo
-                            ? 'bg-sky-100 text-sky-700'
-                            : 'bg-slate-200 text-slate-600'
-                        }`}
+                        className={`text-xs font-bold px-3 py-1 rounded-full ${producto.activo
+                          ? 'bg-sky-100 text-sky-700'
+                          : 'bg-slate-200 text-slate-600'
+                          }`}
                       >
                         {producto.activo ? 'Activo' : 'Inactivo'}
                       </span>
@@ -512,23 +543,86 @@ export default function Productos() {
                   />
                 </div>
 
-                <div>
+                <div className="relative">
                   <label className="block text-sm font-bold text-slate-700 mb-2">
                     Categoría
                   </label>
-                  <select
-                    name="id_categoria"
-                    value={form.id_categoria}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
-                  >
-                    <option value="">Sin categoría</option>
-                    {categorias.map((cat) => (
-                      <option key={cat.id_categoria} value={cat.id_categoria}>
-                        {cat.nombre}
-                      </option>
-                    ))}
-                  </select>
+
+                  <div className="relative">
+                    <Search
+                      size={18}
+                      className="absolute left-4 top-3.5 text-slate-400"
+                    />
+
+                    <input
+                      type="text"
+                      value={
+                        mostrarCategorias
+                          ? busquedaCategoria
+                          : categoriaSeleccionada?.nombre || busquedaCategoria
+                      }
+                      onChange={(e) => {
+                        setBusquedaCategoria(e.target.value);
+                        setMostrarCategorias(true);
+
+                        if (e.target.value.trim() === '') {
+                          setForm({
+                            ...form,
+                            id_categoria: '',
+                          });
+                        }
+                      }}
+                      onFocus={() => {
+                        setBusquedaCategoria(categoriaSeleccionada?.nombre || '');
+                        setMostrarCategorias(true);
+                      }}
+                      placeholder="Buscar categoría..."
+                      className="w-full pl-11 pr-10 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    />
+
+                    {form.id_categoria && (
+                      <button
+                        type="button"
+                        onClick={() => seleccionarCategoria(null)}
+                        className="absolute right-3 top-3 text-slate-400 hover:text-red-500"
+                        title="Quitar categoría"
+                      >
+                        <X size={18} />
+                      </button>
+                    )}
+                  </div>
+
+                  {mostrarCategorias && (
+                    <div className="absolute z-[9999] mt-2 w-full bg-white border border-slate-200 rounded-2xl shadow-xl max-h-60 overflow-y-auto">
+                      <button
+                        type="button"
+                        onClick={() => seleccionarCategoria(null)}
+                        className="w-full text-left px-4 py-3 hover:bg-slate-50 font-semibold text-slate-600"
+                      >
+                        Sin categoría
+                      </button>
+
+                      {categoriasFiltradas.length === 0 ? (
+                        <div className="px-4 py-3 text-sm text-slate-500">
+                          No se encontraron categorías.
+                        </div>
+                      ) : (
+                        categoriasFiltradas.map((cat) => (
+                          <button
+                            key={cat.id_categoria}
+                            type="button"
+                            onClick={() => seleccionarCategoria(cat)}
+                            className={`w-full text-left px-4 py-3 hover:bg-sky-50 transition ${Number(form.id_categoria) === Number(cat.id_categoria)
+                                ? 'bg-sky-100 text-sky-700 font-bold'
+                                : 'text-slate-700'
+                              }`}
+                          >
+                            {cat.nombre}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div>
