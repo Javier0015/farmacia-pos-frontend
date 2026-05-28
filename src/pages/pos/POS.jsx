@@ -2524,7 +2524,7 @@ function ModalRecetasPendientes({
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
           <div>
             <h2 className="text-xl font-bold text-slate-800">Recetas pendientes Doctor Shaddai</h2>
-            <p className="text-sm text-slate-500">Selecciona una receta. Cada producto abrirá la misma pantalla de lotes del POS.</p>
+            <p className="text-sm text-slate-500">Selecciona una receta y atiendela.</p>
           </div>
           <button type="button" onClick={onClose} className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200">
             <X size={20} />

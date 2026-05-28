@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Swal from 'sweetalert2';
 import {
   Plus,
@@ -9,8 +9,11 @@ import {
   RefreshCw,
   X,
   Save,
+  Camera,
 } from 'lucide-react';
 import api from '../../api/axios';
+
+import BarcodeScannerModal from '../../components/BarcodeScannerModal';
 
 const formInicial = {
   codigo_barras: '',
@@ -38,6 +41,9 @@ export default function Productos() {
   const [modoEdicion, setModoEdicion] = useState(false);
   const [productoEditando, setProductoEditando] = useState(null);
   const [form, setForm] = useState(formInicial);
+  const scannerRef = useRef(null);
+  const [escanerAbierto, setEscanerAbierto] = useState(false);
+  const [iniciandoEscaner, setIniciandoEscaner] = useState(false);
 
   const cargarCategorias = async () => {
     try {
@@ -305,6 +311,105 @@ export default function Productos() {
     setBusquedaCategoria(cat ? cat.nombre : '');
     setMostrarCategorias(false);
   };
+
+  const detenerEscanerCodigo = async () => {
+    try {
+      if (scannerRef.current) {
+        await scannerRef.current.stop().catch(() => { });
+        await scannerRef.current.clear().catch(() => { });
+        scannerRef.current = null;
+      }
+    } catch (error) {
+      console.error('Error al detener escáner:', error);
+    }
+  };
+
+  const cerrarEscanerCodigo = async () => {
+    await detenerEscanerCodigo();
+    setEscanerAbierto(false);
+    setIniciandoEscaner(false);
+  };
+
+  const abrirEscanerCodigo = () => {
+    setEscanerAbierto(true);
+  };
+
+  useEffect(() => {
+    if (!escanerAbierto) return;
+
+    let cancelado = false;
+
+    const iniciarEscaner = async () => {
+      try {
+        setIniciandoEscaner(true);
+
+        await new Promise((resolve) => setTimeout(resolve, 300));
+
+        if (cancelado) return;
+
+        const scanner = new Html5Qrcode('scanner-codigo-barras');
+
+        scannerRef.current = scanner;
+
+        await scanner.start(
+          {
+            facingMode: 'environment',
+          },
+          {
+            fps: 10,
+            qrbox: {
+              width: 280,
+              height: 160,
+            },
+            formatsToSupport: [
+              Html5QrcodeSupportedFormats.EAN_13,
+              Html5QrcodeSupportedFormats.EAN_8,
+              Html5QrcodeSupportedFormats.CODE_128,
+              Html5QrcodeSupportedFormats.CODE_39,
+              Html5QrcodeSupportedFormats.UPC_A,
+              Html5QrcodeSupportedFormats.UPC_E,
+            ],
+          },
+          async (decodedText) => {
+            setForm((prev) => ({
+              ...prev,
+              codigo_barras: decodedText,
+            }));
+
+            await cerrarEscanerCodigo();
+
+            Swal.fire({
+              icon: 'success',
+              title: 'Código escaneado',
+              text: decodedText,
+              timer: 1300,
+              showConfirmButton: false,
+            });
+          },
+          () => { }
+        );
+      } catch (error) {
+        console.error(error);
+
+        Swal.fire({
+          icon: 'error',
+          title: 'No se pudo abrir la cámara',
+          text: 'Verifica que el navegador tenga permiso para usar la cámara. En teléfono normalmente debe abrirse desde HTTPS.',
+        });
+
+        setEscanerAbierto(false);
+      } finally {
+        setIniciandoEscaner(false);
+      }
+    };
+
+    iniciarEscaner();
+
+    return () => {
+      cancelado = true;
+      detenerEscanerCodigo();
+    };
+  }, [escanerAbierto]);
 
   return (
     <div className="space-y-6">
@@ -578,13 +683,26 @@ export default function Productos() {
                   <label className="block text-sm font-bold text-slate-700 mb-2">
                     Código de barras
                   </label>
-                  <input
-                    name="codigo_barras"
-                    value={form.codigo_barras}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
-                    placeholder="750..."
-                  />
+
+                  <div className="flex gap-2">
+                    <input
+                      name="codigo_barras"
+                      value={form.codigo_barras}
+                      onChange={handleChange}
+                      className="flex-1 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                      placeholder="750..."
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() => setEscanerAbierto(true)}
+                      className="px-4 py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold flex items-center justify-center gap-2 transition"
+                      title="Escanear código de barras"
+                    >
+                      <Camera size={20} />
+                      <span className="hidden sm:inline">Escanear</span>
+                    </button>
+                  </div>
                 </div>
 
                 <div className="relative">
@@ -805,6 +923,77 @@ export default function Productos() {
           </div>
         </div>
       )}
+      {escanerAbierto && (
+        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 z-[9999]">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-slate-800">
+                  Escanear código
+                </h3>
+                <p className="text-sm text-slate-500">
+                  Apunta la cámara al código de barras del producto.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={cerrarEscanerCodigo}
+                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-5">
+              {iniciandoEscaner && (
+                <div className="mb-3 text-sm text-slate-500 text-center">
+                  Abriendo cámara...
+                </div>
+              )}
+
+              <div
+                id="scanner-codigo-barras"
+                className="w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-100"
+              />
+
+              <p className="text-xs text-slate-500 mt-4 text-center">
+                En teléfono usa la cámara trasera. Si no abre, revisa permisos del navegador.
+              </p>
+
+              <button
+                type="button"
+                onClick={cerrarEscanerCodigo}
+                className="mt-5 w-full px-5 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition"
+              >
+                Cancelar escaneo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      <BarcodeScannerModal
+        abierto={escanerAbierto}
+        titulo="Escanear código de barras"
+        descripcion="Apunta la cámara al código de barras del producto."
+        onClose={() => setEscanerAbierto(false)}
+        onDetected={(codigo) => {
+          setForm((prev) => ({
+            ...prev,
+            codigo_barras: codigo,
+          }));
+
+          setEscanerAbierto(false);
+
+          Swal.fire({
+            icon: 'success',
+            title: 'Código escaneado',
+            text: codigo,
+            timer: 1300,
+            showConfirmButton: false,
+          });
+        }}
+      />
     </div>
   );
 }
