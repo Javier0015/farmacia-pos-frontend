@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Swal from 'sweetalert2';
 import {
   Plus,
@@ -11,8 +11,8 @@ import {
   Save,
   Camera,
 } from 'lucide-react';
-import api from '../../api/axios';
 
+import api from '../../api/axios';
 import BarcodeScannerModal from '../../components/BarcodeScannerModal';
 
 const formInicial = {
@@ -32,18 +32,21 @@ const formInicial = {
 export default function Productos() {
   const [productos, setProductos] = useState([]);
   const [categorias, setCategorias] = useState([]);
+
   const [buscar, setBuscar] = useState('');
   const [busquedaCategoria, setBusquedaCategoria] = useState('');
   const [mostrarCategorias, setMostrarCategorias] = useState(false);
+
   const [cargando, setCargando] = useState(false);
   const [guardando, setGuardando] = useState(false);
+
   const [modalAbierto, setModalAbierto] = useState(false);
   const [modoEdicion, setModoEdicion] = useState(false);
   const [productoEditando, setProductoEditando] = useState(null);
+
   const [form, setForm] = useState(formInicial);
-  const scannerRef = useRef(null);
+
   const [escanerAbierto, setEscanerAbierto] = useState(false);
-  const [iniciandoEscaner, setIniciandoEscaner] = useState(false);
 
   const cargarCategorias = async () => {
     try {
@@ -109,9 +112,6 @@ export default function Productos() {
     setProductoEditando(producto);
     setModoEdicion(true);
 
-    setBusquedaCategoria(producto.categoria || '');
-    setMostrarCategorias(false);
-
     setForm({
       codigo_barras: producto.codigo_barras || '',
       nombre: producto.nombre || '',
@@ -128,7 +128,6 @@ export default function Productos() {
 
     setBusquedaCategoria(producto.categoria || '');
     setMostrarCategorias(false);
-
     setModalAbierto(true);
   };
 
@@ -139,15 +138,16 @@ export default function Productos() {
     setForm(formInicial);
     setBusquedaCategoria('');
     setMostrarCategorias(false);
+    setEscanerAbierto(false);
   };
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
 
-    setForm({
-      ...form,
+    setForm((prev) => ({
+      ...prev,
       [name]: type === 'checkbox' ? checked : value,
-    });
+    }));
   };
 
   const validarForm = () => {
@@ -157,6 +157,7 @@ export default function Productos() {
         title: 'Nombre obligatorio',
         text: 'Ingresa el nombre del producto.',
       });
+
       return false;
     }
 
@@ -166,6 +167,7 @@ export default function Productos() {
         title: 'Precio inválido',
         text: 'El precio de compra no puede ser negativo.',
       });
+
       return false;
     }
 
@@ -175,6 +177,7 @@ export default function Productos() {
         title: 'Precio inválido',
         text: 'Ingresa un precio de venta válido.',
       });
+
       return false;
     }
 
@@ -303,113 +306,31 @@ export default function Productos() {
   );
 
   const seleccionarCategoria = (cat) => {
-    setForm({
-      ...form,
+    setForm((prev) => ({
+      ...prev,
       id_categoria: cat ? cat.id_categoria : '',
-    });
+    }));
 
     setBusquedaCategoria(cat ? cat.nombre : '');
     setMostrarCategorias(false);
   };
 
-  const detenerEscanerCodigo = async () => {
-    try {
-      if (scannerRef.current) {
-        await scannerRef.current.stop().catch(() => { });
-        await scannerRef.current.clear().catch(() => { });
-        scannerRef.current = null;
-      }
-    } catch (error) {
-      console.error('Error al detener escáner:', error);
-    }
-  };
+  const manejarCodigoDetectado = (codigo) => {
+    setForm((prev) => ({
+      ...prev,
+      codigo_barras: codigo,
+    }));
 
-  const cerrarEscanerCodigo = async () => {
-    await detenerEscanerCodigo();
     setEscanerAbierto(false);
-    setIniciandoEscaner(false);
+
+    Swal.fire({
+      icon: 'success',
+      title: 'Código escaneado',
+      text: codigo,
+      timer: 1300,
+      showConfirmButton: false,
+    });
   };
-
-  const abrirEscanerCodigo = () => {
-    setEscanerAbierto(true);
-  };
-
-  useEffect(() => {
-    if (!escanerAbierto) return;
-
-    let cancelado = false;
-
-    const iniciarEscaner = async () => {
-      try {
-        setIniciandoEscaner(true);
-
-        await new Promise((resolve) => setTimeout(resolve, 300));
-
-        if (cancelado) return;
-
-        const scanner = new Html5Qrcode('scanner-codigo-barras');
-
-        scannerRef.current = scanner;
-
-        await scanner.start(
-          {
-            facingMode: 'environment',
-          },
-          {
-            fps: 10,
-            qrbox: {
-              width: 280,
-              height: 160,
-            },
-            formatsToSupport: [
-              Html5QrcodeSupportedFormats.EAN_13,
-              Html5QrcodeSupportedFormats.EAN_8,
-              Html5QrcodeSupportedFormats.CODE_128,
-              Html5QrcodeSupportedFormats.CODE_39,
-              Html5QrcodeSupportedFormats.UPC_A,
-              Html5QrcodeSupportedFormats.UPC_E,
-            ],
-          },
-          async (decodedText) => {
-            setForm((prev) => ({
-              ...prev,
-              codigo_barras: decodedText,
-            }));
-
-            await cerrarEscanerCodigo();
-
-            Swal.fire({
-              icon: 'success',
-              title: 'Código escaneado',
-              text: decodedText,
-              timer: 1300,
-              showConfirmButton: false,
-            });
-          },
-          () => { }
-        );
-      } catch (error) {
-        console.error(error);
-
-        Swal.fire({
-          icon: 'error',
-          title: 'No se pudo abrir la cámara',
-          text: 'Verifica que el navegador tenga permiso para usar la cámara. En teléfono normalmente debe abrirse desde HTTPS.',
-        });
-
-        setEscanerAbierto(false);
-      } finally {
-        setIniciandoEscaner(false);
-      }
-    };
-
-    iniciarEscaner();
-
-    return () => {
-      cancelado = true;
-      detenerEscanerCodigo();
-    };
-  }, [escanerAbierto]);
 
   return (
     <div className="space-y-6">
@@ -433,6 +354,7 @@ export default function Productos() {
           </div>
 
           <button
+            type="button"
             onClick={abrirNuevo}
             className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold shadow-lg shadow-sky-900/20 transition"
           >
@@ -447,6 +369,7 @@ export default function Productos() {
               className="absolute left-4 top-3.5 text-slate-400"
               size={20}
             />
+
             <input
               value={buscar}
               onChange={(e) => setBuscar(e.target.value)}
@@ -459,6 +382,7 @@ export default function Productos() {
           </div>
 
           <button
+            type="button"
             onClick={cargarProductos}
             className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition"
           >
@@ -466,6 +390,7 @@ export default function Productos() {
             Buscar
           </button>
         </div>
+
         <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="rounded-3xl border border-sky-100 bg-sky-50 p-5">
             <div className="flex items-center justify-between gap-4">
@@ -547,13 +472,19 @@ export default function Productos() {
             <tbody className="divide-y divide-slate-100">
               {cargando ? (
                 <tr>
-                  <td colSpan="9" className="px-5 py-10 text-center text-slate-500">
+                  <td
+                    colSpan="9"
+                    className="px-5 py-10 text-center text-slate-500"
+                  >
                     Cargando productos...
                   </td>
                 </tr>
               ) : productos.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="px-5 py-10 text-center text-slate-500">
+                  <td
+                    colSpan="9"
+                    className="px-5 py-10 text-center text-slate-500"
+                  >
                     No hay productos registrados.
                   </td>
                 </tr>
@@ -565,12 +496,14 @@ export default function Productos() {
                         <p className="font-bold text-slate-800">
                           {producto.nombre}
                         </p>
+
                         <div className="flex gap-2 mt-1">
                           {producto.requiere_receta && (
                             <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
                               Receta
                             </span>
                           )}
+
                           {producto.es_controlado && (
                             <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700">
                               Controlado
@@ -606,10 +539,11 @@ export default function Productos() {
 
                     <td className="px-5 py-4 text-center">
                       <span
-                        className={`text-xs font-bold px-3 py-1 rounded-full ${producto.activo
-                          ? 'bg-sky-100 text-sky-700'
-                          : 'bg-slate-200 text-slate-600'
-                          }`}
+                        className={`text-xs font-bold px-3 py-1 rounded-full ${
+                          producto.activo
+                            ? 'bg-sky-100 text-sky-700'
+                            : 'bg-slate-200 text-slate-600'
+                        }`}
                       >
                         {producto.activo ? 'Activo' : 'Inactivo'}
                       </span>
@@ -618,6 +552,7 @@ export default function Productos() {
                     <td className="px-5 py-4">
                       <div className="flex items-center justify-center gap-2">
                         <button
+                          type="button"
                           onClick={() => abrirEditar(producto)}
                           className="w-9 h-9 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 flex items-center justify-center transition"
                           title="Editar"
@@ -626,6 +561,7 @@ export default function Productos() {
                         </button>
 
                         <button
+                          type="button"
                           onClick={() => desactivarProducto(producto)}
                           disabled={!producto.activo}
                           className="w-9 h-9 rounded-xl bg-red-50 text-red-700 hover:bg-red-100 flex items-center justify-center transition disabled:opacity-40"
@@ -657,6 +593,7 @@ export default function Productos() {
               </div>
 
               <button
+                type="button"
                 onClick={cerrarModal}
                 className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center"
               >
@@ -664,12 +601,16 @@ export default function Productos() {
               </button>
             </div>
 
-            <form onSubmit={guardarProducto} className="p-6 overflow-y-auto max-h-[75vh]">
+            <form
+              onSubmit={guardarProducto}
+              className="p-6 overflow-y-auto max-h-[75vh]"
+            >
               <div className="grid md:grid-cols-2 gap-5">
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-2">
                     Nombre *
                   </label>
+
                   <input
                     name="nombre"
                     value={form.nombre}
@@ -728,14 +669,16 @@ export default function Productos() {
                         setMostrarCategorias(true);
 
                         if (e.target.value.trim() === '') {
-                          setForm({
-                            ...form,
+                          setForm((prev) => ({
+                            ...prev,
                             id_categoria: '',
-                          });
+                          }));
                         }
                       }}
                       onFocus={() => {
-                        setBusquedaCategoria(categoriaSeleccionada?.nombre || '');
+                        setBusquedaCategoria(
+                          categoriaSeleccionada?.nombre || ''
+                        );
                         setMostrarCategorias(true);
                       }}
                       placeholder="Buscar categoría..."
@@ -774,10 +717,12 @@ export default function Productos() {
                             key={cat.id_categoria}
                             type="button"
                             onClick={() => seleccionarCategoria(cat)}
-                            className={`w-full text-left px-4 py-3 hover:bg-sky-50 transition ${Number(form.id_categoria) === Number(cat.id_categoria)
-                              ? 'bg-sky-100 text-sky-700 font-bold'
-                              : 'text-slate-700'
-                              }`}
+                            className={`w-full text-left px-4 py-3 hover:bg-sky-50 transition ${
+                              Number(form.id_categoria) ===
+                              Number(cat.id_categoria)
+                                ? 'bg-sky-100 text-sky-700 font-bold'
+                                : 'text-slate-700'
+                            }`}
                           >
                             {cat.nombre}
                           </button>
@@ -791,6 +736,7 @@ export default function Productos() {
                   <label className="block text-sm font-bold text-slate-700 mb-2">
                     Laboratorio
                   </label>
+
                   <input
                     name="laboratorio"
                     value={form.laboratorio}
@@ -804,6 +750,7 @@ export default function Productos() {
                   <label className="block text-sm font-bold text-slate-700 mb-2">
                     Presentación
                   </label>
+
                   <input
                     name="presentacion"
                     value={form.presentacion}
@@ -817,6 +764,7 @@ export default function Productos() {
                   <label className="block text-sm font-bold text-slate-700 mb-2">
                     Precio compra
                   </label>
+
                   <input
                     type="number"
                     step="0.01"
@@ -832,6 +780,7 @@ export default function Productos() {
                   <label className="block text-sm font-bold text-slate-700 mb-2">
                     Precio venta *
                   </label>
+
                   <input
                     type="number"
                     step="0.01"
@@ -847,6 +796,7 @@ export default function Productos() {
                   <label className="block text-sm font-bold text-slate-700 mb-2">
                     Descripción
                   </label>
+
                   <textarea
                     name="descripcion"
                     value={form.descripcion}
@@ -866,6 +816,7 @@ export default function Productos() {
                       onChange={handleChange}
                       className="w-5 h-5 accent-sky-700"
                     />
+
                     <span className="font-semibold text-slate-700">
                       Requiere receta
                     </span>
@@ -879,6 +830,7 @@ export default function Productos() {
                       onChange={handleChange}
                       className="w-5 h-5 accent-red-600"
                     />
+
                     <span className="font-semibold text-slate-700">
                       Controlado
                     </span>
@@ -893,6 +845,7 @@ export default function Productos() {
                         onChange={handleChange}
                         className="w-5 h-5 accent-sky-700"
                       />
+
                       <span className="font-semibold text-slate-700">
                         Activo
                       </span>
@@ -923,76 +876,13 @@ export default function Productos() {
           </div>
         </div>
       )}
-      {escanerAbierto && (
-        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 z-[9999]">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-bold text-slate-800">
-                  Escanear código
-                </h3>
-                <p className="text-sm text-slate-500">
-                  Apunta la cámara al código de barras del producto.
-                </p>
-              </div>
 
-              <button
-                type="button"
-                onClick={cerrarEscanerCodigo}
-                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="p-5">
-              {iniciandoEscaner && (
-                <div className="mb-3 text-sm text-slate-500 text-center">
-                  Abriendo cámara...
-                </div>
-              )}
-
-              <div
-                id="scanner-codigo-barras"
-                className="w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-100"
-              />
-
-              <p className="text-xs text-slate-500 mt-4 text-center">
-                En teléfono usa la cámara trasera. Si no abre, revisa permisos del navegador.
-              </p>
-
-              <button
-                type="button"
-                onClick={cerrarEscanerCodigo}
-                className="mt-5 w-full px-5 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition"
-              >
-                Cancelar escaneo
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
       <BarcodeScannerModal
         abierto={escanerAbierto}
         titulo="Escanear código de barras"
         descripcion="Apunta la cámara al código de barras del producto."
         onClose={() => setEscanerAbierto(false)}
-        onDetected={(codigo) => {
-          setForm((prev) => ({
-            ...prev,
-            codigo_barras: codigo,
-          }));
-
-          setEscanerAbierto(false);
-
-          Swal.fire({
-            icon: 'success',
-            title: 'Código escaneado',
-            text: codigo,
-            timer: 1300,
-            showConfirmButton: false,
-          });
-        }}
+        onDetected={manejarCodigoDetectado}
       />
     </div>
   );
