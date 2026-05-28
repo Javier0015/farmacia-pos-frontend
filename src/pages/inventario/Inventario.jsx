@@ -3,6 +3,7 @@ import Swal from 'sweetalert2';
 import {
   Boxes,
   Search,
+  Pencil,
   RefreshCw,
   Plus,
   ArrowDownCircle,
@@ -49,6 +50,14 @@ const formMovimientoInicial = {
   precio_compra: '',
   referencia: '',
   observaciones: '',
+};
+
+const formEditarLoteInicial = {
+  id_lote: '',
+  id_proveedor: '',
+  lote: '',
+  fecha_caducidad: '',
+  precio_compra: '',
 };
 
 const tiposMovimiento = [
@@ -118,9 +127,12 @@ export default function Inventario() {
 
   const [modalLotes, setModalLotes] = useState(false);
   const [modalCaducidad, setModalCaducidad] = useState(false);
+  const [modalEditarLote, setModalEditarLote] = useState(false);
 
   const [formAsignar, setFormAsignar] = useState(formAsignarInicial);
   const [formMovimiento, setFormMovimiento] = useState(formMovimientoInicial);
+  const [formEditarLote, setFormEditarLote] = useState(formEditarLoteInicial);
+  const [loteEditando, setLoteEditando] = useState(null);
 
   const sucursalActual = useMemo(() => {
     return sucursales.find((s) => Number(s.id_sucursal) === Number(idSucursal));
@@ -570,6 +582,120 @@ export default function Inventario() {
     setModalCaducidad(false);
     setModalLotes(false);
     setModalMovimiento(true);
+  };
+
+  const abrirEditarLote = (loteItem) => {
+    setLoteEditando(loteItem);
+    setFormEditarLote({
+      id_lote: loteItem.id_lote || '',
+      id_proveedor: loteItem.id_proveedor || '',
+      lote: loteItem.lote || '',
+      fecha_caducidad: loteItem.fecha_caducidad
+        ? String(loteItem.fecha_caducidad).slice(0, 10)
+        : '',
+      precio_compra: loteItem.precio_compra || '',
+    });
+    setModalEditarLote(true);
+  };
+
+  const cerrarModalEditarLote = () => {
+    setModalEditarLote(false);
+    setLoteEditando(null);
+    setFormEditarLote(formEditarLoteInicial);
+  };
+
+  const handleEditarLoteChange = (e) => {
+    const { name, value } = e.target;
+
+    setFormEditarLote((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  const guardarEditarLote = async (e) => {
+    e.preventDefault();
+
+    if (!loteEditando?.id_lote) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Lote no seleccionado',
+        text: 'Selecciona un lote válido para editar.',
+      });
+      return;
+    }
+
+    if (!formEditarLote.lote.trim()) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Lote obligatorio',
+        text: 'Ingresa el número o clave del lote.',
+      });
+      return;
+    }
+
+    if (
+      formEditarLote.precio_compra !== '' &&
+      Number(formEditarLote.precio_compra) < 0
+    ) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Precio inválido',
+        text: 'El precio de compra no puede ser negativo.',
+      });
+      return;
+    }
+
+    try {
+      setGuardando(true);
+
+      const payload = {
+        id_proveedor: formEditarLote.id_proveedor
+          ? Number(formEditarLote.id_proveedor)
+          : null,
+        lote: formEditarLote.lote.trim(),
+        fecha_caducidad: formEditarLote.fecha_caducidad || null,
+        precio_compra: formEditarLote.precio_compra
+          ? Number(formEditarLote.precio_compra)
+          : 0,
+      };
+
+      const { data } = await api.put(
+        `/inventario/lotes/${loteEditando.id_lote}`,
+        payload
+      );
+
+      if (data.ok) {
+        Swal.fire({
+          icon: 'success',
+          title: 'Lote actualizado',
+          text: data.mensaje || 'La información del lote se actualizó correctamente.',
+          timer: 1400,
+          showConfirmButton: false,
+        });
+
+        cerrarModalEditarLote();
+
+        if (productoLotes?.id_producto) {
+          await cargarLotesProducto(productoLotes.id_producto);
+        }
+
+        await cargarInventario();
+        await cargarBajoStock();
+      }
+    } catch (error) {
+      console.error(error);
+
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text:
+          error.response?.data?.mensaje ||
+          'No se pudo actualizar el lote.',
+      });
+    } finally {
+      setGuardando(false);
+    }
   };
 
   const abrirLotes = async (item) => {
@@ -1936,7 +2062,7 @@ export default function Inventario() {
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[1250px]">
+                  <table className="w-full min-w-[1350px]">
                     <thead className="bg-slate-50 border-b border-slate-100">
                       <tr>
                         <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
@@ -1964,7 +2090,7 @@ export default function Inventario() {
                           Entrada
                         </th>
                         <th className="px-4 py-3 text-center text-xs font-bold text-slate-500 uppercase">
-                          Acción
+                          Acciones
                         </th>
                       </tr>
                     </thead>
@@ -2020,19 +2146,33 @@ export default function Inventario() {
                             {formatoFecha(loteItem.fecha_entrada)}
                           </td>
 
-                          <td className="px-4 py-3 text-center">
-                            {Number(loteItem.stock_actual) > 0 ? (
+                          <td className="px-4 py-3">
+                            <div className="flex items-center justify-center gap-2">
                               <button
-                                onClick={() => abrirBajaLote(loteItem, 'CADUCIDAD')}
-                                className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-red-50 text-red-700 hover:bg-red-100 font-bold transition"
+                                type="button"
+                                onClick={() => abrirEditarLote(loteItem)}
+                                className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold transition"
+                                title="Editar lote"
                               >
-                                Dar de baja
+                                <Pencil size={16} />
+                                Editar
                               </button>
-                            ) : (
-                              <span className="text-xs font-bold px-3 py-1 rounded-full bg-slate-100 text-slate-500">
-                                Sin stock
-                              </span>
-                            )}
+
+                              {Number(loteItem.stock_actual) > 0 ? (
+                                <button
+                                  type="button"
+                                  onClick={() => abrirBajaLote(loteItem, 'CADUCIDAD')}
+                                  className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-red-50 text-red-700 hover:bg-red-100 font-bold transition"
+                                  title="Dar de baja lote"
+                                >
+                                  Dar de baja
+                                </button>
+                              ) : (
+                                <span className="text-xs font-bold px-3 py-1 rounded-full bg-slate-100 text-slate-500">
+                                  Sin stock
+                                </span>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -2041,6 +2181,140 @@ export default function Inventario() {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {modalEditarLote && (
+        <div className="fixed inset-0 z-[60] flex items-start sm:items-center justify-center px-3 sm:px-4 py-4 sm:py-8 overflow-y-auto">
+          <div
+            className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm"
+            onClick={cerrarModalEditarLote}
+          />
+
+          <div className="relative bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden my-auto">
+            <div className="px-4 sm:px-6 py-5 border-b border-slate-100 flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h2 className="text-lg sm:text-xl font-bold text-slate-800">
+                  Editar lote
+                </h2>
+                <p className="text-sm text-slate-500 break-words">
+                  {productoLotes?.producto || loteEditando?.producto || 'Producto'}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={cerrarModalEditarLote}
+                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center shrink-0"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={guardarEditarLote}>
+              <div className="p-4 sm:p-6 grid grid-cols-1 md:grid-cols-2 gap-5 max-h-[70vh] overflow-y-auto">
+                <div className="md:col-span-2 rounded-2xl bg-amber-50 border border-amber-100 p-4 text-amber-800 text-sm">
+                  <p className="font-bold">Nota</p>
+                  <p>
+                    Esta edición solo cambia los datos administrativos del lote. El stock se modifica desde movimientos para conservar el historial.
+                  </p>
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Lote *
+                  </label>
+                  <input
+                    name="lote"
+                    value={formEditarLote.lote}
+                    onChange={handleEditarLoteChange}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    placeholder="Ej. PAR-2026-A"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Fecha de caducidad
+                  </label>
+                  <input
+                    type="date"
+                    name="fecha_caducidad"
+                    value={formEditarLote.fecha_caducidad}
+                    onChange={handleEditarLoteChange}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Precio compra lote
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    name="precio_compra"
+                    value={formEditarLote.precio_compra}
+                    onChange={handleEditarLoteChange}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    placeholder="0.00"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Proveedor
+                  </label>
+                  <select
+                    name="id_proveedor"
+                    value={formEditarLote.id_proveedor}
+                    onChange={handleEditarLoteChange}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
+                  >
+                    <option value="">Sin proveedor</option>
+                    {proveedores.map((proveedor) => (
+                      <option
+                        key={proveedor.id_proveedor}
+                        value={proveedor.id_proveedor}
+                      >
+                        {proveedor.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="md:col-span-2 rounded-2xl bg-slate-50 border border-slate-100 p-4 text-sm text-slate-600">
+                  <p>
+                    <span className="font-bold text-slate-700">Stock actual:</span>{' '}
+                    {formatoNumero(loteEditando?.stock_actual)}
+                  </p>
+                  <p className="mt-1">
+                    <span className="font-bold text-slate-700">Compra relacionada:</span>{' '}
+                    {loteEditando?.folio_compra || '—'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="px-4 sm:px-6 py-5 flex flex-col sm:flex-row justify-end gap-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={cerrarModalEditarLote}
+                  className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition"
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={guardando}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold transition disabled:opacity-60"
+                >
+                  <Save size={19} />
+                  {guardando ? 'Guardando...' : 'Guardar cambios'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
