@@ -54,6 +54,75 @@ const METODOS_PAGO_POS = [
   { id: 'PUNTOS', label: 'Puntos', icono: Coins },
 ];
 
+
+const DIAS_ALERTA_CADUCIDAD_POS = 30;
+
+const normalizarFechaLocal = (fecha) => {
+  if (!fecha) return null;
+
+  const valor = new Date(fecha);
+  if (Number.isNaN(valor.getTime())) return null;
+
+  valor.setHours(0, 0, 0, 0);
+  return valor;
+};
+
+const obtenerEstadoCaducidadLote = (fechaCaducidad) => {
+  const fecha = normalizarFechaLocal(fechaCaducidad);
+
+  if (!fecha) {
+    return {
+      estado: 'SIN_CADUCIDAD',
+      caducado: false,
+      proximoCaducar: false,
+      diasRestantes: null,
+      label: 'Sin caducidad',
+      cardClass: 'border-slate-200 bg-white',
+      badgeClass: 'bg-slate-100 text-slate-600',
+    };
+  }
+
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+
+  const diffMs = fecha.getTime() - hoy.getTime();
+  const diasRestantes = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diasRestantes < 0) {
+    return {
+      estado: 'CADUCADO',
+      caducado: true,
+      proximoCaducar: false,
+      diasRestantes,
+      label: 'Caducado',
+      cardClass: 'border-red-300 bg-red-50',
+      badgeClass: 'bg-red-100 text-red-700',
+    };
+  }
+
+  if (diasRestantes <= DIAS_ALERTA_CADUCIDAD_POS) {
+    return {
+      estado: 'PROXIMO_CADUCAR',
+      caducado: false,
+      proximoCaducar: true,
+      diasRestantes,
+      label: `Por caducar en ${diasRestantes} día(s)`,
+      cardClass: 'border-amber-300 bg-amber-50',
+      badgeClass: 'bg-amber-100 text-amber-800',
+    };
+  }
+
+  return {
+    estado: 'VIGENTE',
+    caducado: false,
+    proximoCaducar: false,
+    diasRestantes,
+    label: 'Vigente',
+    cardClass: 'border-emerald-200 bg-white',
+    badgeClass: 'bg-emerald-100 text-emerald-700',
+  };
+};
+
 export default function POS() {
   const { usuario } = useAuth();
   const puedeCambiarSucursal = esSuperAdmin(usuario);
@@ -577,6 +646,17 @@ export default function POS() {
 
   const agregarProductoConLote = (producto, loteItem, cantidadManual = 1) => {
     if (!producto || !loteItem) return;
+
+    const estadoCaducidad = obtenerEstadoCaducidadLote(loteItem.fecha_caducidad);
+
+    if (estadoCaducidad.caducado) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Lote caducado',
+        text: `El lote ${loteItem.lote || 'seleccionado'} ya caducó y no puede agregarse al carrito.`,
+      });
+      return;
+    }
 
     const idLote = loteItem?.id_lote ? Number(loteItem.id_lote) : null;
     const stockDisponible = Number(loteItem?.stock_actual || producto.stock_actual || 0);
@@ -1617,7 +1697,6 @@ export default function POS() {
             sesionAbierta={sesionAbierta}
             formatoMoneda={formatoMoneda}
             formatoNumero={formatoNumero}
-            formatoFechaCorta={formatoFechaCorta}
             tieneOfertaActiva={tieneOfertaActiva}
             esProductoControlado={esProductoControlado}
             productoRequiereReceta={productoRequiereReceta}
@@ -1734,7 +1813,6 @@ function ProductosDisponibles({
   sesionAbierta,
   formatoMoneda,
   formatoNumero,
-  formatoFechaCorta,
   tieneOfertaActiva,
   esProductoControlado,
   productoRequiereReceta,
@@ -1799,7 +1877,6 @@ function ProductosDisponibles({
                   sesionAbierta={sesionAbierta}
                   formatoMoneda={formatoMoneda}
                   formatoNumero={formatoNumero}
-                  formatoFechaCorta={formatoFechaCorta}
                   tieneOfertaActiva={tieneOfertaActiva}
                   esProductoControlado={esProductoControlado}
                   productoRequiereReceta={productoRequiereReceta}
@@ -1846,7 +1923,6 @@ function ProductoCard({
   sesionAbierta,
   formatoMoneda,
   formatoNumero,
-  formatoFechaCorta,
   tieneOfertaActiva,
   esProductoControlado,
   productoRequiereReceta,
@@ -1886,20 +1962,14 @@ function ProductoCard({
         formatoNumero={formatoNumero}
       />
 
-      <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
+      <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
         <div className="rounded-2xl bg-slate-50 p-3">
           <p className="text-[11px] font-bold uppercase text-slate-400">Código</p>
           <p className="mt-1 truncate font-black text-slate-800">{item.codigo_barras || '—'}</p>
         </div>
         <div className="rounded-2xl bg-slate-50 p-3 text-center">
-          <p className="text-[11px] font-bold uppercase text-slate-400">Stock</p>
+          <p className="text-[11px] font-bold uppercase text-slate-400">Stock total</p>
           <p className="mt-1 font-black text-slate-900">{formatoNumero(item.stock_actual)}</p>
-        </div>
-        <div className="rounded-2xl bg-slate-50 p-3 text-right">
-          <p className="text-[11px] font-bold uppercase text-slate-400">Caducidad</p>
-          <p className={`mt-1 truncate font-black ${item.proxima_caducidad ? 'text-red-600' : 'text-slate-700'}`}>
-            {item.proxima_caducidad ? formatoFechaCorta(item.proxima_caducidad) : '—'}
-          </p>
         </div>
       </div>
 
@@ -2430,21 +2500,69 @@ function ModalLotesProducto({
                 const stock = Number(lote.stock_actual || 0);
                 const cantidadNumerica = Math.max(Number(cantidad || 1), 1);
                 const sinStock = stock < cantidadNumerica;
+                const estadoCaducidad = obtenerEstadoCaducidadLote(lote.fecha_caducidad);
+                const loteBloqueado = sinStock || estadoCaducidad.caducado;
 
                 return (
-                  <div key={lote.id_lote || lote.lote} className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+                  <div
+                    key={lote.id_lote || lote.lote}
+                    className={`rounded-2xl border p-4 shadow-sm transition ${estadoCaducidad.cardClass}`}
+                  >
                     <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                      <div>
-                        <p className="font-black text-slate-900">Lote: {lote.lote || 'Sin lote'}</p>
-                        <p className="mt-1 text-sm text-slate-500">Caducidad: {formatoFechaCorta(lote.fecha_caducidad)}</p>
-                        <p className={`mt-2 inline-flex rounded-full px-3 py-1 text-xs font-bold ${sinStock ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                          Stock disponible: {formatoNumero(stock)}
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className={`font-black ${estadoCaducidad.caducado ? 'text-red-900' : 'text-slate-900'}`}>
+                            Lote: {lote.lote || 'Sin lote'}
+                          </p>
+
+                          <span className={`rounded-full px-3 py-1 text-xs font-black ${estadoCaducidad.badgeClass}`}>
+                            {estadoCaducidad.label}
+                          </span>
+                        </div>
+
+                        <p className={`mt-1 text-sm font-bold ${estadoCaducidad.caducado ? 'text-red-700' : estadoCaducidad.proximoCaducar ? 'text-amber-700' : 'text-slate-500'}`}>
+                          Caducidad: {formatoFechaCorta(lote.fecha_caducidad)}
                         </p>
+
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <p className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${sinStock ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                            Stock disponible: {formatoNumero(stock)}
+                          </p>
+
+                          {estadoCaducidad.caducado && (
+                            <p className="inline-flex rounded-full bg-red-600 px-3 py-1 text-xs font-black text-white">
+                              No vendible
+                            </p>
+                          )}
+
+                          {estadoCaducidad.proximoCaducar && (
+                            <p className="inline-flex rounded-full bg-amber-500 px-3 py-1 text-xs font-black text-white">
+                              Revisar antes de vender
+                            </p>
+                          )}
+                        </div>
                       </div>
 
-                      <button type="button" onClick={() => onAgregar(producto, lote, cantidadNumerica)} disabled={sinStock} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-sky-700 px-5 py-3 text-sm font-bold text-white transition hover:bg-sky-800 disabled:cursor-not-allowed disabled:bg-red-100 disabled:text-red-600">
+                      <button
+                        type="button"
+                        onClick={() => onAgregar(producto, lote, cantidadNumerica)}
+                        disabled={loteBloqueado}
+                        className={`inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-bold transition ${
+                          loteBloqueado
+                            ? 'cursor-not-allowed bg-slate-100 text-slate-400'
+                            : estadoCaducidad.proximoCaducar
+                              ? 'bg-amber-500 text-white hover:bg-amber-600'
+                              : 'bg-sky-700 text-white hover:bg-sky-800'
+                        }`}
+                      >
                         <Plus size={18} />
-                        {sinStock ? 'Stock insuficiente' : 'Agregar este lote'}
+                        {estadoCaducidad.caducado
+                          ? 'Lote caducado'
+                          : sinStock
+                            ? 'Stock insuficiente'
+                            : estadoCaducidad.proximoCaducar
+                              ? 'Agregar con alerta'
+                              : 'Agregar este lote'}
                       </button>
                     </div>
                   </div>
