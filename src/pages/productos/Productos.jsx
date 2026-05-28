@@ -283,6 +283,9 @@ export default function Productos() {
     });
   };
 
+  const totalActivos = productos.filter((producto) => producto.activo).length;
+  const totalInactivos = productos.filter((producto) => !producto.activo).length;
+
   const categoriaSeleccionada = categorias.find(
     (cat) => Number(cat.id_categoria) === Number(form.id_categoria)
   );
@@ -357,6 +360,47 @@ export default function Productos() {
             <RefreshCw size={19} className={cargando ? 'animate-spin' : ''} />
             Buscar
           </button>
+        </div>
+        <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="rounded-3xl border border-sky-100 bg-sky-50 p-5">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-bold text-sky-700">
+                  Productos activos
+                </p>
+                <p className="text-3xl font-black text-slate-800 mt-1">
+                  {totalActivos}
+                </p>
+                <p className="text-xs text-slate-500 mt-1">
+                  Productos disponibles en el catálogo
+                </p>
+              </div>
+
+              <div className="w-12 h-12 rounded-2xl bg-white text-sky-700 flex items-center justify-center shadow-sm">
+                <Package size={24} />
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-bold text-slate-600">
+                  Productos inactivos
+                </p>
+                <p className="text-3xl font-black text-slate-800 mt-1">
+                  {totalInactivos}
+                </p>
+                <p className="text-xs text-slate-500 mt-1">
+                  Productos desactivados u ocultos
+                </p>
+              </div>
+
+              <div className="w-12 h-12 rounded-2xl bg-white text-slate-600 flex items-center justify-center shadow-sm">
+                <Trash2 size={24} />
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -613,8 +657,8 @@ export default function Productos() {
                             type="button"
                             onClick={() => seleccionarCategoria(cat)}
                             className={`w-full text-left px-4 py-3 hover:bg-sky-50 transition ${Number(form.id_categoria) === Number(cat.id_categoria)
-                                ? 'bg-sky-100 text-sky-700 font-bold'
-                                : 'text-slate-700'
+                              ? 'bg-sky-100 text-sky-700 font-bold'
+                              : 'text-slate-700'
                               }`}
                           >
                             {cat.nombre}
