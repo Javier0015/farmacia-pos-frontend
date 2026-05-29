@@ -1356,7 +1356,7 @@ const imprimirTicketPOS = (ventaData = null) => {
 
   const venta = datosTicket.venta;
   const resumenVenta = datosTicket.resumen || {};
-  const productosVenta = venta.productos || [];
+  const productosVenta = Array.isArray(venta.productos) ? venta.productos : [];
 
   const pagosTicket = Array.isArray(venta.pagos)
     ? venta.pagos
@@ -1369,10 +1369,11 @@ const imprimirTicketPOS = (ventaData = null) => {
       ? 'PUNTOS'
       : venta.metodo_pago || metodoPago || 'EFECTIVO';
 
+  // Para ticket 58mm conviene 32 caracteres aprox.
   const ancho = 32;
 
   const limpiarTexto = (texto = '') => {
-    return String(texto || '')
+    return String(texto ?? '')
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
       .replace(/[^\x20-\x7E]/g, '')
@@ -1381,7 +1382,7 @@ const imprimirTicketPOS = (ventaData = null) => {
   };
 
   const escapeHtml = (texto = '') => {
-    return String(texto || '')
+    return String(texto ?? '')
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
@@ -1406,6 +1407,7 @@ const imprimirTicketPOS = (ventaData = null) => {
 
   const dividirTexto = (texto = '', largo = 20) => {
     const limpio = limpiarTexto(texto);
+
     if (!limpio) return [''];
 
     const palabras = limpio.split(' ');
@@ -1414,6 +1416,7 @@ const imprimirTicketPOS = (ventaData = null) => {
 
     palabras.forEach((palabra) => {
       const p = palabra.slice(0, largo);
+
       if ((actual + ' ' + p).trim().length <= largo) {
         actual = `${actual} ${p}`.trim();
       } else {
@@ -1423,7 +1426,22 @@ const imprimirTicketPOS = (ventaData = null) => {
     });
 
     if (actual) lineas.push(actual);
-    return lineas;
+
+    return lineas.length ? lineas : [''];
+  };
+
+  const formatearFecha = (fecha) => {
+    if (!fecha) return '';
+
+    const d = new Date(fecha);
+
+    if (Number.isNaN(d.getTime())) return '';
+
+    return d.toLocaleDateString('es-MX', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
   };
 
   const fechaVenta = venta.fecha_venta
@@ -1475,7 +1493,12 @@ const imprimirTicketPOS = (ventaData = null) => {
     venta.subtotal ??
     productosVenta.reduce((acc, item) => {
       const cantidad = Number(item.cantidad || 0);
-      const precio = Number(item.precio_unitario || item.precio_venta || item.precio || 0);
+      const precio = Number(
+        item.precio_unitario ||
+        item.precio_venta ||
+        item.precio ||
+        0
+      );
       return acc + cantidad * precio;
     }, 0);
 
@@ -1497,10 +1520,9 @@ const imprimirTicketPOS = (ventaData = null) => {
     venta.cambio ??
     0;
 
-  const cantidadArticulos = productosVenta.reduce(
-    (acc, item) => acc + Number(item.cantidad || 0),
-    0
-  );
+  const cantidadArticulos = productosVenta.reduce((acc, item) => {
+    return acc + Number(item.cantidad || 0);
+  }, 0);
 
   let contenido = '';
 
@@ -1521,8 +1543,9 @@ const imprimirTicketPOS = (ventaData = null) => {
   contenido += `${centrar(fechaFormateada)}\n`;
   contenido += `\n`;
 
+  // Cajero y caja más compacto para que no se vaya hacia abajo
   contenido += `${fila('CAJERO:', nombreCajero.toUpperCase())}\n`;
-  contenido += `${fila('CAJA:', nombreCaja.toUpperCase())}\n`;
+  contenido += `${fila('CAJA:', String(nombreCaja).toUpperCase())}\n`;
   contenido += `${fila('FOLIO:', venta.folio || venta.id_venta || '---')}\n`;
   contenido += `\n`;
 
@@ -1531,9 +1554,25 @@ const imprimirTicketPOS = (ventaData = null) => {
 
   productosVenta.forEach((item) => {
     const cantidad = Number(item.cantidad || 0);
-    const precioUnitario = Number(item.precio_unitario || item.precio_venta || item.precio || 0);
-    const importe = Number(item.subtotal || cantidad * precioUnitario || 0);
-    const nombre = item.nombre || item.producto || item.descripcion || 'PRODUCTO';
+    const precioUnitario = Number(
+      item.precio_unitario ||
+      item.precio_venta ||
+      item.precio ||
+      0
+    );
+
+    const importe = Number(
+      item.subtotal ||
+      item.importe ||
+      cantidad * precioUnitario ||
+      0
+    );
+
+    const nombre =
+      item.nombre ||
+      item.producto ||
+      item.descripcion ||
+      'PRODUCTO';
 
     const lineasNombre = dividirTexto(nombre.toUpperCase(), 16);
 
@@ -1550,8 +1589,10 @@ const imprimirTicketPOS = (ventaData = null) => {
     }
 
     if (item.fecha_caducidad) {
-      const caducidad = new Date(item.fecha_caducidad).toLocaleDateString('es-MX');
-      contenido += `    Cad: ${caducidad}\n`;
+      const caducidad = formatearFecha(item.fecha_caducidad);
+      if (caducidad) {
+        contenido += `    Cad: ${caducidad}\n`;
+      }
     }
   });
 
@@ -1572,13 +1613,16 @@ const imprimirTicketPOS = (ventaData = null) => {
 
   if (pagosTicket.length > 0) {
     pagosTicket.forEach((pago) => {
-      contenido += `${fila(pago.metodo_pago || 'PAGO', moneda(pago.monto))}\n`;
+      contenido += `${fila(
+        String(pago.metodo_pago || 'PAGO').toUpperCase(),
+        moneda(pago.monto)
+      )}\n`;
     });
   } else {
     contenido += `${fila('PAGO CON:', moneda(recibidoTicket))}\n`;
   }
 
-  contenido += `${fila('METODO:', metodoPagoTicket)}\n`;
+  contenido += `${fila('METODO:', String(metodoPagoTicket).toUpperCase())}\n`;
   contenido += `${fila('SU CAMBIO:', moneda(cambioTicket))}\n`;
 
   const ahorroTicket = resumenVenta.ahorro || descuentoTicket || 0;
@@ -1592,11 +1636,14 @@ const imprimirTicketPOS = (ventaData = null) => {
   contenido += `${centrar('CONSERVE SU TICKET PARA')}\n`;
   contenido += `${centrar('CUALQUIER DUDA O')}\n`;
   contenido += `${centrar('ACLARACION')}\n`;
+
+  // Espacio final para que no corte el texto al terminar.
   contenido += `\n\n\n\n\n`;
 
   const folioTitulo = limpiarTexto(venta.folio || venta.id_venta || 'ticket');
+  const nombreVentana = `ticket_${folioTitulo}_${Date.now()}`;
 
-  const ventana = window.open('', `ticket_${folioTitulo}`, 'width=360,height=650');
+  const ventana = window.open('', nombreVentana, 'width=360,height=650');
 
   if (!ventana) {
     Swal.fire({
@@ -1613,11 +1660,17 @@ const imprimirTicketPOS = (ventaData = null) => {
     <html>
       <head>
         <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>Ticket ${escapeHtml(folioTitulo)}</title>
+
         <style>
           @page {
             size: 58mm auto;
             margin: 0;
+          }
+
+          * {
+            box-sizing: border-box;
           }
 
           html,
@@ -1625,61 +1678,103 @@ const imprimirTicketPOS = (ventaData = null) => {
             margin: 0;
             padding: 0;
             width: 58mm;
+            min-width: 58mm;
+            max-width: 58mm;
             background: #ffffff;
             color: #000000;
           }
 
           body {
-            font-family: "Courier New", monospace;
+            font-family: "Courier New", Courier, monospace;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
           }
 
           .ticket {
             width: 58mm;
-            padding: 2mm 2mm 4mm 2mm;
+            min-width: 58mm;
+            max-width: 58mm;
+            padding: 2mm 2mm 6mm 2mm;
+            background: #ffffff;
           }
 
           pre {
+            display: block;
+            width: 100%;
             margin: 0;
             padding: 0;
-            font-family: "Courier New", monospace;
+            font-family: "Courier New", Courier, monospace;
             font-size: 9px;
-            line-height: 1.12;
+            line-height: 1.14;
             font-weight: 700;
             white-space: pre;
+            color: #000000;
+            background: #ffffff;
           }
 
           @media print {
             html,
             body {
-              margin: 0;
-              padding: 0;
-              width: 58mm;
+              margin: 0 !important;
+              padding: 0 !important;
+              width: 58mm !important;
+              min-width: 58mm !important;
+              max-width: 58mm !important;
+              background: #ffffff !important;
             }
 
             .ticket {
-              width: 58mm;
-              padding: 2mm 2mm 4mm 2mm;
+              width: 58mm !important;
+              min-width: 58mm !important;
+              max-width: 58mm !important;
+              padding: 2mm 2mm 6mm 2mm !important;
             }
 
             pre {
-              font-size: 9px;
-              line-height: 1.12;
+              font-size: 9px !important;
+              line-height: 1.14 !important;
+              font-weight: 700 !important;
+              white-space: pre !important;
             }
           }
         </style>
       </head>
+
       <body>
         <div class="ticket">
           <pre>${escapeHtml(contenido)}</pre>
         </div>
 
         <script>
-          window.onload = function() {
+          let yaImprimio = false;
+
+          function imprimirTicket() {
+            if (yaImprimio) return;
+            yaImprimio = true;
+
+            window.focus();
+
             setTimeout(function() {
-              window.focus();
               window.print();
-            }, 600);
-          };
+            }, 300);
+          }
+
+          window.addEventListener('load', function() {
+            setTimeout(imprimirTicket, 500);
+          });
+
+          window.addEventListener('afterprint', function() {
+            setTimeout(function() {
+              window.close();
+            }, 500);
+          });
+
+          // Respaldo por si el navegador no dispara afterprint.
+          setTimeout(function() {
+            if (yaImprimio) {
+              window.close();
+            }
+          }, 15000);
         </script>
       </body>
     </html>
