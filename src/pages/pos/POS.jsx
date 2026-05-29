@@ -1369,7 +1369,9 @@ export default function POS() {
         ? 'PAGAR CON PUNTOS'
         : venta.metodo_pago || metodoPago || 'EFECTIVO';
 
-    const ancho = 32;
+    // Para ticketera 58mm conviene usar 30 caracteres.
+    // 32 suele provocar cortes o saltos raros dependiendo del driver.
+    const ancho = 30;
 
     const limpiarTexto = (texto = '') => {
       return String(texto || '')
@@ -1398,7 +1400,7 @@ export default function POS() {
       return `${izq}${' '.repeat(espacio)}${der}`.slice(0, ancho);
     };
 
-    const partirTexto = (texto = '', largo = 18) => {
+    const partirTexto = (texto = '', largo = 16) => {
       const limpio = limpiarTexto(texto);
       const palabras = limpio.split(' ');
       const lineas = [];
@@ -1463,13 +1465,44 @@ export default function POS() {
       0
     );
 
+    const subtotalTicket =
+      resumenVenta.subtotal ??
+      venta.subtotal ??
+      productosVenta.reduce((acc, item) => {
+        const cantidad = Number(item.cantidad || 0);
+        const precio = Number(item.precio_unitario || item.precio_venta || item.precio || 0);
+        return acc + cantidad * precio;
+      }, 0);
+
+    const impuestoTicket =
+      resumenVenta.impuesto ??
+      venta.impuesto ??
+      0;
+
+    const descuentoTicket =
+      resumenVenta.descuento ??
+      venta.descuento ??
+      0;
+
+    const totalTicket =
+      resumenVenta.total ??
+      venta.total ??
+      subtotalTicket + impuestoTicket - descuentoTicket;
+
+    const recibidoTicket =
+      resumenVenta.monto_recibido ??
+      venta.monto_recibido ??
+      totalTicket;
+
+    const cambioTicket =
+      resumenVenta.cambio ??
+      venta.cambio ??
+      0;
+
     let contenido = '';
 
     contenido += `${centrar('FARMACIAS SHADDAI')}\n`;
-
-    if (nombreSucursal) {
-      contenido += `${centrar(nombreSucursal.toUpperCase())}\n`;
-    }
+    contenido += `${centrar(nombreSucursal.toUpperCase())}\n`;
 
     if (direccionSucursal) {
       partirTexto(direccionSucursal.toUpperCase(), ancho).forEach((lineaDir) => {
@@ -1484,12 +1517,14 @@ export default function POS() {
     contenido += `\n`;
     contenido += `${centrar(fechaFormateada)}\n`;
     contenido += `\n`;
-    contenido += `${fila('CAJERO:', nombreCajero.toUpperCase())}\n`;
-    contenido += `${fila('CAJA:', nombreCaja.toUpperCase())}\n`;
-    contenido += `${fila('FOLIO:', venta.folio || venta.id_venta || '---')}\n`;
+
+    contenido += `CAJERO:\n`;
+    contenido += `${limpiarTexto(nombreCajero.toUpperCase())}\n`;
+    contenido += `CAJA: ${limpiarTexto(nombreCaja.toUpperCase())}\n`;
+    contenido += `FOLIO: ${limpiarTexto(venta.folio || venta.id_venta || '---')}\n`;
     contenido += `\n`;
 
-    contenido += `${fila('CANT DESCRIPCION', 'IMPORTE')}\n`;
+    contenido += `CANT DESCRIPCION     IMPORTE\n`;
     contenido += `${linea('=')}\n`;
 
     productosVenta.forEach((item) => {
@@ -1498,22 +1533,21 @@ export default function POS() {
       const importe = Number(item.subtotal || cantidad * precio || 0);
       const nombre = item.nombre || item.producto || item.descripcion || 'PRODUCTO';
 
-      const lineasNombre = partirTexto(nombre.toUpperCase(), 18);
+      const lineasNombre = partirTexto(nombre.toUpperCase(), 16);
 
-      contenido += `${String(cantidad).padEnd(3, ' ')} ${lineasNombre[0].padEnd(18, ' ').slice(0, 18)} ${monedaTicket(importe).padStart(8, ' ')}\n`;
+      contenido += `${String(cantidad).padEnd(3, ' ')} ${lineasNombre[0].padEnd(16, ' ').slice(0, 16)} ${monedaTicket(importe).padStart(8, ' ')}\n`;
 
       lineasNombre.slice(1).forEach((lineaExtra) => {
         contenido += `    ${lineaExtra}\n`;
       });
 
       if (item.lote || item.fecha_caducidad) {
-        const caducidad = item.fecha_caducidad
-          ? new Date(item.fecha_caducidad).toLocaleDateString('es-MX')
-          : '';
+        if (item.lote) {
+          contenido += `    Lote: ${limpiarTexto(item.lote)}\n`;
+        }
 
-        contenido += `    Lote: ${limpiarTexto(item.lote || '---')}\n`;
-
-        if (caducidad) {
+        if (item.fecha_caducidad) {
+          const caducidad = new Date(item.fecha_caducidad).toLocaleDateString('es-MX');
           contenido += `    Cad: ${caducidad}\n`;
         }
       }
@@ -1522,17 +1556,18 @@ export default function POS() {
     contenido += `\n`;
     contenido += `${fila('NO. DE ARTICULOS:', cantidadArticulos)}\n`;
     contenido += `\n`;
-    contenido += `${fila('SUBTOTAL:', monedaTicket(resumenVenta.subtotal))}\n`;
 
-    if (Number(resumenVenta.impuesto || 0) > 0) {
-      contenido += `${fila('IMPUESTO:', monedaTicket(resumenVenta.impuesto))}\n`;
+    contenido += `${fila('SUBTOTAL:', monedaTicket(subtotalTicket))}\n`;
+
+    if (Number(impuestoTicket || 0) > 0) {
+      contenido += `${fila('IMPUESTO:', monedaTicket(impuestoTicket))}\n`;
     }
 
-    if (Number(resumenVenta.descuento || 0) > 0) {
-      contenido += `${fila('DESCUENTO:', monedaTicket(resumenVenta.descuento))}\n`;
+    if (Number(descuentoTicket || 0) > 0) {
+      contenido += `${fila('DESCUENTO:', monedaTicket(descuentoTicket))}\n`;
     }
 
-    contenido += `${fila('TOTAL:', monedaTicket(resumenVenta.total))}\n`;
+    contenido += `${fila('TOTAL:', monedaTicket(totalTicket))}\n`;
 
     if (pagosTicket.length > 0) {
       contenido += `\n`;
@@ -1540,23 +1575,25 @@ export default function POS() {
         contenido += `${fila(pago.metodo_pago || 'PAGO', monedaTicket(pago.monto))}\n`;
       });
     } else {
-      contenido += `${fila('PAGO CON:', monedaTicket(resumenVenta.monto_recibido || resumenVenta.total))}\n`;
+      contenido += `${fila('PAGO CON:', monedaTicket(recibidoTicket))}\n`;
     }
 
     contenido += `${fila('METODO:', metodoPagoTicket)}\n`;
-    contenido += `${fila('SU CAMBIO:', monedaTicket(resumenVenta.cambio))}\n`;
+    contenido += `${fila('SU CAMBIO:', monedaTicket(cambioTicket))}\n`;
 
-    if (Number(resumenVenta.ahorro || resumenVenta.descuento || 0) > 0) {
-      contenido += `${fila('USTED AHORRO:', monedaTicket(resumenVenta.ahorro || resumenVenta.descuento))}\n`;
+    const ahorroTicket = resumenVenta.ahorro || descuentoTicket || 0;
+
+    if (Number(ahorroTicket || 0) > 0) {
+      contenido += `${fila('USTED AHORRO:', monedaTicket(ahorroTicket))}\n`;
     }
 
     contenido += `\n`;
     contenido += `${centrar('*** GRACIAS POR SU COMPRA ***')}\n`;
     contenido += `${centrar('CONSERVE SU TICKET PARA')}\n`;
     contenido += `${centrar('CUALQUIER DUDA O ACLARACION')}\n`;
-    contenido += `\n\n\n`;
+    contenido += `\n\n\n\n\n`;
 
-    const ventana = window.open('', '_blank', 'width=380,height=650');
+    const ventana = window.open('', '_blank', 'width=380,height=700');
 
     ventana.document.write(`
     <html>
@@ -1564,7 +1601,7 @@ export default function POS() {
         <title>Ticket ${venta.folio || ''}</title>
         <style>
           @page {
-            size: 58mm auto;
+            size: 58mm 220mm;
             margin: 0;
           }
 
@@ -1576,43 +1613,61 @@ export default function POS() {
           body {
             margin: 0;
             padding: 0;
+            width: 58mm;
+            min-height: 220mm;
             background: #ffffff;
+            color: #000000;
           }
 
           body {
-            width: 58mm;
             font-family: "Courier New", Courier, monospace;
-            color: #000000;
           }
 
           .ticket {
             width: 58mm;
-            padding: 4mm 2mm 2mm 2mm;
+            min-height: 220mm;
+            padding: 3mm 2mm 12mm 2mm;
+            overflow: visible;
           }
 
           pre {
             margin: 0;
             padding: 0;
             font-family: "Courier New", Courier, monospace;
-            font-size: 12px;
-            line-height: 1.25;
+            font-size: 10px;
+            line-height: 1.18;
             font-weight: 700;
-            white-space: pre-wrap;
-            word-break: normal;
+            white-space: pre;
+            overflow: visible;
           }
 
           @media print {
+            @page {
+              size: 58mm 220mm;
+              margin: 0;
+            }
+
             html,
             body {
               width: 58mm;
+              min-height: 220mm;
               margin: 0;
               padding: 0;
+              overflow: visible;
             }
 
             .ticket {
               width: 58mm;
-              margin: 0;
-              padding: 4mm 2mm 2mm 2mm;
+              min-height: 220mm;
+              padding: 3mm 2mm 12mm 2mm;
+              overflow: visible;
+            }
+
+            pre {
+              font-size: 10px;
+              line-height: 1.18;
+              white-space: pre;
+              overflow: visible;
             }
           }
         </style>
@@ -1626,11 +1681,7 @@ export default function POS() {
           window.onload = function() {
             setTimeout(function() {
               window.print();
-            }, 250);
-
-            window.onafterprint = function() {
-              window.close();
-            };
+            }, 500);
           };
         </script>
       </body>
