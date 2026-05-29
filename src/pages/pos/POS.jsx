@@ -1343,303 +1343,285 @@ export default function POS() {
   };
 
   const imprimirTicketPOS = (ventaData = null) => {
-    const datosTicket = ventaData || ventaFinalizada;
+  const datosTicket = ventaData || ventaFinalizada;
 
-    if (!datosTicket?.venta) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Sin venta',
-        text: 'No hay una venta reciente para imprimir.',
-      });
-      return;
-    }
+  if (!datosTicket?.venta) {
+    Swal.fire({
+      icon: 'warning',
+      title: 'Sin venta',
+      text: 'No hay una venta reciente para imprimir.',
+    });
+    return;
+  }
 
-    const venta = datosTicket.venta;
-    const resumenVenta = datosTicket.resumen || {};
-    const productosVenta = venta.productos || [];
+  const venta = datosTicket.venta;
+  const resumenVenta = datosTicket.resumen || {};
+  const productosVenta = venta.productos || [];
 
-    const pagosTicket = Array.isArray(venta.pagos)
-      ? venta.pagos
-      : Array.isArray(datosTicket.pagos)
-        ? datosTicket.pagos
-        : [];
+  const pagosTicket = Array.isArray(venta.pagos)
+    ? venta.pagos
+    : Array.isArray(datosTicket.pagos)
+      ? datosTicket.pagos
+      : [];
 
-    const metodoPagoTicket =
-      venta.metodo_pago === 'PUNTOS'
-        ? 'PAGAR CON PUNTOS'
-        : venta.metodo_pago || metodoPago || 'EFECTIVO';
+  const metodoPagoTicket =
+    venta.metodo_pago === 'PUNTOS'
+      ? 'PAGAR CON PUNTOS'
+      : venta.metodo_pago || metodoPago || 'EFECTIVO';
 
-    /*
-      IMPORTANTE:
-      Para 58mm no conviene usar más de 30 caracteres.
-      Si subes a 32 o 34, algunas impresoras cortan o bajan columnas.
-    */
-    const ancho = 30;
+  const ancho = 30;
 
-    const limpiarTexto = (texto = '') => {
-      return String(texto || '')
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^\x20-\x7E]/g, '')
-        .replace(/\s+/g, ' ')
-        .trim();
-    };
+  const limpiarTexto = (texto = '') => {
+    return String(texto || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^\x20-\x7E]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
 
-    const escapeHtml = (texto = '') => {
-      return String(texto || '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
-    };
+  const escapeHtml = (texto = '') => {
+    return String(texto || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  };
 
-    const monedaTicket = (valor) => {
-      return `$${Number(valor || 0).toFixed(2)}`;
-    };
+  const monedaTicket = (valor) => {
+    return `$${Number(valor || 0).toFixed(2)}`;
+  };
 
-    const linea = (caracter = '=') => caracter.repeat(ancho);
+  const linea = (caracter = '=') => caracter.repeat(ancho);
 
-    const centrar = (texto = '') => {
-      const limpio = limpiarTexto(texto).slice(0, ancho);
-      const espacios = Math.max(Math.floor((ancho - limpio.length) / 2), 0);
-      return `${' '.repeat(espacios)}${limpio}`;
-    };
+  const centrar = (texto = '') => {
+    const limpio = limpiarTexto(texto).slice(0, ancho);
+    const espacios = Math.max(Math.floor((ancho - limpio.length) / 2), 0);
+    return `${' '.repeat(espacios)}${limpio}`;
+  };
 
-    const fila = (izquierda = '', derecha = '') => {
-      const izq = limpiarTexto(izquierda);
-      const der = limpiarTexto(derecha);
-      const espacio = Math.max(ancho - izq.length - der.length, 1);
-      return `${izq}${' '.repeat(espacio)}${der}`.slice(0, ancho);
-    };
+  const fila = (izquierda = '', derecha = '') => {
+    const izq = limpiarTexto(izquierda);
+    const der = limpiarTexto(derecha);
+    const espacio = Math.max(ancho - izq.length - der.length, 1);
+    return `${izq}${' '.repeat(espacio)}${der}`.slice(0, ancho);
+  };
 
-    const partirTexto = (texto = '', largo = 18) => {
-      const limpio = limpiarTexto(texto);
-      if (!limpio) return [''];
+  const partirTexto = (texto = '', largo = 18) => {
+    const limpio = limpiarTexto(texto);
+    if (!limpio) return [''];
 
-      const palabras = limpio.split(' ');
-      const lineas = [];
-      let lineaActual = '';
+    const palabras = limpio.split(' ');
+    const lineas = [];
+    let lineaActual = '';
 
-      palabras.forEach((palabra) => {
-        const palabraLimpia = palabra.slice(0, largo);
+    palabras.forEach((palabra) => {
+      const palabraLimpia = palabra.slice(0, largo);
 
-        if ((lineaActual + ' ' + palabraLimpia).trim().length <= largo) {
-          lineaActual = `${lineaActual} ${palabraLimpia}`.trim();
-        } else {
-          if (lineaActual) lineas.push(lineaActual);
-          lineaActual = palabraLimpia;
-        }
-      });
-
-      if (lineaActual) lineas.push(lineaActual);
-      return lineas.length ? lineas : [''];
-    };
-
-    const fechaVenta = venta.fecha_venta
-      ? new Date(venta.fecha_venta)
-      : new Date();
-
-    const fechaFormateada = fechaVenta.toLocaleString('es-MX', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
+      if ((lineaActual + ' ' + palabraLimpia).trim().length <= largo) {
+        lineaActual = `${lineaActual} ${palabraLimpia}`.trim();
+      } else {
+        if (lineaActual) lineas.push(lineaActual);
+        lineaActual = palabraLimpia;
+      }
     });
 
-    const nombreSucursal =
-      venta.sucursal ||
-      venta.nombre_sucursal ||
-      sucursalActual?.nombre ||
-      'FARMACIA SHADDAI';
+    if (lineaActual) lineas.push(lineaActual);
+    return lineas.length ? lineas : [''];
+  };
 
-    const direccionSucursal =
-      venta.direccion_sucursal ||
-      sucursalActual?.direccion ||
-      '';
+  const fechaVenta = venta.fecha_venta
+    ? new Date(venta.fecha_venta)
+    : new Date();
 
-    const telefonoSucursal =
-      venta.telefono_sucursal ||
-      sucursalActual?.telefono ||
-      '';
+  const fechaFormateada = fechaVenta.toLocaleString('es-MX', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 
-    const nombreCaja =
-      venta.caja ||
-      venta.nombre_caja ||
-      cajaActual?.nombre ||
-      idCaja ||
-      'CAJA PRINCIPAL';
+  const nombreSucursal =
+    venta.sucursal ||
+    venta.nombre_sucursal ||
+    sucursalActual?.nombre ||
+    'FARMACIA SHADDAI';
 
-    const nombreCajero =
-      venta.usuario ||
-      venta.cajero ||
-      venta.nombre_cajero ||
-      usuario?.nombre ||
-      usuario?.usuario ||
-      usuario?.nombre_completo ||
-      'CAJERO';
+  const direccionSucursal =
+    venta.direccion_sucursal ||
+    sucursalActual?.direccion ||
+    '';
 
-    const subtotalTicket =
-      resumenVenta.subtotal ??
-      venta.subtotal ??
-      productosVenta.reduce((acc, item) => {
-        const cantidad = Number(item.cantidad || 0);
-        const precio = Number(item.precio_unitario || item.precio_venta || item.precio || 0);
-        return acc + cantidad * precio;
-      }, 0);
+  const telefonoSucursal =
+    venta.telefono_sucursal ||
+    sucursalActual?.telefono ||
+    '';
 
-    const impuestoTicket =
-      resumenVenta.impuesto ??
-      venta.impuesto ??
-      0;
+  const nombreCaja =
+    venta.caja ||
+    venta.nombre_caja ||
+    cajaActual?.nombre ||
+    idCaja ||
+    'CAJA PRINCIPAL';
 
-    const descuentoTicket =
-      resumenVenta.descuento ??
-      venta.descuento ??
-      0;
+  const nombreCajero =
+    venta.usuario ||
+    venta.cajero ||
+    venta.nombre_cajero ||
+    usuario?.nombre ||
+    usuario?.usuario ||
+    usuario?.nombre_completo ||
+    'CAJERO';
 
-    const totalTicket =
-      resumenVenta.total ??
-      venta.total ??
-      Number(subtotalTicket || 0) + Number(impuestoTicket || 0) - Number(descuentoTicket || 0);
-
-    const recibidoTicket =
-      resumenVenta.monto_recibido ??
-      venta.monto_recibido ??
-      totalTicket;
-
-    const cambioTicket =
-      resumenVenta.cambio ??
-      venta.cambio ??
-      0;
-
-    const cantidadArticulos = productosVenta.reduce(
-      (acc, item) => acc + Number(item.cantidad || 0),
-      0
-    );
-
-    let contenido = '';
-
-    // Encabezado
-    contenido += `${centrar('FARMACIAS SHADDAI')}\n`;
-    contenido += `${centrar(nombreSucursal.toUpperCase())}\n`;
-
-    if (direccionSucursal) {
-      partirTexto(direccionSucursal.toUpperCase(), ancho).forEach((lineaDir) => {
-        contenido += `${centrar(lineaDir)}\n`;
-      });
-    }
-
-    if (telefonoSucursal) {
-      contenido += `${centrar(`TEL. ${telefonoSucursal}`)}\n`;
-    }
-
-    contenido += `\n`;
-    contenido += `${centrar(fechaFormateada)}\n`;
-    contenido += `\n`;
-
-    // Datos de venta
-    contenido += `CAJERO:\n`;
-    partirTexto(nombreCajero.toUpperCase(), ancho).forEach((lineaCajero) => {
-      contenido += `${lineaCajero}\n`;
-    });
-
-    contenido += `CAJA: ${limpiarTexto(nombreCaja.toUpperCase()).slice(0, 24)}\n`;
-    contenido += `FOLIO: ${limpiarTexto(venta.folio || venta.id_venta || '---')}\n`;
-    contenido += `\n`;
-
-    // Productos
-    contenido += `CANT DESCRIPCION       IMPORTE\n`;
-    contenido += `${linea('=')}\n`;
-
-    productosVenta.forEach((item) => {
+  const subtotalTicket =
+    resumenVenta.subtotal ??
+    venta.subtotal ??
+    productosVenta.reduce((acc, item) => {
       const cantidad = Number(item.cantidad || 0);
-      const precioUnitario = Number(item.precio_unitario || item.precio_venta || item.precio || 0);
-      const importe = Number(item.subtotal || cantidad * precioUnitario || 0);
-      const nombre = item.nombre || item.producto || item.descripcion || 'PRODUCTO';
+      const precio = Number(item.precio_unitario || item.precio_venta || item.precio || 0);
+      return acc + cantidad * precio;
+    }, 0);
 
-      /*
-        16 caracteres para descripción en primera línea.
-        Esto evita que el importe se vaya a otra línea.
-      */
-      const lineasNombre = partirTexto(nombre.toUpperCase(), 16);
+  const impuestoTicket =
+    resumenVenta.impuesto ??
+    venta.impuesto ??
+    0;
 
-      contenido += `${String(cantidad).padEnd(3, ' ')} ${lineasNombre[0].padEnd(16, ' ').slice(0, 16)} ${monedaTicket(importe).padStart(8, ' ')}\n`;
+  const descuentoTicket =
+    resumenVenta.descuento ??
+    venta.descuento ??
+    0;
 
-      lineasNombre.slice(1).forEach((lineaExtra) => {
-        contenido += `    ${lineaExtra}\n`;
-      });
+  const totalTicket =
+    resumenVenta.total ??
+    venta.total ??
+    Number(subtotalTicket || 0) + Number(impuestoTicket || 0) - Number(descuentoTicket || 0);
 
-      if (item.lote) {
-        contenido += `    Lote: ${limpiarTexto(item.lote)}\n`;
-      }
+  const recibidoTicket =
+    resumenVenta.monto_recibido ??
+    venta.monto_recibido ??
+    totalTicket;
 
-      if (item.fecha_caducidad) {
-        const caducidad = new Date(item.fecha_caducidad).toLocaleDateString('es-MX');
-        contenido += `    Cad: ${caducidad}\n`;
-      }
+  const cambioTicket =
+    resumenVenta.cambio ??
+    venta.cambio ??
+    0;
+
+  const cantidadArticulos = productosVenta.reduce(
+    (acc, item) => acc + Number(item.cantidad || 0),
+    0
+  );
+
+  let contenido = '';
+
+  contenido += `${centrar('FARMACIAS SHADDAI')}\n`;
+  contenido += `${centrar(nombreSucursal.toUpperCase())}\n`;
+
+  if (direccionSucursal) {
+    partirTexto(direccionSucursal.toUpperCase(), ancho).forEach((lineaDir) => {
+      contenido += `${centrar(lineaDir)}\n`;
+    });
+  }
+
+  if (telefonoSucursal) {
+    contenido += `${centrar(`TEL. ${telefonoSucursal}`)}\n`;
+  }
+
+  contenido += `\n`;
+  contenido += `${centrar(fechaFormateada)}\n`;
+  contenido += `\n`;
+
+  contenido += `${fila('CAJERO:', nombreCajero.toUpperCase())}\n`;
+  contenido += `${fila('CAJA:', nombreCaja.toUpperCase())}\n`;
+  contenido += `${fila('FOLIO:', venta.folio || venta.id_venta || '---')}\n`;
+  contenido += `\n`;
+
+  contenido += `CANT DESCRIPCION       IMPORTE\n`;
+  contenido += `${linea('=')}\n`;
+
+  productosVenta.forEach((item) => {
+    const cantidad = Number(item.cantidad || 0);
+    const precioUnitario = Number(item.precio_unitario || item.precio_venta || item.precio || 0);
+    const importe = Number(item.subtotal || cantidad * precioUnitario || 0);
+    const nombre = item.nombre || item.producto || item.descripcion || 'PRODUCTO';
+
+    const lineasNombre = partirTexto(nombre.toUpperCase(), 16);
+
+    contenido += `${String(cantidad).padEnd(3, ' ')} ${lineasNombre[0]
+      .padEnd(16, ' ')
+      .slice(0, 16)} ${monedaTicket(importe).padStart(8, ' ')}\n`;
+
+    lineasNombre.slice(1).forEach((lineaExtra) => {
+      contenido += `    ${lineaExtra}\n`;
     });
 
-    contenido += `\n`;
-
-    // Totales
-    contenido += `${fila('NO. DE ARTICULOS:', cantidadArticulos)}\n`;
-    contenido += `${fila('SUBTOTAL:', monedaTicket(subtotalTicket))}\n`;
-
-    if (Number(impuestoTicket || 0) > 0) {
-      contenido += `${fila('IMPUESTO:', monedaTicket(impuestoTicket))}\n`;
+    if (item.lote) {
+      contenido += `    Lote: ${limpiarTexto(item.lote)}\n`;
     }
 
-    if (Number(descuentoTicket || 0) > 0) {
-      contenido += `${fila('DESCUENTO:', monedaTicket(descuentoTicket))}\n`;
+    if (item.fecha_caducidad) {
+      const caducidad = new Date(item.fecha_caducidad).toLocaleDateString('es-MX');
+      contenido += `    Cad: ${caducidad}\n`;
     }
+  });
 
-    contenido += `${fila('TOTAL:', monedaTicket(totalTicket))}\n`;
-    contenido += `\n`;
+  contenido += `\n`;
 
-    // Pagos
-    if (pagosTicket.length > 0) {
-      pagosTicket.forEach((pago) => {
-        contenido += `${fila(pago.metodo_pago || 'PAGO', monedaTicket(pago.monto))}\n`;
-      });
-    } else {
-      contenido += `${fila('PAGO CON:', monedaTicket(recibidoTicket))}\n`;
-    }
+  contenido += `${fila('NO. DE ARTICULOS:', cantidadArticulos)}\n`;
+  contenido += `${fila('SUBTOTAL:', monedaTicket(subtotalTicket))}\n`;
 
-    contenido += `${fila('METODO:', metodoPagoTicket)}\n`;
-    contenido += `${fila('SU CAMBIO:', monedaTicket(cambioTicket))}\n`;
+  if (Number(impuestoTicket || 0) > 0) {
+    contenido += `${fila('IMPUESTO:', monedaTicket(impuestoTicket))}\n`;
+  }
 
-    const ahorroTicket = resumenVenta.ahorro || descuentoTicket || 0;
+  if (Number(descuentoTicket || 0) > 0) {
+    contenido += `${fila('DESCUENTO:', monedaTicket(descuentoTicket))}\n`;
+  }
 
-    if (Number(ahorroTicket || 0) > 0) {
-      contenido += `${fila('USTED AHORRO:', monedaTicket(ahorroTicket))}\n`;
-    }
+  contenido += `${fila('TOTAL:', monedaTicket(totalTicket))}\n`;
+  contenido += `\n`;
 
-    contenido += `\n`;
-    contenido += `${centrar('*** GRACIAS POR SU COMPRA ***')}\n`;
-    contenido += `${centrar('CONSERVE SU TICKET PARA')}\n`;
-    contenido += `${centrar('CUALQUIER DUDA O ACLARACION')}\n`;
+  if (pagosTicket.length > 0) {
+    pagosTicket.forEach((pago) => {
+      contenido += `${fila(pago.metodo_pago || 'PAGO', monedaTicket(pago.monto))}\n`;
+    });
+  } else {
+    contenido += `${fila('PAGO CON:', monedaTicket(recibidoTicket))}\n`;
+  }
 
-    /*
-      Avance de papel.
-      Esto ayuda a que la impresora saque el ticket completo antes del corte manual.
-    */
-    contenido += `\n\n\n\n\n\n\n\n\n\n`;
+  contenido += `${fila('METODO:', metodoPagoTicket)}\n`;
+  contenido += `${fila('SU CAMBIO:', monedaTicket(cambioTicket))}\n`;
 
-    const ventana = window.open('', '_blank', 'width=380,height=1000');
+  const ahorroTicket = resumenVenta.ahorro || descuentoTicket || 0;
 
-    if (!ventana) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Ventana bloqueada',
-        text: 'Permite las ventanas emergentes para poder imprimir el ticket.',
-      });
-      return;
-    }
+  if (Number(ahorroTicket || 0) > 0) {
+    contenido += `${fila('USTED AHORRO:', monedaTicket(ahorroTicket))}\n`;
+  }
 
-    ventana.document.open();
-    ventana.document.write(`
+  contenido += `\n`;
+  contenido += `${centrar('*** GRACIAS POR SU COMPRA ***')}\n`;
+  contenido += `${centrar('CONSERVE SU TICKET PARA')}\n`;
+  contenido += `${centrar('CUALQUIER DUDA O')}\n`;
+  contenido += `${centrar('ACLARACION')}\n`;
+
+  // Avance de papel para que no corte el cierre del ticket.
+  contenido += `\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n`;
+
+  const ventana = window.open('', '_blank', 'width=380,height=1000');
+
+  if (!ventana) {
+    Swal.fire({
+      icon: 'warning',
+      title: 'Ventana bloqueada',
+      text: 'Permite las ventanas emergentes para poder imprimir el ticket.',
+    });
+    return;
+  }
+
+  ventana.document.open();
+  ventana.document.write(`
     <html>
       <head>
         <title>Ticket ${escapeHtml(venta.folio || '')}</title>
@@ -1671,7 +1653,7 @@ export default function POS() {
           .ticket {
             width: 58mm;
             min-height: 297mm;
-            padding: 2mm 2mm 18mm 2mm;
+            padding: 2mm 2mm 22mm 2mm;
             overflow: visible;
           }
 
@@ -1679,8 +1661,8 @@ export default function POS() {
             margin: 0;
             padding: 0;
             font-family: "Courier New", Courier, monospace;
-            font-size: 9.5px;
-            line-height: 1.15;
+            font-size: 9px;
+            line-height: 1.12;
             font-weight: 700;
             white-space: pre;
             overflow: visible;
@@ -1704,13 +1686,13 @@ export default function POS() {
             .ticket {
               width: 58mm;
               min-height: 297mm;
-              padding: 2mm 2mm 18mm 2mm;
+              padding: 2mm 2mm 22mm 2mm;
               overflow: visible;
             }
 
             pre {
-              font-size: 9.5px;
-              line-height: 1.15;
+              font-size: 9px;
+              line-height: 1.12;
               white-space: pre;
               overflow: visible;
             }
@@ -1733,8 +1715,8 @@ export default function POS() {
     </html>
   `);
 
-    ventana.document.close();
-  };
+  ventana.document.close();
+};
 
   const abrirEscanerProducto = () => {
     setScannerTipo('PRODUCTO');
@@ -2543,10 +2525,11 @@ function CarritoPOS({
                     key={metodo.id}
                     type="button"
                     onClick={() => seleccionarMetodoPago(metodo.id)}
-                    className={`flex items-center justify-center gap-2 rounded-2xl px-3 py-3 text-xs font-black transition ${activo
+                    className={`flex items-center justify-center gap-2 rounded-2xl px-3 py-3 text-xs font-black transition ${
+                      activo
                         ? 'bg-sky-700 text-white shadow-lg shadow-sky-700/20'
                         : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                      }`}
+                    }`}
                   >
                     <Icono size={16} />
                     {metodo.label}
@@ -2820,12 +2803,13 @@ function ModalLotesProducto({
                         type="button"
                         onClick={() => onAgregar(producto, lote, cantidadNumerica)}
                         disabled={loteBloqueado}
-                        className={`inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-bold transition ${loteBloqueado
+                        className={`inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-bold transition ${
+                          loteBloqueado
                             ? 'cursor-not-allowed bg-slate-100 text-slate-400'
                             : estadoCaducidad.proximoCaducar
                               ? 'bg-amber-500 text-white hover:bg-amber-600'
                               : 'bg-sky-700 text-white hover:bg-sky-800'
-                          }`}
+                        }`}
                       >
                         <Plus size={18} />
                         {estadoCaducidad.caducado
