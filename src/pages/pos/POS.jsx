@@ -1369,8 +1369,11 @@ export default function POS() {
         ? 'PAGAR CON PUNTOS'
         : venta.metodo_pago || metodoPago || 'EFECTIVO';
 
-    // Para ticketera 58mm conviene usar 30 caracteres.
-    // 32 suele provocar cortes o saltos raros dependiendo del driver.
+    /*
+      IMPORTANTE:
+      Para 58mm no conviene usar más de 30 caracteres.
+      Si subes a 32 o 34, algunas impresoras cortan o bajan columnas.
+    */
     const ancho = 30;
 
     const limpiarTexto = (texto = '') => {
@@ -1378,7 +1381,17 @@ export default function POS() {
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
         .replace(/[^\x20-\x7E]/g, '')
+        .replace(/\s+/g, ' ')
         .trim();
+    };
+
+    const escapeHtml = (texto = '') => {
+      return String(texto || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
     };
 
     const monedaTicket = (valor) => {
@@ -1400,18 +1413,22 @@ export default function POS() {
       return `${izq}${' '.repeat(espacio)}${der}`.slice(0, ancho);
     };
 
-    const partirTexto = (texto = '', largo = 16) => {
+    const partirTexto = (texto = '', largo = 18) => {
       const limpio = limpiarTexto(texto);
+      if (!limpio) return [''];
+
       const palabras = limpio.split(' ');
       const lineas = [];
       let lineaActual = '';
 
       palabras.forEach((palabra) => {
-        if ((lineaActual + ' ' + palabra).trim().length <= largo) {
-          lineaActual = `${lineaActual} ${palabra}`.trim();
+        const palabraLimpia = palabra.slice(0, largo);
+
+        if ((lineaActual + ' ' + palabraLimpia).trim().length <= largo) {
+          lineaActual = `${lineaActual} ${palabraLimpia}`.trim();
         } else {
           if (lineaActual) lineas.push(lineaActual);
-          lineaActual = palabra.slice(0, largo);
+          lineaActual = palabraLimpia;
         }
       });
 
@@ -1432,38 +1449,36 @@ export default function POS() {
     });
 
     const nombreSucursal =
-      sucursalActual?.nombre ||
       venta.sucursal ||
       venta.nombre_sucursal ||
+      sucursalActual?.nombre ||
       'FARMACIA SHADDAI';
 
     const direccionSucursal =
-      sucursalActual?.direccion ||
       venta.direccion_sucursal ||
+      sucursalActual?.direccion ||
       '';
 
     const telefonoSucursal =
-      sucursalActual?.telefono ||
       venta.telefono_sucursal ||
+      sucursalActual?.telefono ||
       '';
 
     const nombreCaja =
-      cajaActual?.nombre ||
       venta.caja ||
       venta.nombre_caja ||
+      cajaActual?.nombre ||
+      idCaja ||
       'CAJA PRINCIPAL';
 
     const nombreCajero =
-      usuario?.nombre ||
-      usuario?.nombre_completo ||
+      venta.usuario ||
       venta.cajero ||
       venta.nombre_cajero ||
+      usuario?.nombre ||
+      usuario?.usuario ||
+      usuario?.nombre_completo ||
       'CAJERO';
-
-    const cantidadArticulos = productosVenta.reduce(
-      (acc, item) => acc + Number(item.cantidad || 0),
-      0
-    );
 
     const subtotalTicket =
       resumenVenta.subtotal ??
@@ -1487,7 +1502,7 @@ export default function POS() {
     const totalTicket =
       resumenVenta.total ??
       venta.total ??
-      subtotalTicket + impuestoTicket - descuentoTicket;
+      Number(subtotalTicket || 0) + Number(impuestoTicket || 0) - Number(descuentoTicket || 0);
 
     const recibidoTicket =
       resumenVenta.monto_recibido ??
@@ -1499,8 +1514,14 @@ export default function POS() {
       venta.cambio ??
       0;
 
+    const cantidadArticulos = productosVenta.reduce(
+      (acc, item) => acc + Number(item.cantidad || 0),
+      0
+    );
+
     let contenido = '';
 
+    // Encabezado
     contenido += `${centrar('FARMACIAS SHADDAI')}\n`;
     contenido += `${centrar(nombreSucursal.toUpperCase())}\n`;
 
@@ -1518,21 +1539,30 @@ export default function POS() {
     contenido += `${centrar(fechaFormateada)}\n`;
     contenido += `\n`;
 
+    // Datos de venta
     contenido += `CAJERO:\n`;
-    contenido += `${limpiarTexto(nombreCajero.toUpperCase())}\n`;
-    contenido += `CAJA: ${limpiarTexto(nombreCaja.toUpperCase())}\n`;
+    partirTexto(nombreCajero.toUpperCase(), ancho).forEach((lineaCajero) => {
+      contenido += `${lineaCajero}\n`;
+    });
+
+    contenido += `CAJA: ${limpiarTexto(nombreCaja.toUpperCase()).slice(0, 24)}\n`;
     contenido += `FOLIO: ${limpiarTexto(venta.folio || venta.id_venta || '---')}\n`;
     contenido += `\n`;
 
-    contenido += `CANT DESCRIPCION     IMPORTE\n`;
+    // Productos
+    contenido += `CANT DESCRIPCION       IMPORTE\n`;
     contenido += `${linea('=')}\n`;
 
     productosVenta.forEach((item) => {
       const cantidad = Number(item.cantidad || 0);
-      const precio = Number(item.precio_unitario || item.precio_venta || item.precio || 0);
-      const importe = Number(item.subtotal || cantidad * precio || 0);
+      const precioUnitario = Number(item.precio_unitario || item.precio_venta || item.precio || 0);
+      const importe = Number(item.subtotal || cantidad * precioUnitario || 0);
       const nombre = item.nombre || item.producto || item.descripcion || 'PRODUCTO';
 
+      /*
+        16 caracteres para descripción en primera línea.
+        Esto evita que el importe se vaya a otra línea.
+      */
       const lineasNombre = partirTexto(nombre.toUpperCase(), 16);
 
       contenido += `${String(cantidad).padEnd(3, ' ')} ${lineasNombre[0].padEnd(16, ' ').slice(0, 16)} ${monedaTicket(importe).padStart(8, ' ')}\n`;
@@ -1541,22 +1571,20 @@ export default function POS() {
         contenido += `    ${lineaExtra}\n`;
       });
 
-      if (item.lote || item.fecha_caducidad) {
-        if (item.lote) {
-          contenido += `    Lote: ${limpiarTexto(item.lote)}\n`;
-        }
+      if (item.lote) {
+        contenido += `    Lote: ${limpiarTexto(item.lote)}\n`;
+      }
 
-        if (item.fecha_caducidad) {
-          const caducidad = new Date(item.fecha_caducidad).toLocaleDateString('es-MX');
-          contenido += `    Cad: ${caducidad}\n`;
-        }
+      if (item.fecha_caducidad) {
+        const caducidad = new Date(item.fecha_caducidad).toLocaleDateString('es-MX');
+        contenido += `    Cad: ${caducidad}\n`;
       }
     });
 
     contenido += `\n`;
-    contenido += `${fila('NO. DE ARTICULOS:', cantidadArticulos)}\n`;
-    contenido += `\n`;
 
+    // Totales
+    contenido += `${fila('NO. DE ARTICULOS:', cantidadArticulos)}\n`;
     contenido += `${fila('SUBTOTAL:', monedaTicket(subtotalTicket))}\n`;
 
     if (Number(impuestoTicket || 0) > 0) {
@@ -1568,9 +1596,10 @@ export default function POS() {
     }
 
     contenido += `${fila('TOTAL:', monedaTicket(totalTicket))}\n`;
+    contenido += `\n`;
 
+    // Pagos
     if (pagosTicket.length > 0) {
-      contenido += `\n`;
       pagosTicket.forEach((pago) => {
         contenido += `${fila(pago.metodo_pago || 'PAGO', monedaTicket(pago.monto))}\n`;
       });
@@ -1591,17 +1620,32 @@ export default function POS() {
     contenido += `${centrar('*** GRACIAS POR SU COMPRA ***')}\n`;
     contenido += `${centrar('CONSERVE SU TICKET PARA')}\n`;
     contenido += `${centrar('CUALQUIER DUDA O ACLARACION')}\n`;
-    contenido += `\n\n\n\n\n`;
 
-    const ventana = window.open('', '_blank', 'width=380,height=700');
+    /*
+      Avance de papel.
+      Esto ayuda a que la impresora saque el ticket completo antes del corte manual.
+    */
+    contenido += `\n\n\n\n\n\n\n\n\n\n`;
 
+    const ventana = window.open('', '_blank', 'width=380,height=1000');
+
+    if (!ventana) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Ventana bloqueada',
+        text: 'Permite las ventanas emergentes para poder imprimir el ticket.',
+      });
+      return;
+    }
+
+    ventana.document.open();
     ventana.document.write(`
     <html>
       <head>
-        <title>Ticket ${venta.folio || ''}</title>
+        <title>Ticket ${escapeHtml(venta.folio || '')}</title>
         <style>
           @page {
-            size: 58mm 220mm;
+            size: 58mm 297mm;
             margin: 0;
           }
 
@@ -1614,9 +1658,10 @@ export default function POS() {
             margin: 0;
             padding: 0;
             width: 58mm;
-            min-height: 220mm;
+            min-height: 297mm;
             background: #ffffff;
             color: #000000;
+            overflow: visible;
           }
 
           body {
@@ -1625,8 +1670,8 @@ export default function POS() {
 
           .ticket {
             width: 58mm;
-            min-height: 220mm;
-            padding: 3mm 2mm 12mm 2mm;
+            min-height: 297mm;
+            padding: 2mm 2mm 18mm 2mm;
             overflow: visible;
           }
 
@@ -1634,8 +1679,8 @@ export default function POS() {
             margin: 0;
             padding: 0;
             font-family: "Courier New", Courier, monospace;
-            font-size: 10px;
-            line-height: 1.18;
+            font-size: 9.5px;
+            line-height: 1.15;
             font-weight: 700;
             white-space: pre;
             overflow: visible;
@@ -1643,14 +1688,14 @@ export default function POS() {
 
           @media print {
             @page {
-              size: 58mm 220mm;
+              size: 58mm 297mm;
               margin: 0;
             }
 
             html,
             body {
               width: 58mm;
-              min-height: 220mm;
+              min-height: 297mm;
               margin: 0;
               padding: 0;
               overflow: visible;
@@ -1658,14 +1703,14 @@ export default function POS() {
 
             .ticket {
               width: 58mm;
-              min-height: 220mm;
-              padding: 3mm 2mm 12mm 2mm;
+              min-height: 297mm;
+              padding: 2mm 2mm 18mm 2mm;
               overflow: visible;
             }
 
             pre {
-              font-size: 10px;
-              line-height: 1.18;
+              font-size: 9.5px;
+              line-height: 1.15;
               white-space: pre;
               overflow: visible;
             }
@@ -1674,14 +1719,14 @@ export default function POS() {
       </head>
       <body>
         <div class="ticket">
-          <pre>${contenido}</pre>
+          <pre>${escapeHtml(contenido)}</pre>
         </div>
 
         <script>
           window.onload = function() {
             setTimeout(function() {
               window.print();
-            }, 500);
+            }, 700);
           };
         </script>
       </body>
