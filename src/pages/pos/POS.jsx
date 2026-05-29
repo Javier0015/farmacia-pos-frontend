@@ -1344,13 +1344,18 @@ export default function POS() {
 
   const imprimirTicketPOS = (ventaData = null) => {
     const datosTicket = ventaData || ventaFinalizada;
+
     if (!datosTicket?.venta) {
-      Swal.fire({ icon: 'warning', title: 'Sin venta', text: 'No hay una venta reciente para imprimir.' });
+      Swal.fire({
+        icon: 'warning',
+        title: 'Sin venta',
+        text: 'No hay una venta reciente para imprimir.',
+      });
       return;
     }
 
     const venta = datosTicket.venta;
-    const resumenVenta = datosTicket.resumen;
+    const resumenVenta = datosTicket.resumen || {};
     const productosVenta = venta.productos || [];
 
     const pagosTicket = Array.isArray(venta.pagos)
@@ -1359,105 +1364,278 @@ export default function POS() {
         ? datosTicket.pagos
         : [];
 
-    const metodoPagoTicket = venta.metodo_pago === 'PUNTOS' ? 'PAGAR CON PUNTOS' : venta.metodo_pago || metodoPago || '—';
-    const ventana = window.open('', '_blank', 'width=420,height=650');
+    const metodoPagoTicket =
+      venta.metodo_pago === 'PUNTOS'
+        ? 'PAGAR CON PUNTOS'
+        : venta.metodo_pago || metodoPago || 'EFECTIVO';
+
+    const ancho = 32;
+
+    const limpiarTexto = (texto = '') => {
+      return String(texto || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^\x20-\x7E]/g, '')
+        .trim();
+    };
+
+    const monedaTicket = (valor) => {
+      return `$${Number(valor || 0).toFixed(2)}`;
+    };
+
+    const linea = (caracter = '=') => caracter.repeat(ancho);
+
+    const centrar = (texto = '') => {
+      const limpio = limpiarTexto(texto).slice(0, ancho);
+      const espacios = Math.max(Math.floor((ancho - limpio.length) / 2), 0);
+      return `${' '.repeat(espacios)}${limpio}`;
+    };
+
+    const fila = (izquierda = '', derecha = '') => {
+      const izq = limpiarTexto(izquierda);
+      const der = limpiarTexto(derecha);
+      const espacio = Math.max(ancho - izq.length - der.length, 1);
+      return `${izq}${' '.repeat(espacio)}${der}`.slice(0, ancho);
+    };
+
+    const partirTexto = (texto = '', largo = 18) => {
+      const limpio = limpiarTexto(texto);
+      const palabras = limpio.split(' ');
+      const lineas = [];
+      let lineaActual = '';
+
+      palabras.forEach((palabra) => {
+        if ((lineaActual + ' ' + palabra).trim().length <= largo) {
+          lineaActual = `${lineaActual} ${palabra}`.trim();
+        } else {
+          if (lineaActual) lineas.push(lineaActual);
+          lineaActual = palabra.slice(0, largo);
+        }
+      });
+
+      if (lineaActual) lineas.push(lineaActual);
+      return lineas.length ? lineas : [''];
+    };
+
+    const fechaVenta = venta.fecha_venta
+      ? new Date(venta.fecha_venta)
+      : new Date();
+
+    const fechaFormateada = fechaVenta.toLocaleString('es-MX', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+    const nombreSucursal =
+      sucursalActual?.nombre ||
+      venta.sucursal ||
+      venta.nombre_sucursal ||
+      'FARMACIA SHADDAI';
+
+    const direccionSucursal =
+      sucursalActual?.direccion ||
+      venta.direccion_sucursal ||
+      '';
+
+    const telefonoSucursal =
+      sucursalActual?.telefono ||
+      venta.telefono_sucursal ||
+      '';
+
+    const nombreCaja =
+      cajaActual?.nombre ||
+      venta.caja ||
+      venta.nombre_caja ||
+      'CAJA PRINCIPAL';
+
+    const nombreCajero =
+      usuario?.nombre ||
+      usuario?.nombre_completo ||
+      venta.cajero ||
+      venta.nombre_cajero ||
+      'CAJERO';
+
+    const cantidadArticulos = productosVenta.reduce(
+      (acc, item) => acc + Number(item.cantidad || 0),
+      0
+    );
+
+    let contenido = '';
+
+    contenido += `${centrar('FARMACIAS SHADDAI')}\n`;
+
+    if (nombreSucursal) {
+      contenido += `${centrar(nombreSucursal.toUpperCase())}\n`;
+    }
+
+    if (direccionSucursal) {
+      partirTexto(direccionSucursal.toUpperCase(), ancho).forEach((lineaDir) => {
+        contenido += `${centrar(lineaDir)}\n`;
+      });
+    }
+
+    if (telefonoSucursal) {
+      contenido += `${centrar(`TEL. ${telefonoSucursal}`)}\n`;
+    }
+
+    contenido += `\n`;
+    contenido += `${centrar(fechaFormateada)}\n`;
+    contenido += `\n`;
+    contenido += `${fila('CAJERO:', nombreCajero.toUpperCase())}\n`;
+    contenido += `${fila('CAJA:', nombreCaja.toUpperCase())}\n`;
+    contenido += `${fila('FOLIO:', venta.folio || venta.id_venta || '---')}\n`;
+    contenido += `\n`;
+
+    contenido += `${fila('CANT DESCRIPCION', 'IMPORTE')}\n`;
+    contenido += `${linea('=')}\n`;
+
+    productosVenta.forEach((item) => {
+      const cantidad = Number(item.cantidad || 0);
+      const precio = Number(item.precio_unitario || item.precio_venta || item.precio || 0);
+      const importe = Number(item.subtotal || cantidad * precio || 0);
+      const nombre = item.nombre || item.producto || item.descripcion || 'PRODUCTO';
+
+      const lineasNombre = partirTexto(nombre.toUpperCase(), 18);
+
+      contenido += `${String(cantidad).padEnd(3, ' ')} ${lineasNombre[0].padEnd(18, ' ').slice(0, 18)} ${monedaTicket(importe).padStart(8, ' ')}\n`;
+
+      lineasNombre.slice(1).forEach((lineaExtra) => {
+        contenido += `    ${lineaExtra}\n`;
+      });
+
+      if (item.lote || item.fecha_caducidad) {
+        const caducidad = item.fecha_caducidad
+          ? new Date(item.fecha_caducidad).toLocaleDateString('es-MX')
+          : '';
+
+        contenido += `    Lote: ${limpiarTexto(item.lote || '---')}\n`;
+
+        if (caducidad) {
+          contenido += `    Cad: ${caducidad}\n`;
+        }
+      }
+    });
+
+    contenido += `\n`;
+    contenido += `${fila('NO. DE ARTICULOS:', cantidadArticulos)}\n`;
+    contenido += `\n`;
+    contenido += `${fila('SUBTOTAL:', monedaTicket(resumenVenta.subtotal))}\n`;
+
+    if (Number(resumenVenta.impuesto || 0) > 0) {
+      contenido += `${fila('IMPUESTO:', monedaTicket(resumenVenta.impuesto))}\n`;
+    }
+
+    if (Number(resumenVenta.descuento || 0) > 0) {
+      contenido += `${fila('DESCUENTO:', monedaTicket(resumenVenta.descuento))}\n`;
+    }
+
+    contenido += `${fila('TOTAL:', monedaTicket(resumenVenta.total))}\n`;
+
+    if (pagosTicket.length > 0) {
+      contenido += `\n`;
+      pagosTicket.forEach((pago) => {
+        contenido += `${fila(pago.metodo_pago || 'PAGO', monedaTicket(pago.monto))}\n`;
+      });
+    } else {
+      contenido += `${fila('PAGO CON:', monedaTicket(resumenVenta.monto_recibido || resumenVenta.total))}\n`;
+    }
+
+    contenido += `${fila('METODO:', metodoPagoTicket)}\n`;
+    contenido += `${fila('SU CAMBIO:', monedaTicket(resumenVenta.cambio))}\n`;
+
+    if (Number(resumenVenta.ahorro || resumenVenta.descuento || 0) > 0) {
+      contenido += `${fila('USTED AHORRO:', monedaTicket(resumenVenta.ahorro || resumenVenta.descuento))}\n`;
+    }
+
+    contenido += `\n`;
+    contenido += `${centrar('*** GRACIAS POR SU COMPRA ***')}\n`;
+    contenido += `${centrar('CONSERVE SU TICKET PARA')}\n`;
+    contenido += `${centrar('CUALQUIER DUDA O ACLARACION')}\n`;
+    contenido += `\n\n\n`;
+
+    const ventana = window.open('', '_blank', 'width=380,height=650');
 
     ventana.document.write(`
-      <html>
-        <head>
-          <title>Ticket ${venta.folio}</title>
-          <style>
-            * { box-sizing: border-box; }
-            body { margin: 0; padding: 12px; font-family: Arial, sans-serif; color: #111827; background: #ffffff; }
-            .ticket { width: 280px; margin: 0 auto; }
-            .center { text-align: center; }
-            .title { font-size: 17px; font-weight: bold; margin-bottom: 4px; }
-            .small { font-size: 11px; }
-            .line { border-top: 1px dashed #111827; margin: 10px 0; }
-            table { width: 100%; border-collapse: collapse; font-size: 11px; }
-            th, td { padding: 3px 0; vertical-align: top; }
-            th { text-align: left; border-bottom: 1px dashed #111827; }
-            .right { text-align: right; }
-            .bold { font-weight: bold; }
-            .total { font-size: 14px; font-weight: bold; }
-            .muted { color: #4b5563; }
-            .offer { color: #047857; font-weight: bold; }
-            @page { margin: 4mm; }
-            @media print { body { margin: 0; padding: 0; } }
-          </style>
-        </head>
-        <body>
-          <div class="ticket">
-            <div class="center">
-              <div class="title">FARMACIA SHADDAI</div>
-              <div class="small">${venta.sucursal || sucursalActual?.nombre || 'Sucursal'}</div>
-              <div class="small">Punto de venta</div>
-            </div>
-            <div class="line"></div>
-            <table>
-              <tbody>
-                <tr><td class="bold">Folio:</td><td class="right">${venta.folio}</td></tr>
-                <tr><td class="bold">Caja:</td><td class="right">${venta.caja || cajaActual?.nombre || idCaja || '—'}</td></tr>
-                <tr><td class="bold">Cajero:</td><td class="right">${venta.usuario || usuario?.nombre || usuario?.usuario || '—'}</td></tr>
-                <tr><td class="bold">Fecha:</td><td class="right">${new Date(venta.fecha_venta || Date.now()).toLocaleString('es-MX')}</td></tr>
-              </tbody>
-            </table>
-            <div class="line"></div>
-            <table>
-              <thead><tr><th>Producto</th><th class="right">Cant.</th><th class="right">Importe</th></tr></thead>
-              <tbody>
-                ${productosVenta
-        .map((item) => {
-          const precioOriginal = Number(item.precio_original || item.precio_unitario || 0);
-          const precioUnitario = Number(item.precio_unitario || 0);
-          const porcentajeDescuento = Number(item.porcentaje_descuento || 0);
-          const tieneOfertaTicket = porcentajeDescuento > 0;
-          return `
-                      <tr>
-                        <td>
-                          <div class="bold">${item.nombre || item.producto || 'Producto'}</div>
-                          ${item.lote ? `<div class="small muted">Lote: ${item.lote}${item.fecha_caducidad ? ` · Cad: ${new Date(item.fecha_caducidad).toLocaleDateString('es-MX')}` : ''}</div>` : ''}
-                          <div class="small muted">${Number(item.cantidad || 0).toLocaleString('es-MX')} x ${precioUnitario.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}</div>
-                          ${tieneOfertaTicket ? `<div class="small offer">Oferta -${porcentajeDescuento.toLocaleString('es-MX')}%</div><div class="small muted">Antes: ${precioOriginal.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}</div>` : ''}
-                        </td>
-                        <td class="right">${Number(item.cantidad || 0).toLocaleString('es-MX')}</td>
-                        <td class="right">${Number(item.subtotal || 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}</td>
-                      </tr>
-                    `;
-        })
-        .join('')}
-              </tbody>
-            </table>
-            <div class="line"></div>
-            <table>
-              <tbody>
-                <tr><td>Subtotal:</td><td class="right">${Number(resumenVenta?.subtotal || 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}</td></tr>
-                <tr><td>Impuesto:</td><td class="right">${Number(resumenVenta?.impuesto || 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}</td></tr>
-                <tr><td class="total">TOTAL:</td><td class="right total">${Number(resumenVenta?.total || 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}</td></tr>
-              </tbody>
-            </table>
-            <div class="line"></div>
-            <table>
-              <tbody>
-                <tr><td>Método:</td><td class="right">${metodoPagoTicket}</td></tr>
-                ${pagosTicket.length > 0
-                  ? pagosTicket.map((pago) => `<tr><td>${pago.metodo_pago}:</td><td class="right">${Number(pago.monto || 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}</td></tr>`).join('')
-                  : ''
-                }
-                <tr><td>Recibido:</td><td class="right">${Number(resumenVenta?.monto_recibido || 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}</td></tr>
-                <tr><td>Cambio:</td><td class="right">${Number(resumenVenta?.cambio || 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}</td></tr>
-              </tbody>
-            </table>
-            <div class="line"></div>
-            <div class="center small">Gracias por su compra</div>
-            <div class="center small">Este ticket no es comprobante fiscal</div>
-          </div>
-          <script>
-            window.onload = function() { window.print(); window.onafterprint = function() { window.close(); }; };
-          </script>
-        </body>
-      </html>
-    `);
+    <html>
+      <head>
+        <title>Ticket ${venta.folio || ''}</title>
+        <style>
+          @page {
+            size: 58mm auto;
+            margin: 0;
+          }
+
+          * {
+            box-sizing: border-box;
+          }
+
+          html,
+          body {
+            margin: 0;
+            padding: 0;
+            background: #ffffff;
+          }
+
+          body {
+            width: 58mm;
+            font-family: "Courier New", Courier, monospace;
+            color: #000000;
+          }
+
+          .ticket {
+            width: 58mm;
+            padding: 4mm 2mm 2mm 2mm;
+          }
+
+          pre {
+            margin: 0;
+            padding: 0;
+            font-family: "Courier New", Courier, monospace;
+            font-size: 12px;
+            line-height: 1.25;
+            font-weight: 700;
+            white-space: pre-wrap;
+            word-break: normal;
+          }
+
+          @media print {
+            html,
+            body {
+              width: 58mm;
+              margin: 0;
+              padding: 0;
+            }
+
+            .ticket {
+              width: 58mm;
+              margin: 0;
+              padding: 4mm 2mm 2mm 2mm;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="ticket">
+          <pre>${contenido}</pre>
+        </div>
+
+        <script>
+          window.onload = function() {
+            setTimeout(function() {
+              window.print();
+            }, 250);
+
+            window.onafterprint = function() {
+              window.close();
+            };
+          };
+        </script>
+      </body>
+    </html>
+  `);
 
     ventana.document.close();
   };
@@ -2269,11 +2447,10 @@ function CarritoPOS({
                     key={metodo.id}
                     type="button"
                     onClick={() => seleccionarMetodoPago(metodo.id)}
-                    className={`flex items-center justify-center gap-2 rounded-2xl px-3 py-3 text-xs font-black transition ${
-                      activo
+                    className={`flex items-center justify-center gap-2 rounded-2xl px-3 py-3 text-xs font-black transition ${activo
                         ? 'bg-sky-700 text-white shadow-lg shadow-sky-700/20'
                         : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                    }`}
+                      }`}
                   >
                     <Icono size={16} />
                     {metodo.label}
@@ -2547,13 +2724,12 @@ function ModalLotesProducto({
                         type="button"
                         onClick={() => onAgregar(producto, lote, cantidadNumerica)}
                         disabled={loteBloqueado}
-                        className={`inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-bold transition ${
-                          loteBloqueado
+                        className={`inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-bold transition ${loteBloqueado
                             ? 'cursor-not-allowed bg-slate-100 text-slate-400'
                             : estadoCaducidad.proximoCaducar
                               ? 'bg-amber-500 text-white hover:bg-amber-600'
                               : 'bg-sky-700 text-white hover:bg-sky-800'
-                        }`}
+                          }`}
                       >
                         <Plus size={18} />
                         {estadoCaducidad.caducado
