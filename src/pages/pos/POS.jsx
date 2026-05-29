@@ -1568,7 +1568,6 @@ export default function POS() {
   });
 
   contenido += `\n`;
-
   contenido += `${fila('NO. DE ARTICULOS:', cantidadArticulos)}\n`;
   contenido += `${fila('SUBTOTAL:', monedaTicket(subtotalTicket))}\n`;
 
@@ -1606,10 +1605,22 @@ export default function POS() {
   contenido += `${centrar('CUALQUIER DUDA O')}\n`;
   contenido += `${centrar('ACLARACION')}\n`;
 
-  // Avance de papel para que no corte el cierre del ticket.
-  contenido += `\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n`;
+  // Avance moderado. No poner demasiados saltos porque Generic/Text Only puede atorarse.
+  contenido += `\n\n\n\n\n\n`;
 
-  const ventana = window.open('', '_blank', 'width=380,height=1000');
+  /*
+    Altura dinámica:
+    - Mínimo 130mm.
+    - Máximo 220mm.
+    - Sube un poco según la cantidad de productos.
+    Esto evita usar 297mm o 500mm fijos, que pueden atorarse en Generic/Text Only.
+  */
+  const altoTicketMm = Math.min(
+    220,
+    Math.max(130, 105 + productosVenta.length * 18)
+  );
+
+  const ventana = window.open('', '_blank', 'width=380,height=700');
 
   if (!ventana) {
     Swal.fire({
@@ -1627,7 +1638,7 @@ export default function POS() {
         <title>Ticket ${escapeHtml(venta.folio || '')}</title>
         <style>
           @page {
-            size: 58mm 297mm;
+            size: 58mm ${altoTicketMm}mm;
             margin: 0;
           }
 
@@ -1640,7 +1651,7 @@ export default function POS() {
             margin: 0;
             padding: 0;
             width: 58mm;
-            min-height: 297mm;
+            min-height: ${altoTicketMm}mm;
             background: #ffffff;
             color: #000000;
             overflow: visible;
@@ -1652,8 +1663,8 @@ export default function POS() {
 
           .ticket {
             width: 58mm;
-            min-height: 297mm;
-            padding: 2mm 2mm 22mm 2mm;
+            min-height: ${altoTicketMm}mm;
+            padding: 2mm 2mm 8mm 2mm;
             overflow: visible;
           }
 
@@ -1670,14 +1681,14 @@ export default function POS() {
 
           @media print {
             @page {
-              size: 58mm 297mm;
+              size: 58mm ${altoTicketMm}mm;
               margin: 0;
             }
 
             html,
             body {
               width: 58mm;
-              min-height: 297mm;
+              min-height: ${altoTicketMm}mm;
               margin: 0;
               padding: 0;
               overflow: visible;
@@ -1685,8 +1696,8 @@ export default function POS() {
 
             .ticket {
               width: 58mm;
-              min-height: 297mm;
-              padding: 2mm 2mm 22mm 2mm;
+              min-height: ${altoTicketMm}mm;
+              padding: 2mm 2mm 8mm 2mm;
               overflow: visible;
             }
 
