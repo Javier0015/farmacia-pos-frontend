@@ -1369,6 +1369,11 @@ const imprimirTicketPOS = (ventaData = null) => {
       ? 'PAGAR CON PUNTOS'
       : venta.metodo_pago || metodoPago || 'EFECTIVO';
 
+  /*
+    IMPORTANTE:
+    Para 58mm no conviene usar más de 30 caracteres.
+    Si subes a 32 o 34, algunas impresoras cortan o bajan columnas.
+  */
   const ancho = 30;
 
   const limpiarTexto = (texto = '') => {
@@ -1516,6 +1521,7 @@ const imprimirTicketPOS = (ventaData = null) => {
 
   let contenido = '';
 
+  // Encabezado
   contenido += `${centrar('FARMACIAS SHADDAI')}\n`;
   contenido += `${centrar(nombreSucursal.toUpperCase())}\n`;
 
@@ -1533,11 +1539,17 @@ const imprimirTicketPOS = (ventaData = null) => {
   contenido += `${centrar(fechaFormateada)}\n`;
   contenido += `\n`;
 
-  contenido += `${fila('CAJERO:', nombreCajero.toUpperCase())}\n`;
-  contenido += `${fila('CAJA:', nombreCaja.toUpperCase())}\n`;
-  contenido += `${fila('FOLIO:', venta.folio || venta.id_venta || '---')}\n`;
+  // Datos de venta
+  contenido += `CAJERO:\n`;
+  partirTexto(nombreCajero.toUpperCase(), ancho).forEach((lineaCajero) => {
+    contenido += `${lineaCajero}\n`;
+  });
+
+  contenido += `CAJA: ${limpiarTexto(nombreCaja.toUpperCase()).slice(0, 24)}\n`;
+  contenido += `FOLIO: ${limpiarTexto(venta.folio || venta.id_venta || '---')}\n`;
   contenido += `\n`;
 
+  // Productos
   contenido += `CANT DESCRIPCION       IMPORTE\n`;
   contenido += `${linea('=')}\n`;
 
@@ -1547,11 +1559,13 @@ const imprimirTicketPOS = (ventaData = null) => {
     const importe = Number(item.subtotal || cantidad * precioUnitario || 0);
     const nombre = item.nombre || item.producto || item.descripcion || 'PRODUCTO';
 
+    /*
+      16 caracteres para descripción en primera línea.
+      Esto evita que el importe se vaya a otra línea.
+    */
     const lineasNombre = partirTexto(nombre.toUpperCase(), 16);
 
-    contenido += `${String(cantidad).padEnd(3, ' ')} ${lineasNombre[0]
-      .padEnd(16, ' ')
-      .slice(0, 16)} ${monedaTicket(importe).padStart(8, ' ')}\n`;
+    contenido += `${String(cantidad).padEnd(3, ' ')} ${lineasNombre[0].padEnd(16, ' ').slice(0, 16)} ${monedaTicket(importe).padStart(8, ' ')}\n`;
 
     lineasNombre.slice(1).forEach((lineaExtra) => {
       contenido += `    ${lineaExtra}\n`;
@@ -1568,6 +1582,8 @@ const imprimirTicketPOS = (ventaData = null) => {
   });
 
   contenido += `\n`;
+
+  // Totales
   contenido += `${fila('NO. DE ARTICULOS:', cantidadArticulos)}\n`;
   contenido += `${fila('SUBTOTAL:', monedaTicket(subtotalTicket))}\n`;
 
@@ -1582,6 +1598,7 @@ const imprimirTicketPOS = (ventaData = null) => {
   contenido += `${fila('TOTAL:', monedaTicket(totalTicket))}\n`;
   contenido += `\n`;
 
+  // Pagos
   if (pagosTicket.length > 0) {
     pagosTicket.forEach((pago) => {
       contenido += `${fila(pago.metodo_pago || 'PAGO', monedaTicket(pago.monto))}\n`;
@@ -1602,25 +1619,15 @@ const imprimirTicketPOS = (ventaData = null) => {
   contenido += `\n`;
   contenido += `${centrar('*** GRACIAS POR SU COMPRA ***')}\n`;
   contenido += `${centrar('CONSERVE SU TICKET PARA')}\n`;
-  contenido += `${centrar('CUALQUIER DUDA O')}\n`;
-  contenido += `${centrar('ACLARACION')}\n`;
-
-  // Avance moderado. No poner demasiados saltos porque Generic/Text Only puede atorarse.
-  contenido += `\n\n\n\n\n\n`;
+  contenido += `${centrar('CUALQUIER DUDA O ACLARACION')}\n`;
 
   /*
-    Altura dinámica:
-    - Mínimo 130mm.
-    - Máximo 220mm.
-    - Sube un poco según la cantidad de productos.
-    Esto evita usar 297mm o 500mm fijos, que pueden atorarse en Generic/Text Only.
+    Avance de papel.
+    Esto ayuda a que la impresora saque el ticket completo antes del corte manual.
   */
-  const altoTicketMm = Math.min(
-    220,
-    Math.max(130, 105 + productosVenta.length * 18)
-  );
+  contenido += `\n\n\n\n\n\n\n\n\n\n`;
 
-  const ventana = window.open('', '_blank', 'width=380,height=700');
+  const ventana = window.open('', '_blank', 'width=380,height=1000');
 
   if (!ventana) {
     Swal.fire({
@@ -1638,7 +1645,7 @@ const imprimirTicketPOS = (ventaData = null) => {
         <title>Ticket ${escapeHtml(venta.folio || '')}</title>
         <style>
           @page {
-            size: 58mm ${altoTicketMm}mm;
+            size: 58mm 297mm;
             margin: 0;
           }
 
@@ -1651,7 +1658,7 @@ const imprimirTicketPOS = (ventaData = null) => {
             margin: 0;
             padding: 0;
             width: 58mm;
-            min-height: ${altoTicketMm}mm;
+            min-height: 297mm;
             background: #ffffff;
             color: #000000;
             overflow: visible;
@@ -1663,8 +1670,8 @@ const imprimirTicketPOS = (ventaData = null) => {
 
           .ticket {
             width: 58mm;
-            min-height: ${altoTicketMm}mm;
-            padding: 2mm 2mm 8mm 2mm;
+            min-height: 297mm;
+            padding: 2mm 2mm 18mm 2mm;
             overflow: visible;
           }
 
@@ -1672,8 +1679,8 @@ const imprimirTicketPOS = (ventaData = null) => {
             margin: 0;
             padding: 0;
             font-family: "Courier New", Courier, monospace;
-            font-size: 9px;
-            line-height: 1.12;
+            font-size: 9.5px;
+            line-height: 1.15;
             font-weight: 700;
             white-space: pre;
             overflow: visible;
@@ -1681,14 +1688,14 @@ const imprimirTicketPOS = (ventaData = null) => {
 
           @media print {
             @page {
-              size: 58mm ${altoTicketMm}mm;
+              size: 58mm 297mm;
               margin: 0;
             }
 
             html,
             body {
               width: 58mm;
-              min-height: ${altoTicketMm}mm;
+              min-height: 297mm;
               margin: 0;
               padding: 0;
               overflow: visible;
@@ -1696,14 +1703,14 @@ const imprimirTicketPOS = (ventaData = null) => {
 
             .ticket {
               width: 58mm;
-              min-height: ${altoTicketMm}mm;
-              padding: 2mm 2mm 8mm 2mm;
+              min-height: 297mm;
+              padding: 2mm 2mm 18mm 2mm;
               overflow: visible;
             }
 
             pre {
-              font-size: 9px;
-              line-height: 1.12;
+              font-size: 9.5px;
+              line-height: 1.15;
               white-space: pre;
               overflow: visible;
             }
