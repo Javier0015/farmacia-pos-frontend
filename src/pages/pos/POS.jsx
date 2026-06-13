@@ -54,7 +54,6 @@ const METODOS_PAGO_POS = [
   { id: 'PUNTOS', label: 'Puntos', icono: Coins },
 ];
 
-
 const DIAS_ALERTA_CADUCIDAD_POS = 30;
 
 const normalizarFechaLocal = (fecha) => {
@@ -149,7 +148,7 @@ export default function POS() {
   const [montoRecibido, setMontoRecibido] = useState('');
   const [pagoMixtoActivo, setPagoMixtoActivo] = useState(false);
   const [pagosMixtos, setPagosMixtos] = useState(PAGOS_MIXTOS_INICIALES);
-  const [cobrarImpuesto, setCobrarImpuesto] = useState(true);
+  const [cobrarImpuesto, setCobrarImpuesto] = useState(false);
 
   const [cargando, setCargando] = useState(false);
   const [cobrando, setCobrando] = useState(false);
@@ -169,6 +168,22 @@ export default function POS() {
   const [detalleReceta, setDetalleReceta] = useState([]);
   const [detallesRecetasCache, setDetallesRecetasCache] = useState({});
   const [cargandoDetalleReceta, setCargandoDetalleReceta] = useState(false);
+
+  const [modalControladoAbierto, setModalControladoAbierto] = useState(false);
+  const [productoControladoPendiente, setProductoControladoPendiente] = useState(null);
+  const [datosControlProducto, setDatosControlProducto] = useState({
+    numero_receta: '',
+    fecha_receta: '',
+    medico_nombre: '',
+    medico_cedula: '',
+    paciente_nombre: '',
+    paciente_telefono: '',
+    cantidad_recetada: '',
+    cantidad_surtida: '1',
+    tipo_surtido: 'COMPLETO',
+    cantidad_pendiente: 0,
+    observaciones: '',
+  });
 
   const sucursalActual = useMemo(() => {
     return sucursales.find((s) => Number(s.id_sucursal) === Number(idSucursal));
@@ -270,6 +285,61 @@ export default function POS() {
 
   const obtenerKeyCarrito = (idProducto, idLote) => {
     return `${Number(idProducto)}-${idLote ? Number(idLote) : 'FEFO'}`;
+  };
+
+
+  const obtenerCantidadRecetadaDetalle = (detalle) => {
+    return Number(
+      detalle?.cantidad_recetada ??
+      detalle?.cantidad_solicitada ??
+      detalle?.cantidad ??
+      1
+    );
+  };
+
+  const obtenerCantidadSurtidaDetalle = (detalle) => {
+    return Number(
+      detalle?.cantidad_surtida ??
+      detalle?.total_surtido ??
+      detalle?.surtido ??
+      0
+    );
+  };
+
+  const obtenerCantidadEnCarritoDetalle = (detalle, carritoBase = carrito) => {
+    if (!detalle) return 0;
+
+    const idDetalle = Number(
+      detalle.id_detalle ||
+      detalle.id_detalle_receta ||
+      detalle.id_detalle_receta_shaddai ||
+      0
+    );
+
+    return (Array.isArray(carritoBase) ? carritoBase : [])
+      .filter((item) => {
+        const idDetalleItem = Number(item.id_detalle_receta_shaddai || 0);
+        return idDetalle > 0 && idDetalleItem === idDetalle;
+      })
+      .reduce((acc, item) => acc + Number(item.cantidad || 0), 0);
+  };
+
+  const obtenerEstadoSurtidoDetallePOS = (detalle, carritoBase = carrito) => {
+    const cantidadRecetada = obtenerCantidadRecetadaDetalle(detalle);
+    const cantidadSurtidaPrevia = obtenerCantidadSurtidaDetalle(detalle);
+    const cantidadEnCarrito = obtenerCantidadEnCarritoDetalle(detalle, carritoBase);
+    const cantidadTotalConsiderada = cantidadSurtidaPrevia + cantidadEnCarrito;
+    const cantidadPendiente = Math.max(cantidadRecetada - cantidadTotalConsiderada, 0);
+
+    return {
+      cantidadRecetada,
+      cantidadSurtidaPrevia,
+      cantidadEnCarrito,
+      cantidadTotalConsiderada,
+      cantidadPendiente,
+      vendidoCompleto: cantidadRecetada > 0 && cantidadTotalConsiderada >= cantidadRecetada,
+      vendidoParcial: cantidadTotalConsiderada > 0 && cantidadTotalConsiderada < cantidadRecetada,
+    };
   };
 
   const porcentajeClientePuntos = Number(configuracionPuntos?.porcentaje_cliente || 0);
@@ -576,6 +646,25 @@ export default function POS() {
     await cargarRecetasPendientes();
   };
 
+
+  const abrirModalControlado = (producto) => {
+    setProductoControladoPendiente(producto);
+    setDatosControlProducto({
+      numero_receta: '',
+      fecha_receta: '',
+      medico_nombre: '',
+      medico_cedula: '',
+      paciente_nombre: '',
+      paciente_telefono: '',
+      cantidad_recetada: '',
+      cantidad_surtida: '1',
+      tipo_surtido: 'COMPLETO',
+      cantidad_pendiente: 0,
+      observaciones: '',
+    });
+    setModalControladoAbierto(true);
+  };
+
   const validarProductoEspecial = async (producto) => {
     const esControlado = esProductoControlado(producto);
     const requiereReceta = productoRequiereReceta(producto);
@@ -606,9 +695,117 @@ export default function POS() {
     return confirmacion.isConfirmed;
   };
 
-  const abrirModalLotesParaProducto = async ({ producto, receta = null, detalle = null }) => {
-    if (!sesionAbierta) {
-      Swal.fire({ icon: 'warning', title: 'Caja no abierta', text: 'Primero abre una caja para poder vender.' });
+  const confirmarDatosControlado = async () => {
+    if (!productoControladoPendiente) return;
+
+    const esControlado = esProductoControlado(productoControladoPendiente);
+    const requiereReceta = productoRequiereReceta(productoControladoPendiente);
+
+    if ((esControlado || requiereReceta) && !datosControlProducto.numero_receta.trim()) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Número de receta requerido',
+        text: 'Captura el número de receta antes de continuar.',
+      });
+      return;
+    }
+
+    if (!datosControlProducto.medico_nombre.trim()) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Médico requerido',
+        text: 'Captura el nombre del médico.',
+      });
+      return;
+    }
+
+    if (!datosControlProducto.medico_cedula.trim()) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Cédula requerida',
+        text: 'Captura la cédula profesional del médico.',
+      });
+      return;
+    }
+
+    if (!datosControlProducto.paciente_nombre.trim()) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Paciente requerido',
+        text: 'Captura el nombre del paciente.',
+      });
+      return;
+    }
+
+    const cantidadRecetadaExterna = Number(datosControlProducto.cantidad_recetada || 0);
+    const cantidadSurtidaExterna = Number(datosControlProducto.cantidad_surtida || 0);
+
+    if (cantidadRecetadaExterna <= 0) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Cantidad indicada requerida',
+        text: 'Captura cuántas piezas/cajas indica la receta externa.',
+      });
+      return;
+    }
+
+    if (cantidadSurtidaExterna <= 0) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Cantidad a surtir requerida',
+        text: 'Captura cuántas piezas/cajas se van a surtir ahora.',
+      });
+      return;
+    }
+
+    if (cantidadSurtidaExterna > cantidadRecetadaExterna) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Cantidad no válida',
+        text: 'La cantidad a surtir no puede ser mayor que la cantidad indicada en la receta.',
+      });
+      return;
+    }
+
+    const cantidadPendienteExterna = Math.max(cantidadRecetadaExterna - cantidadSurtidaExterna, 0);
+    const tipoSurtidoExterno = cantidadPendienteExterna === 0 ? 'COMPLETO' : 'PARCIAL';
+
+    const productoConControl = {
+      ...productoControladoPendiente,
+      cantidad_control_sanitario_sugerida: cantidadSurtidaExterna,
+      datos_control_sanitario: {
+        ...datosControlProducto,
+        tipo_receta: 'EXTERNA',
+        cantidad_recetada: cantidadRecetadaExterna,
+        cantidad_surtida: cantidadSurtidaExterna,
+        cantidad_pendiente: cantidadPendienteExterna,
+        tipo_surtido: tipoSurtidoExterno,
+      },
+    };
+
+    setModalControladoAbierto(false);
+    setProductoControladoPendiente(null);
+
+    await abrirModalLotesParaProducto({
+      producto: productoConControl,
+      receta: null,
+      detalle: null,
+      omitirValidacionControlado: true,
+    });
+  };
+
+  const abrirModalLotesParaProducto = async ({
+    producto,
+    receta = null,
+    detalle = null,
+    omitirValidacionControlado = false,
+  }) => {
+    if (
+      !receta &&
+      !omitirValidacionControlado &&
+      (esProductoControlado(producto) || productoRequiereReceta(producto))
+    ) {
+      abrirModalControlado(producto);
       return;
     }
 
@@ -618,7 +815,7 @@ export default function POS() {
       return;
     }
 
-    if (!receta) {
+    if (!receta && !omitirValidacionControlado) {
       const puedeAgregar = await validarProductoEspecial(producto);
       if (!puedeAgregar) return;
     }
@@ -685,6 +882,77 @@ export default function POS() {
 
     const receta = contextoLoteReceta?.receta || null;
     const detalle = contextoLoteReceta?.detalle || null;
+    const datosControlSanitarioBase = producto.datos_control_sanitario || null;
+
+    const esProductoDeReceta = !!(receta?.id_receta && detalle);
+    const cantidadRecetada = esProductoDeReceta
+      ? obtenerCantidadRecetadaDetalle(detalle)
+      : null;
+    const cantidadSurtidaPrevia = esProductoDeReceta
+      ? obtenerCantidadSurtidaDetalle(detalle)
+      : null;
+    const cantidadEnCarritoPrevia = esProductoDeReceta
+      ? obtenerCantidadEnCarritoDetalle(detalle)
+      : 0;
+    const cantidadPendienteAntes = esProductoDeReceta
+      ? Math.max(cantidadRecetada - cantidadSurtidaPrevia - cantidadEnCarritoPrevia, 0)
+      : null;
+
+    if (esProductoDeReceta && cantidadPendienteAntes <= 0) {
+      Swal.fire({
+        icon: 'info',
+        title: 'Sin pendiente por surtir',
+        text: 'Este producto de la receta ya fue surtido por completo.',
+      });
+      return;
+    }
+
+    if (esProductoDeReceta && cantidadAgregar > cantidadPendienteAntes) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Cantidad mayor a la pendiente',
+        text: `Solo quedan ${formatoNumero(cantidadPendienteAntes)} pieza(s) pendientes de esta receta.`,
+      });
+      return;
+    }
+
+    const cantidadPendienteDespues = esProductoDeReceta
+      ? Math.max(cantidadPendienteAntes - cantidadAgregar, 0)
+      : null;
+    const tipoSurtidoReceta = esProductoDeReceta
+      ? cantidadPendienteDespues === 0
+        ? 'COMPLETA'
+        : 'PARCIAL'
+      : null;
+    const estatusDetalleReceta = esProductoDeReceta
+      ? cantidadPendienteDespues === 0
+        ? 'SURTIDO'
+        : 'SURTIDO_PARCIAL'
+      : null;
+
+    const datosControlSanitarioActualizado = datosControlSanitarioBase
+      ? (() => {
+        const cantidadRecetadaExterna = Number(datosControlSanitarioBase.cantidad_recetada || 0);
+        const cantidadSurtidaExterna = cantidadAgregar;
+        const cantidadPendienteExterna = cantidadRecetadaExterna > 0
+          ? Math.max(cantidadRecetadaExterna - cantidadSurtidaExterna, 0)
+          : null;
+        const tipoSurtidoExterno = cantidadRecetadaExterna > 0
+          ? cantidadPendienteExterna === 0
+            ? 'COMPLETO'
+            : 'PARCIAL'
+          : datosControlSanitarioBase.tipo_surtido || null;
+
+        return {
+          ...datosControlSanitarioBase,
+          tipo_receta: datosControlSanitarioBase.tipo_receta || 'EXTERNA',
+          cantidad_recetada: cantidadRecetadaExterna || datosControlSanitarioBase.cantidad_recetada || null,
+          cantidad_surtida: cantidadSurtidaExterna,
+          cantidad_pendiente: cantidadPendienteExterna,
+          tipo_surtido: tipoSurtidoExterno,
+        };
+      })()
+      : null;
 
     setCarrito((prev) => {
       const existe = prev.find((item) => item.key_carrito === keyCarrito);
@@ -711,6 +979,21 @@ export default function POS() {
                 receta?.folio_receta || receta?.id_receta || item.folio_receta_shaddai || null,
               paciente_receta_shaddai: receta?.nombre_paciente || item.paciente_receta_shaddai || null,
               id_detalle_receta_shaddai: detalle?.id_detalle || item.id_detalle_receta_shaddai || null,
+              datos_control_sanitario:
+                datosControlSanitarioActualizado || item.datos_control_sanitario || null,
+              cantidad_recetada_shaddai: cantidadRecetada ?? item.cantidad_recetada_shaddai ?? null,
+              cantidad_surtida_previa_shaddai:
+                cantidadSurtidaPrevia ?? item.cantidad_surtida_previa_shaddai ?? null,
+              cantidad_en_carrito_previa_shaddai:
+                cantidadEnCarritoPrevia ?? item.cantidad_en_carrito_previa_shaddai ?? null,
+              cantidad_pendiente_previa_shaddai:
+                cantidadPendienteAntes ?? item.cantidad_pendiente_previa_shaddai ?? null,
+              cantidad_surtida_actual_shaddai:
+                Number(item.cantidad_surtida_actual_shaddai || 0) + cantidadAgregar,
+              cantidad_pendiente_despues_shaddai: cantidadPendienteDespues ?? item.cantidad_pendiente_despues_shaddai ?? null,
+              tipo_surtido_receta_shaddai: tipoSurtidoReceta || item.tipo_surtido_receta_shaddai || null,
+              estatus_detalle_receta_shaddai:
+                estatusDetalleReceta || item.estatus_detalle_receta_shaddai || null,
             }
             : item
         );
@@ -745,6 +1028,15 @@ export default function POS() {
           cantidad: cantidadAgregar,
           controlado: esProductoControlado(producto),
           requiere_receta: productoRequiereReceta(producto),
+          datos_control_sanitario: datosControlSanitarioActualizado,
+          cantidad_recetada_shaddai: cantidadRecetada,
+          cantidad_surtida_previa_shaddai: cantidadSurtidaPrevia,
+          cantidad_en_carrito_previa_shaddai: cantidadEnCarritoPrevia,
+          cantidad_pendiente_previa_shaddai: cantidadPendienteAntes,
+          cantidad_surtida_actual_shaddai: esProductoDeReceta ? cantidadAgregar : null,
+          cantidad_pendiente_despues_shaddai: cantidadPendienteDespues,
+          tipo_surtido_receta_shaddai: tipoSurtidoReceta,
+          estatus_detalle_receta_shaddai: estatusDetalleReceta,
 
           id_receta_shaddai: receta?.id_receta || null,
           folio_receta_shaddai: receta?.folio_receta || receta?.id_receta || null,
@@ -827,6 +1119,17 @@ export default function POS() {
   const agregarDetalleRecetaConLote = async (detalle) => {
     if (!recetaSeleccionada || !detalle) return;
 
+    const estadoDetalle = obtenerEstadoSurtidoDetallePOS(detalle);
+
+    if (estadoDetalle.cantidadPendiente <= 0) {
+      Swal.fire({
+        icon: 'info',
+        title: 'Receta ya surtida',
+        text: 'Este producto ya no tiene cantidad pendiente por surtir.',
+      });
+      return;
+    }
+
     const productoInventario = inventario.find(
       (item) => Number(item.id_producto) === Number(detalle.id_producto)
     );
@@ -842,7 +1145,10 @@ export default function POS() {
 
     const productoParaVenta = {
       ...productoInventario,
-      cantidad_receta: Number(detalle.cantidad || 1),
+      cantidad_receta: estadoDetalle.cantidadRecetada,
+      cantidad_surtida_previa_receta: estadoDetalle.cantidadSurtidaPrevia,
+      cantidad_en_carrito_receta: estadoDetalle.cantidadEnCarrito,
+      cantidad_pendiente_receta: estadoDetalle.cantidadPendiente,
       dosis_receta: detalle.dosis,
       frecuencia_receta: detalle.frecuencia,
       duracion_receta: detalle.duracion,
@@ -852,7 +1158,13 @@ export default function POS() {
     await abrirModalLotesParaProducto({
       producto: productoParaVenta,
       receta: recetaSeleccionada,
-      detalle,
+      detalle: {
+        ...detalle,
+        cantidad_recetada: estadoDetalle.cantidadRecetada,
+        cantidad_surtida_previa_receta: estadoDetalle.cantidadSurtidaPrevia,
+        cantidad_en_carrito_receta: estadoDetalle.cantidadEnCarrito,
+        cantidad_pendiente_receta: estadoDetalle.cantidadPendiente,
+      },
     });
   };
 
@@ -916,7 +1228,7 @@ export default function POS() {
     setMontoRecibido('');
     setPagoMixtoActivo(false);
     setPagosMixtos(PAGOS_MIXTOS_INICIALES);
-    setCobrarImpuesto(true);
+    setCobrarImpuesto(false);
     setVentaFinalizada(null);
     setTarjetaPuntos(null);
     setCodigoTarjeta('');
@@ -1216,7 +1528,7 @@ export default function POS() {
       title: '¿Cobrar venta?',
       html: `
         <div style="text-align:left">
-          ${recetaAntesDeCobrar ? `<p><b>Receta:</b> ${recetaAntesDeCobrar.folio}</p><p><b>Paciente:</b> ${recetaAntesDeCobrar.paciente || 'N/A'}</p><p><b>Estatus al cobrar:</b> ${estatusRecetaFinal === 'SURTIDA' ? 'Surtida completamente' : 'Surtida parcialmente'}</p><hr style="margin:10px 0" />` : ''}
+          ${recetaAntesDeCobrar ? `<p><b>Receta:</b> ${recetaAntesDeCobrar.folio}</p><p><b>Paciente:</b> ${recetaAntesDeCobrar.paciente || 'N/A'}</p><p><b>Estatus al cobrar:</b> ${estatusRecetaFinal === 'SURTIDA' ? 'Surtida completamente' : 'Surtida parcialmente'}</p><p><b>Modo:</b> Se calculará según las cantidades surtidas en carrito.</p><hr style="margin:10px 0" />` : ''}
           <p><b>Total:</b> ${formatoMoneda(resumen.total)}</p>
           ${resumen.descuentoOfertas > 0 ? `<p><b>Descuento por ofertas:</b> -${formatoMoneda(resumen.descuentoOfertas)}</p>` : ''}
           <p><b>IVA:</b> ${cobrarImpuesto ? `Aplicado (${formatoMoneda(resumen.impuesto)})` : 'No aplicado'}</p>
@@ -1265,6 +1577,17 @@ export default function POS() {
           id_oferta: item.id_oferta ? Number(item.id_oferta) : null,
           id_receta_shaddai: item.id_receta_shaddai || null,
           id_detalle_receta_shaddai: item.id_detalle_receta_shaddai || null,
+          controlado: item.controlado || false,
+          requiere_receta: item.requiere_receta || false,
+          datos_control_sanitario: item.datos_control_sanitario || null,
+          cantidad_recetada_shaddai: item.cantidad_recetada_shaddai ?? null,
+          cantidad_surtida_previa_shaddai: item.cantidad_surtida_previa_shaddai ?? null,
+          cantidad_en_carrito_previa_shaddai: item.cantidad_en_carrito_previa_shaddai ?? null,
+          cantidad_pendiente_previa_shaddai: item.cantidad_pendiente_previa_shaddai ?? null,
+          cantidad_surtida_actual_shaddai: item.cantidad_surtida_actual_shaddai ?? null,
+          cantidad_pendiente_despues_shaddai: item.cantidad_pendiente_despues_shaddai ?? null,
+          tipo_surtido_receta_shaddai: item.tipo_surtido_receta_shaddai || null,
+          estatus_detalle_receta_shaddai: item.estatus_detalle_receta_shaddai || null,
         })),
       };
 
@@ -1320,7 +1643,7 @@ export default function POS() {
         setMontoRecibido('');
         setPagoMixtoActivo(false);
         setPagosMixtos(PAGOS_MIXTOS_INICIALES);
-        setCobrarImpuesto(true);
+        setCobrarImpuesto(false);
         setTarjetaPuntos(null);
         setCodigoTarjeta('');
         setMetodoPago('EFECTIVO');
@@ -1342,399 +1665,142 @@ export default function POS() {
     }
   };
 
-const imprimirTicketPOS = (ventaData = null) => {
-  const datosTicket = ventaData || ventaFinalizada;
+  const API_IMPRESION_LOCAL = 'http://localhost:3030';
+  const PRINTER_KEY = 'shaddai-printer-2026';
 
-  if (!datosTicket?.venta) {
-    Swal.fire({
-      icon: 'warning',
-      title: 'Sin venta',
-      text: 'No hay una venta reciente para imprimir.',
-    });
-    return;
-  }
+  const imprimirTicketPOS = async (ventaData = null) => {
+    const datosTicket = ventaData || ventaFinalizada;
 
-  const venta = datosTicket.venta;
-  const resumenVenta = datosTicket.resumen || {};
-  const productosVenta = venta.productos || [];
-
-  const pagosTicket = Array.isArray(venta.pagos)
-    ? venta.pagos
-    : Array.isArray(datosTicket.pagos)
-      ? datosTicket.pagos
-      : [];
-
-  const metodoPagoTicket =
-    venta.metodo_pago === 'PUNTOS'
-      ? 'PAGAR CON PUNTOS'
-      : venta.metodo_pago || metodoPago || 'EFECTIVO';
-
-  /*
-    IMPORTANTE:
-    Para 58mm no conviene usar más de 30 caracteres.
-    Si subes a 32 o 34, algunas impresoras cortan o bajan columnas.
-  */
-  const ancho = 30;
-
-  const limpiarTexto = (texto = '') => {
-    return String(texto || '')
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^\x20-\x7E]/g, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-  };
-
-  const escapeHtml = (texto = '') => {
-    return String(texto || '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
-  };
-
-  const monedaTicket = (valor) => {
-    return `$${Number(valor || 0).toFixed(2)}`;
-  };
-
-  const linea = (caracter = '=') => caracter.repeat(ancho);
-
-  const centrar = (texto = '') => {
-    const limpio = limpiarTexto(texto).slice(0, ancho);
-    const espacios = Math.max(Math.floor((ancho - limpio.length) / 2), 0);
-    return `${' '.repeat(espacios)}${limpio}`;
-  };
-
-  const fila = (izquierda = '', derecha = '') => {
-    const izq = limpiarTexto(izquierda);
-    const der = limpiarTexto(derecha);
-    const espacio = Math.max(ancho - izq.length - der.length, 1);
-    return `${izq}${' '.repeat(espacio)}${der}`.slice(0, ancho);
-  };
-
-  const partirTexto = (texto = '', largo = 18) => {
-    const limpio = limpiarTexto(texto);
-    if (!limpio) return [''];
-
-    const palabras = limpio.split(' ');
-    const lineas = [];
-    let lineaActual = '';
-
-    palabras.forEach((palabra) => {
-      const palabraLimpia = palabra.slice(0, largo);
-
-      if ((lineaActual + ' ' + palabraLimpia).trim().length <= largo) {
-        lineaActual = `${lineaActual} ${palabraLimpia}`.trim();
-      } else {
-        if (lineaActual) lineas.push(lineaActual);
-        lineaActual = palabraLimpia;
-      }
-    });
-
-    if (lineaActual) lineas.push(lineaActual);
-    return lineas.length ? lineas : [''];
-  };
-
-  const fechaVenta = venta.fecha_venta
-    ? new Date(venta.fecha_venta)
-    : new Date();
-
-  const fechaFormateada = fechaVenta.toLocaleString('es-MX', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-
-  const nombreSucursal =
-    venta.sucursal ||
-    venta.nombre_sucursal ||
-    sucursalActual?.nombre ||
-    'FARMACIA SHADDAI';
-
-  const direccionSucursal =
-    venta.direccion_sucursal ||
-    sucursalActual?.direccion ||
-    '';
-
-  const telefonoSucursal =
-    venta.telefono_sucursal ||
-    sucursalActual?.telefono ||
-    '';
-
-  const nombreCaja =
-    venta.caja ||
-    venta.nombre_caja ||
-    cajaActual?.nombre ||
-    idCaja ||
-    'CAJA PRINCIPAL';
-
-  const nombreCajero =
-    venta.usuario ||
-    venta.cajero ||
-    venta.nombre_cajero ||
-    usuario?.nombre ||
-    usuario?.usuario ||
-    usuario?.nombre_completo ||
-    'CAJERO';
-
-  const subtotalTicket =
-    resumenVenta.subtotal ??
-    venta.subtotal ??
-    productosVenta.reduce((acc, item) => {
-      const cantidad = Number(item.cantidad || 0);
-      const precio = Number(item.precio_unitario || item.precio_venta || item.precio || 0);
-      return acc + cantidad * precio;
-    }, 0);
-
-  const impuestoTicket =
-    resumenVenta.impuesto ??
-    venta.impuesto ??
-    0;
-
-  const descuentoTicket =
-    resumenVenta.descuento ??
-    venta.descuento ??
-    0;
-
-  const totalTicket =
-    resumenVenta.total ??
-    venta.total ??
-    Number(subtotalTicket || 0) + Number(impuestoTicket || 0) - Number(descuentoTicket || 0);
-
-  const recibidoTicket =
-    resumenVenta.monto_recibido ??
-    venta.monto_recibido ??
-    totalTicket;
-
-  const cambioTicket =
-    resumenVenta.cambio ??
-    venta.cambio ??
-    0;
-
-  const cantidadArticulos = productosVenta.reduce(
-    (acc, item) => acc + Number(item.cantidad || 0),
-    0
-  );
-
-  let contenido = '';
-
-  // Encabezado
-  contenido += `${centrar('FARMACIAS SHADDAI')}\n`;
-  contenido += `${centrar(nombreSucursal.toUpperCase())}\n`;
-
-  if (direccionSucursal) {
-    partirTexto(direccionSucursal.toUpperCase(), ancho).forEach((lineaDir) => {
-      contenido += `${centrar(lineaDir)}\n`;
-    });
-  }
-
-  if (telefonoSucursal) {
-    contenido += `${centrar(`TEL. ${telefonoSucursal}`)}\n`;
-  }
-
-  contenido += `\n`;
-  contenido += `${centrar(fechaFormateada)}\n`;
-  contenido += `\n`;
-
-  // Datos de venta
-  contenido += `CAJERO:\n`;
-  partirTexto(nombreCajero.toUpperCase(), ancho).forEach((lineaCajero) => {
-    contenido += `${lineaCajero}\n`;
-  });
-
-  contenido += `CAJA: ${limpiarTexto(nombreCaja.toUpperCase()).slice(0, 24)}\n`;
-  contenido += `FOLIO: ${limpiarTexto(venta.folio || venta.id_venta || '---')}\n`;
-  contenido += `\n`;
-
-  // Productos
-  contenido += `CANT DESCRIPCION       IMPORTE\n`;
-  contenido += `${linea('=')}\n`;
-
-  productosVenta.forEach((item) => {
-    const cantidad = Number(item.cantidad || 0);
-    const precioUnitario = Number(item.precio_unitario || item.precio_venta || item.precio || 0);
-    const importe = Number(item.subtotal || cantidad * precioUnitario || 0);
-    const nombre = item.nombre || item.producto || item.descripcion || 'PRODUCTO';
-
-    /*
-      16 caracteres para descripción en primera línea.
-      Esto evita que el importe se vaya a otra línea.
-    */
-    const lineasNombre = partirTexto(nombre.toUpperCase(), 16);
-
-    contenido += `${String(cantidad).padEnd(3, ' ')} ${lineasNombre[0].padEnd(16, ' ').slice(0, 16)} ${monedaTicket(importe).padStart(8, ' ')}\n`;
-
-    lineasNombre.slice(1).forEach((lineaExtra) => {
-      contenido += `    ${lineaExtra}\n`;
-    });
-
-    if (item.lote) {
-      contenido += `    Lote: ${limpiarTexto(item.lote)}\n`;
+    if (!datosTicket?.venta) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Sin venta',
+        text: 'No hay una venta reciente para imprimir.',
+      });
+      return;
     }
 
-    if (item.fecha_caducidad) {
-      const caducidad = new Date(item.fecha_caducidad).toLocaleDateString('es-MX');
-      contenido += `    Cad: ${caducidad}\n`;
-    }
-  });
-
-  contenido += `\n`;
-
-  // Totales
-  contenido += `${fila('NO. DE ARTICULOS:', cantidadArticulos)}\n`;
-  contenido += `${fila('SUBTOTAL:', monedaTicket(subtotalTicket))}\n`;
-
-  if (Number(impuestoTicket || 0) > 0) {
-    contenido += `${fila('IMPUESTO:', monedaTicket(impuestoTicket))}\n`;
-  }
-
-  if (Number(descuentoTicket || 0) > 0) {
-    contenido += `${fila('DESCUENTO:', monedaTicket(descuentoTicket))}\n`;
-  }
-
-  contenido += `${fila('TOTAL:', monedaTicket(totalTicket))}\n`;
-  contenido += `\n`;
-
-  // Pagos
-  if (pagosTicket.length > 0) {
-    pagosTicket.forEach((pago) => {
-      contenido += `${fila(pago.metodo_pago || 'PAGO', monedaTicket(pago.monto))}\n`;
-    });
-  } else {
-    contenido += `${fila('PAGO CON:', monedaTicket(recibidoTicket))}\n`;
-  }
-
-  contenido += `${fila('METODO:', metodoPagoTicket)}\n`;
-  contenido += `${fila('SU CAMBIO:', monedaTicket(cambioTicket))}\n`;
-
-  const ahorroTicket = resumenVenta.ahorro || descuentoTicket || 0;
-
-  if (Number(ahorroTicket || 0) > 0) {
-    contenido += `${fila('USTED AHORRO:', monedaTicket(ahorroTicket))}\n`;
-  }
-
-  contenido += `\n`;
-  contenido += `${centrar('*** GRACIAS POR SU COMPRA ***')}\n`;
-  contenido += `${centrar('CONSERVE SU TICKET PARA')}\n`;
-  contenido += `${centrar('CUALQUIER DUDA O ACLARACION')}\n`;
-
-  /*
-    Avance de papel.
-    Esto ayuda a que la impresora saque el ticket completo antes del corte manual.
-  */
-  contenido += `\n\n\n\n\n\n\n\n\n\n`;
-
-  const ventana = window.open('', '_blank', 'width=380,height=1000');
-
-  if (!ventana) {
-    Swal.fire({
-      icon: 'warning',
-      title: 'Ventana bloqueada',
-      text: 'Permite las ventanas emergentes para poder imprimir el ticket.',
-    });
-    return;
-  }
-
-  ventana.document.open();
-  ventana.document.write(`
-    <html>
-      <head>
-        <title>Ticket ${escapeHtml(venta.folio || '')}</title>
-        <style>
-          @page {
-            size: 58mm 297mm;
-            margin: 0;
-          }
-
-          * {
-            box-sizing: border-box;
-          }
-
-          html,
-          body {
-            margin: 0;
-            padding: 0;
-            width: 58mm;
-            min-height: 297mm;
-            background: #ffffff;
-            color: #000000;
-            overflow: visible;
-          }
-
-          body {
-            font-family: "Courier New", Courier, monospace;
-          }
-
-          .ticket {
-            width: 58mm;
-            min-height: 297mm;
-            padding: 2mm 2mm 18mm 2mm;
-            overflow: visible;
-          }
-
-          pre {
-            margin: 0;
-            padding: 0;
-            font-family: "Courier New", Courier, monospace;
-            font-size: 9.5px;
-            line-height: 1.15;
-            font-weight: 700;
-            white-space: pre;
-            overflow: visible;
-          }
-
-          @media print {
-            @page {
-              size: 58mm 297mm;
-              margin: 0;
-            }
-
-            html,
-            body {
-              width: 58mm;
-              min-height: 297mm;
-              margin: 0;
-              padding: 0;
-              overflow: visible;
-            }
-
-            .ticket {
-              width: 58mm;
-              min-height: 297mm;
-              padding: 2mm 2mm 18mm 2mm;
-              overflow: visible;
-            }
-
-            pre {
-              font-size: 9.5px;
-              line-height: 1.15;
-              white-space: pre;
-              overflow: visible;
-            }
-          }
-        </style>
-      </head>
-      <body>
-        <div class="ticket">
-          <pre>${escapeHtml(contenido)}</pre>
+    try {
+      Swal.fire({
+        title: 'Imprimiendo ticket...',
+        html: `
+        <div style="text-align:center">
+          <p>Enviando ticket a la impresora local.</p>
+          <p style="font-size:13px;color:#64748b;margin-top:6px">
+            No cierres esta ventana hasta que termine la impresión.
+          </p>
         </div>
+      `,
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        showConfirmButton: false,
+        didOpen: () => {
+          Swal.showLoading();
+        },
+      });
 
-        <script>
-          window.onload = function() {
-            setTimeout(function() {
-              window.print();
-            }, 700);
-          };
-        </script>
-      </body>
-    </html>
-  `);
+      console.log('Enviando ticket a API local:', datosTicket);
 
-  ventana.document.close();
-};
+      const response = await fetch(`${API_IMPRESION_LOCAL}/imprimir-ticket`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-printer-key': PRINTER_KEY,
+        },
+        body: JSON.stringify(datosTicket),
+      });
+
+      const data = await response.json();
+
+      console.log('Respuesta API local:', data);
+
+      if (!response.ok || !data.ok) {
+        throw new Error(data.message || 'No se pudo imprimir el ticket');
+      }
+
+      Swal.fire({
+        icon: 'success',
+        title: 'Ticket impreso',
+        text: 'El ticket se imprimió correctamente.',
+        timer: 1300,
+        showConfirmButton: false,
+      });
+    } catch (error) {
+      console.error('Error de impresión local:', error);
+
+      Swal.fire({
+        icon: 'error',
+        title: 'Error de impresión',
+        text:
+          error.message ||
+          'No se pudo imprimir el ticket. Verifica que la app local de impresión esté abierta.',
+      });
+    }
+  };
+
+  const abrirCajaPOS = async () => {
+    try {
+      const confirmacion = await Swal.fire({
+        icon: 'question',
+        title: '¿Abrir caja?',
+        text: 'Se enviará el comando de apertura a la caja registradora.',
+        showCancelButton: true,
+        confirmButtonText: 'Sí, abrir caja',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#059669',
+        cancelButtonColor: '#64748b',
+      });
+
+      if (!confirmacion.isConfirmed) return;
+
+      Swal.fire({
+        title: 'Abriendo caja...',
+        html: `
+        <div style="text-align:center">
+          <p>Enviando comando a la caja registradora.</p>
+        </div>
+      `,
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        showConfirmButton: false,
+        didOpen: () => {
+          Swal.showLoading();
+        },
+      });
+
+      const response = await fetch(`${API_IMPRESION_LOCAL}/abrir-caja`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-printer-key': PRINTER_KEY,
+        },
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.ok) {
+        throw new Error(data.message || 'No se pudo abrir la caja');
+      }
+
+      Swal.fire({
+        icon: 'success',
+        title: 'Caja abierta',
+        text: 'La caja fue abierta correctamente.',
+        timer: 1200,
+        showConfirmButton: false,
+      });
+    } catch (error) {
+      console.error('Error al abrir caja:', error);
+
+      Swal.fire({
+        icon: 'error',
+        title: 'No se pudo abrir la caja',
+        text:
+          error.message ||
+          'Verifica que la app local de impresión esté abierta y que la caja esté conectada.',
+      });
+    }
+  };
 
   const abrirEscanerProducto = () => {
     setScannerTipo('PRODUCTO');
@@ -1799,6 +1865,17 @@ const imprimirTicketPOS = (ventaData = null) => {
           </div>
 
           <div className="flex flex-col gap-2 sm:flex-row">
+
+            <button
+              type="button"
+              onClick={abrirCajaPOS}
+              disabled={!sesionAbierta}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-black text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Banknote size={18} />
+              Abrir caja
+            </button>
+
             <button
               type="button"
               onClick={abrirModalRecetas}
@@ -2035,6 +2112,19 @@ const imprimirTicketPOS = (ventaData = null) => {
             </button>
           </div>
         </section>
+      )}
+
+      {modalControladoAbierto && (
+        <ModalDatosControlado
+          producto={productoControladoPendiente}
+          datos={datosControlProducto}
+          setDatos={setDatosControlProducto}
+          onClose={() => {
+            setModalControladoAbierto(false);
+            setProductoControladoPendiente(null);
+          }}
+          onConfirmar={confirmarDatosControlado}
+        />
       )}
 
       {modalLotesProducto && (
@@ -2543,11 +2633,10 @@ function CarritoPOS({
                     key={metodo.id}
                     type="button"
                     onClick={() => seleccionarMetodoPago(metodo.id)}
-                    className={`flex items-center justify-center gap-2 rounded-2xl px-3 py-3 text-xs font-black transition ${
-                      activo
-                        ? 'bg-sky-700 text-white shadow-lg shadow-sky-700/20'
-                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                    }`}
+                    className={`flex items-center justify-center gap-2 rounded-2xl px-3 py-3 text-xs font-black transition ${activo
+                      ? 'bg-sky-700 text-white shadow-lg shadow-sky-700/20'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      }`}
                   >
                     <Icono size={16} />
                     {metodo.label}
@@ -2709,6 +2798,233 @@ function ResumenLinea({ label, valor, destacado = null }) {
 }
 
 
+
+function ModalDatosControlado({
+  producto,
+  datos,
+  setDatos,
+  onClose,
+  onConfirmar,
+}) {
+  const actualizarCampo = (campo, valor) => {
+    setDatos((prev) => ({
+      ...prev,
+      [campo]: valor,
+    }));
+  };
+
+  const cantidadRecetada = Number(datos.cantidad_recetada || 0);
+  const cantidadSurtida = Number(datos.cantidad_surtida || 0);
+  const cantidadPendiente = Math.max(cantidadRecetada - cantidadSurtida, 0);
+  const surtimientoValido = cantidadRecetada > 0 && cantidadSurtida > 0 && cantidadSurtida <= cantidadRecetada;
+  const tipoSurtidoCalculado = surtimientoValido
+    ? cantidadPendiente === 0
+      ? 'COMPLETO'
+      : 'PARCIAL'
+    : null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
+      <div className="w-full max-w-3xl overflow-hidden rounded-[2rem] bg-white shadow-2xl">
+        <div className="border-b border-slate-100 bg-amber-50 px-6 py-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-black uppercase tracking-wide text-amber-700">
+                Control sanitario
+              </p>
+              <h2 className="mt-1 text-2xl font-black text-slate-900">
+                Datos para medicamento controlado
+              </h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Producto:{' '}
+                <span className="font-black">
+                  {producto?.producto || producto?.nombre || 'Producto seleccionado'}
+                </span>
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-2xl bg-white p-2 text-slate-500 shadow-sm transition hover:bg-slate-100 hover:text-slate-800"
+            >
+              <X size={22} />
+            </button>
+          </div>
+        </div>
+
+        <div className="grid max-h-[70vh] grid-cols-1 gap-4 overflow-y-auto p-6 md:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-xs font-black uppercase text-slate-500">
+              Número de receta <span className="text-red-500">*</span>
+            </label>
+            <input
+              value={datos.numero_receta}
+              onChange={(e) => actualizarCampo('numero_receta', e.target.value)}
+              className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-sky-500"
+              placeholder="Ej. RX-0001"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-black uppercase text-slate-500">
+              Fecha de receta
+            </label>
+            <input
+              type="date"
+              value={datos.fecha_receta}
+              onChange={(e) => actualizarCampo('fecha_receta', e.target.value)}
+              className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-sky-500"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-black uppercase text-slate-500">
+              Nombre del médico <span className="text-red-500">*</span>
+            </label>
+            <input
+              value={datos.medico_nombre}
+              onChange={(e) => actualizarCampo('medico_nombre', e.target.value)}
+              className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-sky-500"
+              placeholder="Nombre completo"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-black uppercase text-slate-500">
+              Cédula profesional <span className="text-red-500">*</span>
+            </label>
+            <input
+              value={datos.medico_cedula}
+              onChange={(e) => actualizarCampo('medico_cedula', e.target.value)}
+              className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-sky-500"
+              placeholder="Cédula"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-black uppercase text-slate-500">
+              Nombre del paciente <span className="text-red-500">*</span>
+            </label>
+            <input
+              value={datos.paciente_nombre}
+              onChange={(e) => actualizarCampo('paciente_nombre', e.target.value)}
+              className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-sky-500"
+              placeholder="Nombre completo"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-black uppercase text-slate-500">
+              Teléfono del paciente
+            </label>
+            <input
+              value={datos.paciente_telefono}
+              onChange={(e) => actualizarCampo('paciente_telefono', e.target.value)}
+              className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-sky-500"
+              placeholder="Opcional"
+            />
+          </div>
+
+          <div className="rounded-2xl border border-sky-100 bg-sky-50 p-4 md:col-span-2">
+            <p className="text-xs font-black uppercase tracking-wide text-sky-700">
+              Surtimiento de receta externa
+            </p>
+            <p className="mt-1 text-sm text-sky-900">
+              Usa estos campos cuando la receta viene de un médico externo y no existe dentro de Doctor Shaddai.
+            </p>
+
+            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs font-black uppercase text-slate-500">
+                  Cantidad indicada en receta <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={datos.cantidad_recetada}
+                  onChange={(e) => actualizarCampo('cantidad_recetada', e.target.value)}
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-sky-500"
+                  placeholder="Ej. 3"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-black uppercase text-slate-500">
+                  Cantidad a surtir ahora <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max={cantidadRecetada > 0 ? cantidadRecetada : undefined}
+                  step="1"
+                  value={datos.cantidad_surtida}
+                  onChange={(e) => actualizarCampo('cantidad_surtida', e.target.value)}
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-sky-500"
+                  placeholder="Ej. 1"
+                />
+              </div>
+            </div>
+
+            <div className={`mt-4 rounded-2xl p-4 text-sm font-bold ${
+              !surtimientoValido
+                ? 'bg-slate-100 text-slate-600'
+                : tipoSurtidoCalculado === 'COMPLETO'
+                  ? 'bg-emerald-100 text-emerald-800'
+                  : 'bg-orange-100 text-orange-800'
+            }`}>
+              {!surtimientoValido
+                ? 'Captura cantidades válidas para calcular si la venta será completa o parcial.'
+                : tipoSurtidoCalculado === 'COMPLETO'
+                  ? 'Resultado: venta completa. Se surtirá toda la cantidad indicada en la receta.'
+                  : `Resultado: venta parcial. Quedarán ${cantidadPendiente} pieza(s)/caja(s) pendientes.`}
+            </div>
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="mb-1 block text-xs font-black uppercase text-slate-500">
+              Observaciones
+            </label>
+            <textarea
+              value={datos.observaciones}
+              onChange={(e) => actualizarCampo('observaciones', e.target.value)}
+              rows={3}
+              className="w-full resize-none rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-sky-500"
+              placeholder="Notas internas, receta retenida, autorización, etc."
+            />
+          </div>
+
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 md:col-span-2">
+            <p className="font-black">Importante</p>
+            <p className="mt-1">
+                Recuerda que hay casos donde es necesario guardar la receta físicamente. 
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3 border-t border-slate-100 bg-slate-50 px-6 py-5 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-2xl bg-white px-5 py-3 text-sm font-black text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-100"
+          >
+            Cancelar
+          </button>
+
+          <button
+            type="button"
+            onClick={onConfirmar}
+            className="rounded-2xl bg-amber-600 px-5 py-3 text-sm font-black text-white transition hover:bg-amber-700"
+          >
+            Guardar y seleccionar lote
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ModalLotesProducto({
   producto,
   lotes,
@@ -2720,12 +3036,78 @@ function ModalLotesProducto({
   formatoNumero,
   formatoFechaCorta,
 }) {
-  const cantidadSugerida = Number(contextoReceta?.detalle?.cantidad || 1);
+  const esReceta = !!contextoReceta?.receta;
+  const cantidadRecetada = Number(
+    contextoReceta?.detalle?.cantidad_recetada ??
+    contextoReceta?.detalle?.cantidad_solicitada ??
+    contextoReceta?.detalle?.cantidad ??
+    producto?.cantidad_receta ??
+    1
+  );
+  const cantidadSurtidaPrevia = Number(
+    contextoReceta?.detalle?.cantidad_surtida_previa_receta ??
+    contextoReceta?.detalle?.cantidad_surtida ??
+    contextoReceta?.detalle?.total_surtido ??
+    contextoReceta?.detalle?.surtido ??
+    producto?.cantidad_surtida_previa_receta ??
+    0
+  );
+  const cantidadEnCarritoPrevia = Number(
+    contextoReceta?.detalle?.cantidad_en_carrito_receta ??
+    producto?.cantidad_en_carrito_receta ??
+    0
+  );
+  const cantidadPendienteReceta = esReceta
+    ? Math.max(cantidadRecetada - cantidadSurtidaPrevia - cantidadEnCarritoPrevia, 0)
+    : null;
+
+  const cantidadControlSanitarioSugerida = Number(producto?.cantidad_control_sanitario_sugerida || 0);
+  const cantidadSugerida = esReceta
+    ? Math.max(cantidadPendienteReceta, 1)
+    : cantidadControlSanitarioSugerida > 0
+      ? cantidadControlSanitarioSugerida
+      : 1;
+  const [modoSurtido, setModoSurtido] = useState(esReceta ? 'COMPLETA' : 'NORMAL');
   const [cantidad, setCantidad] = useState(cantidadSugerida || 1);
 
   useEffect(() => {
-    setCantidad(cantidadSugerida || 1);
-  }, [cantidadSugerida]);
+    const nuevaCantidad = esReceta
+      ? Math.max(cantidadPendienteReceta, 1)
+      : cantidadControlSanitarioSugerida > 0
+        ? cantidadControlSanitarioSugerida
+        : 1;
+    setCantidad(nuevaCantidad);
+    setModoSurtido(esReceta ? 'COMPLETA' : 'NORMAL');
+  }, [esReceta, cantidadPendienteReceta, cantidadControlSanitarioSugerida]);
+
+  const normalizarCantidad = (valor) => {
+    const numero = Math.max(Number(valor || 1), 1);
+    if (!esReceta) return numero;
+    return Math.min(numero, Math.max(cantidadPendienteReceta, 1));
+  };
+
+  const actualizarCantidad = (valor) => {
+    setCantidad(normalizarCantidad(valor));
+    if (esReceta) setModoSurtido('PARCIAL');
+  };
+
+  const seleccionarModoCompleto = () => {
+    if (!esReceta) return;
+    setModoSurtido('COMPLETA');
+    setCantidad(Math.max(cantidadPendienteReceta, 1));
+  };
+
+  const seleccionarModoParcial = () => {
+    if (!esReceta) return;
+    setModoSurtido('PARCIAL');
+    setCantidad((prev) => Math.min(normalizarCantidad(prev), Math.max(cantidadPendienteReceta, 1)));
+  };
+
+  const cantidadNumericaActual = normalizarCantidad(cantidad);
+  const cantidadPendienteDespues = esReceta
+    ? Math.max(cantidadPendienteReceta - cantidadNumericaActual, 0)
+    : null;
+  const ventaCompletaReceta = esReceta && cantidadPendienteDespues === 0;
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
@@ -2734,7 +3116,7 @@ function ModalLotesProducto({
           <div>
             <h2 className="text-xl font-bold text-slate-800">Seleccionar lote</h2>
             <p className="text-sm text-slate-500">
-              {contextoReceta ? 'Producto tomado desde receta Doctor Shaddai.' : 'Elige el lote que deseas descontar.'}
+              {esReceta ? 'Producto tomado desde receta Doctor Shaddai.' : 'Elige el lote que deseas descontar.'}
             </p>
           </div>
           <button type="button" onClick={onClose} className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200">
@@ -2747,19 +3129,79 @@ function ModalLotesProducto({
             <p className="font-black text-slate-900">{producto?.producto || producto?.nombre || 'Producto'}</p>
             <p className="mt-1 text-xs text-slate-500">Código: {producto?.codigo_barras || '—'} · Presentación: {producto?.presentacion || '—'}</p>
             <p className="mt-2 text-sm font-bold text-sky-700">{formatoMoneda(producto?.precio_con_descuento || producto?.precio_venta || 0)}</p>
-            {contextoReceta?.receta && (
-              <div className="mt-3 rounded-xl bg-sky-50 p-3 text-xs text-sky-800">
-                <p><b>Receta:</b> {contextoReceta.receta.folio_receta || contextoReceta.receta.id_receta}</p>
-                <p><b>Paciente:</b> {contextoReceta.receta.nombre_paciente || 'N/A'}</p>
-                <p><b>Cantidad indicada:</b> {contextoReceta.detalle?.cantidad || 1}</p>
+            {esReceta && (
+              <div className="mt-3 rounded-2xl border border-sky-100 bg-sky-50 p-4 text-xs text-sky-900">
+                <div className="grid gap-2 md:grid-cols-2">
+                  <p><b>Receta:</b> {contextoReceta.receta.folio_receta || contextoReceta.receta.id_receta}</p>
+                  <p><b>Paciente:</b> {contextoReceta.receta.nombre_paciente || 'N/A'}</p>
+                  <p><b>Recetado:</b> {formatoNumero(cantidadRecetada)}</p>
+                  <p><b>Ya surtido:</b> {formatoNumero(cantidadSurtidaPrevia)}</p>
+                  <p><b>En carrito:</b> {formatoNumero(cantidadEnCarritoPrevia)}</p>
+                  <p><b>Pendiente:</b> {formatoNumero(cantidadPendienteReceta)}</p>
+                </div>
               </div>
             )}
           </div>
 
-          <div>
-            <label className="mb-2 block text-sm font-bold text-slate-700">Cantidad a agregar</label>
-            <input type="number" min="1" value={cantidad} onChange={(e) => setCantidad(e.target.value)} className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-sky-500" />
-          </div>
+          {esReceta && cantidadPendienteReceta <= 0 ? (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-bold text-emerald-700">
+              Este producto ya está completamente surtido en la receta.
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-slate-100 bg-white p-4">
+              {esReceta && (
+                <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={seleccionarModoCompleto}
+                    className={`rounded-2xl border px-4 py-3 text-left text-sm font-black transition ${modoSurtido === 'COMPLETA'
+                      ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
+                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                      }`}
+                  >
+                    Venta completa
+                    <span className="mt-1 block text-xs font-bold opacity-80">
+                      Agrega todo lo pendiente: {formatoNumero(cantidadPendienteReceta)}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={seleccionarModoParcial}
+                    className={`rounded-2xl border px-4 py-3 text-left text-sm font-black transition ${modoSurtido === 'PARCIAL'
+                      ? 'border-orange-300 bg-orange-50 text-orange-800'
+                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                      }`}
+                  >
+                    Venta parcial
+                    <span className="mt-1 block text-xs font-bold opacity-80">
+                      Permite vender menos de lo pendiente
+                    </span>
+                  </button>
+                </div>
+              )}
+
+              <label className="mb-2 block text-sm font-bold text-slate-700">
+                {esReceta ? 'Cantidad a surtir de la receta' : 'Cantidad a agregar'}
+              </label>
+              <input
+                type="number"
+                min="1"
+                max={esReceta ? cantidadPendienteReceta : undefined}
+                value={cantidad}
+                onChange={(e) => actualizarCantidad(e.target.value)}
+                className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-sky-500"
+              />
+
+              {esReceta && (
+                <div className={`mt-3 rounded-2xl p-3 text-sm font-bold ${ventaCompletaReceta ? 'bg-emerald-50 text-emerald-700' : 'bg-orange-50 text-orange-700'}`}>
+                  {ventaCompletaReceta
+                    ? 'Con esta cantidad, el producto quedará surtido completamente.'
+                    : `Con esta cantidad, la receta quedará parcial. Pendiente después: ${formatoNumero(cantidadPendienteDespues)}.`}
+                </div>
+              )}
+            </div>
+          )}
 
           {cargando ? (
             <div className="flex items-center justify-center gap-2 rounded-2xl bg-slate-50 p-6 text-sm font-bold text-slate-600">
@@ -2772,10 +3214,11 @@ function ModalLotesProducto({
             <div className="space-y-3">
               {lotes.map((lote) => {
                 const stock = Number(lote.stock_actual || 0);
-                const cantidadNumerica = Math.max(Number(cantidad || 1), 1);
+                const cantidadNumerica = cantidadNumericaActual;
+                const excedePendiente = esReceta && cantidadNumerica > cantidadPendienteReceta;
                 const sinStock = stock < cantidadNumerica;
                 const estadoCaducidad = obtenerEstadoCaducidadLote(lote.fecha_caducidad);
-                const loteBloqueado = sinStock || estadoCaducidad.caducado;
+                const loteBloqueado = sinStock || estadoCaducidad.caducado || excedePendiente || (esReceta && cantidadPendienteReceta <= 0);
 
                 return (
                   <div
@@ -2803,6 +3246,12 @@ function ModalLotesProducto({
                             Stock disponible: {formatoNumero(stock)}
                           </p>
 
+                          {excedePendiente && (
+                            <p className="inline-flex rounded-full bg-orange-100 px-3 py-1 text-xs font-black text-orange-700">
+                              Excede pendiente de receta
+                            </p>
+                          )}
+
                           {estadoCaducidad.caducado && (
                             <p className="inline-flex rounded-full bg-red-600 px-3 py-1 text-xs font-black text-white">
                               No vendible
@@ -2821,22 +3270,31 @@ function ModalLotesProducto({
                         type="button"
                         onClick={() => onAgregar(producto, lote, cantidadNumerica)}
                         disabled={loteBloqueado}
-                        className={`inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-bold transition ${
-                          loteBloqueado
-                            ? 'cursor-not-allowed bg-slate-100 text-slate-400'
-                            : estadoCaducidad.proximoCaducar
-                              ? 'bg-amber-500 text-white hover:bg-amber-600'
-                              : 'bg-sky-700 text-white hover:bg-sky-800'
-                        }`}
+                        className={`inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-bold transition ${loteBloqueado
+                          ? 'cursor-not-allowed bg-slate-100 text-slate-400'
+                          : estadoCaducidad.proximoCaducar
+                            ? 'bg-amber-500 text-white hover:bg-amber-600'
+                            : ventaCompletaReceta
+                              ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                              : esReceta
+                                ? 'bg-orange-500 text-white hover:bg-orange-600'
+                                : 'bg-sky-700 text-white hover:bg-sky-800'
+                          }`}
                       >
                         <Plus size={18} />
                         {estadoCaducidad.caducado
                           ? 'Lote caducado'
                           : sinStock
                             ? 'Stock insuficiente'
-                            : estadoCaducidad.proximoCaducar
-                              ? 'Agregar con alerta'
-                              : 'Agregar este lote'}
+                            : excedePendiente
+                              ? 'Cantidad no válida'
+                              : estadoCaducidad.proximoCaducar
+                                ? 'Agregar con alerta'
+                                : esReceta
+                                  ? ventaCompletaReceta
+                                    ? 'Surtir completo'
+                                    : 'Surtir parcial'
+                                  : 'Agregar este lote'}
                       </button>
                     </div>
                   </div>
@@ -2998,7 +3456,7 @@ function ModalRecetasPendientes({
                   <div className="mb-4 flex items-center justify-between gap-3">
                     <div>
                       <h3 className="text-lg font-black text-slate-900">Productos de la receta</h3>
-                      <p className="text-sm text-slate-500">Cada botón abre la pantalla de selección de lotes del POS.</p>
+                      <p className="text-sm text-slate-500">Cada botón abre la selección de lote, donde puedes surtir completo o parcial.</p>
                     </div>
                     <Package className="text-slate-400" />
                   </div>
@@ -3110,7 +3568,7 @@ function ModalRecetasPendientes({
                                 {estadoSurtido.vendidoCompleto
                                   ? 'Ya vendido'
                                   : estadoSurtido.vendidoParcial
-                                    ? 'Completar pendiente'
+                                    ? 'Surtir pendiente'
                                     : estadoSurtido.agregadoAlCarrito
                                       ? 'Agregar otro lote'
                                       : 'Elegir lote y agregar'}

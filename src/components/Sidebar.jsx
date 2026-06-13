@@ -132,6 +132,12 @@ const links = [
     modulo: 'ventas',
   },
   {
+    to: '/app/control-sanitario',
+    label: 'Control sanitario',
+    icon: ClipboardList,
+    modulo: 'control-sanitario',
+  },  
+  {
     to: '/app/proveedores',
     label: 'Proveedores',
     icon: Truck,

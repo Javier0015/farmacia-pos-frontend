@@ -84,7 +84,7 @@ const TIPOS_ATENCION_INFO = {
     label: 'Servicio clínico rápido',
     titulo: 'Servicio clínico rápido',
     descripcion: 'Registra el procedimiento realizado, como inyección, curación, toma de presión o glucosa.',
-    siguientePaso: 'Registrar servicio realizado',
+    siguientePaso: 'Puedes agregar el producto o servicio en la receta.',
     badgeClass: 'bg-emerald-100 text-emerald-700 border-emerald-200',
     panelClass: 'border-emerald-200 bg-emerald-50 text-emerald-800',
   },
@@ -221,10 +221,11 @@ export default function DoctorShaddaiRecetas() {
 
   const tipoNotaSugerido = notasPreviasDelExpediente.length > 0 ? 'NOTA_EVOLUCION' : 'NOTA_INICIAL';
   const tipoNotaInfo = obtenerInfoTipoNota(tipoNotaSugerido);
-
   const recetaHabilitadaPorTipo =
     !mostrarFlujoAtencion ||
     tipoAtencionActual.value === 'SOLO_RECETA' ||
+    tipoAtencionActual.value === 'SERVICIO_RAPIDO' ||
+    tipoAtencionActual.value === 'LABORATORIO' ||
     (tipoAtencionActual.value === 'CONSULTA_MEDICA' && notaMedicaGuardada);
 
   const laboratorioHabilitadoPorTipo =
@@ -408,7 +409,7 @@ export default function DoctorShaddaiRecetas() {
           null,
 
         tipo_atencion: tipoAtencionActual.value,
-        
+
         paciente: {
           nombre_paciente:
             paciente.nombre_paciente ||
@@ -1053,71 +1054,71 @@ export default function DoctorShaddaiRecetas() {
     return true;
   };
 
-const prepararPayload = () => {
-  const diagnosticoFinal =
-    paciente.diagnostico?.trim() ||
-    notaMedicaActual?.diagnostico ||
-    notaMedicaActual?.impresion_diagnostica ||
-    null;
+  const prepararPayload = () => {
+    const diagnosticoFinal =
+      paciente.diagnostico?.trim() ||
+      notaMedicaActual?.diagnostico ||
+      notaMedicaActual?.impresion_diagnostica ||
+      null;
 
-  const observacionesFinal =
-    paciente.observaciones?.trim() ||
-    notaMedicaActual?.observaciones ||
-    notaMedicaActual?.plan_tratamiento ||
-    null;
+    const observacionesFinal =
+      paciente.observaciones?.trim() ||
+      notaMedicaActual?.observaciones ||
+      notaMedicaActual?.plan_tratamiento ||
+      null;
 
-  return {
-    id_paciente_expediente:
-      expedienteSeleccionado?.id_expediente ||
-      Number(idExpedienteUrl) ||
-      null,
+    return {
+      id_paciente_expediente:
+        expedienteSeleccionado?.id_expediente ||
+        Number(idExpedienteUrl) ||
+        null,
 
-    // Lo dejamos por compatibilidad si tu backend antiguo lo usa
-    id_fila_atencion: idFilaUrl ? Number(idFilaUrl) : null,
+      // Lo dejamos por compatibilidad si tu backend antiguo lo usa
+      id_fila_atencion: idFilaUrl ? Number(idFilaUrl) : null,
 
-    // Este es el importante para documentos_clinicos
-    id_fila: idFilaUrl ? Number(idFilaUrl) : null,
+      // Este es el importante para documentos_clinicos
+      id_fila: idFilaUrl ? Number(idFilaUrl) : null,
 
-    id_sucursal:
-      expedienteSeleccionado?.id_sucursal ||
-      null,
+      id_sucursal:
+        expedienteSeleccionado?.id_sucursal ||
+        null,
 
-    id_nota: notaMedicaActual?.id_nota || null,
-    tipo_atencion: tipoAtencionActual.value,
+      id_nota: notaMedicaActual?.id_nota || null,
+      tipo_atencion: tipoAtencionActual.value,
 
-    paciente: {
-      nombre_paciente: paciente.nombre_paciente.trim(),
-      telefono: paciente.telefono?.trim() || null,
-      edad: paciente.edad ? Number(paciente.edad) : null,
-      sexo: paciente.sexo || null,
+      paciente: {
+        nombre_paciente: paciente.nombre_paciente.trim(),
+        telefono: paciente.telefono?.trim() || null,
+        edad: paciente.edad ? Number(paciente.edad) : null,
+        sexo: paciente.sexo || null,
+        diagnostico: diagnosticoFinal,
+        observaciones: observacionesFinal,
+      },
+
       diagnostico: diagnosticoFinal,
       observaciones: observacionesFinal,
-    },
 
-    diagnostico: diagnosticoFinal,
-    observaciones: observacionesFinal,
-
-    productos: receta.map((item) => ({
-      id_producto: item.id_producto,
-      id_sucursal: null,
-      nombre: item.nombre,
-      nombre_generico: item.nombre_generico || null,
-      forma_farmaceutica: item.forma_farmaceutica || null,
-      presentacion: item.presentacion || null,
-      codigo_barras: item.codigo_barras || null,
-      sucursal: null,
-      stock: Number(item.stock || 0),
-      precio: Number(item.precio || 0),
-      lote: null,
-      fecha_caducidad: null,
-      cantidad: Number(item.cantidad || 1),
-      dosis: item.dosis.trim() || null,
-      frecuencia: item.frecuencia.trim() || null,
-      duracion: item.duracion.trim() || null,
-      indicaciones: item.indicaciones.trim() || null,
-    })),
+      productos: receta.map((item) => ({
+        id_producto: item.id_producto,
+        id_sucursal: null,
+        nombre: item.nombre,
+        nombre_generico: item.nombre_generico || null,
+        forma_farmaceutica: item.forma_farmaceutica || null,
+        presentacion: item.presentacion || null,
+        codigo_barras: item.codigo_barras || null,
+        sucursal: null,
+        stock: Number(item.stock || 0),
+        precio: Number(item.precio || 0),
+        lote: null,
+        fecha_caducidad: null,
+        cantidad: Number(item.cantidad || 1),
+        dosis: item.dosis.trim() || null,
+        frecuencia: item.frecuencia.trim() || null,
+        duracion: item.duracion.trim() || null,
+        indicaciones: item.indicaciones.trim() || null,
+      })),
+    };
   };
-};
 
   const abrirVistaPrevia = () => {
     if (!validarReceta({ validarPerfil: false })) return;
@@ -1292,15 +1293,15 @@ const prepararPayload = () => {
         throw new Error(data.mensaje || 'No se pudo finalizar la atención.');
       }
 
-await Swal.fire({
-  icon: 'success',
-  title: 'Atención finalizada',
-  text: 'Regresando a la fila de espera...',
-  timer: 1400,
-  showConfirmButton: false,
-});
+      await Swal.fire({
+        icon: 'success',
+        title: 'Atención finalizada',
+        text: 'Regresando a la fila de espera...',
+        timer: 1400,
+        showConfirmButton: false,
+      });
 
-navigate('/app/doctor-shaddai/fila-espera');
+      navigate('/app/doctor-shaddai/fila-espera');
     } catch (error) {
       console.error('Error al finalizar atención:', error);
 
@@ -1578,7 +1579,7 @@ navigate('/app/doctor-shaddai/fila-espera');
                   </button>
                 )}
 
-                {tipoAtencionActual.value === 'SERVICIO_RAPIDO' && (
+                {/*   {tipoAtencionActual.value === 'SERVICIO_RAPIDO' && (
                   <button
                     type="button"
                     onClick={registrarServicioRapidoPendiente}
@@ -1588,6 +1589,7 @@ navigate('/app/doctor-shaddai/fila-espera');
                     Registrar servicio
                   </button>
                 )}
+                */}
 
                 {tipoAtencionActual.value === 'LABORATORIO' && (
                   <button
@@ -1625,99 +1627,99 @@ navigate('/app/doctor-shaddai/fila-espera');
               </div>
 
               <div className="mb-5 rounded-3xl border border-sky-100 bg-sky-50 p-5">
-                  <label className="mb-2 block text-sm font-bold text-slate-700">
-                    Buscar expediente clínico
-                  </label>
+                <label className="mb-2 block text-sm font-bold text-slate-700">
+                  Buscar expediente clínico
+                </label>
 
-                  <div className="relative">
-                    <Search className="absolute left-4 top-3.5 text-slate-400" size={20} />
+                <div className="relative">
+                  <Search className="absolute left-4 top-3.5 text-slate-400" size={20} />
 
-                    <input
-                      type="text"
-                      value={busquedaExpediente}
-                      onChange={(e) => setBusquedaExpediente(e.target.value)}
-                      className="w-full rounded-2xl border border-slate-200 py-3 pl-12 pr-4 text-sm outline-none focus:ring-2 focus:ring-sky-500"
-                      placeholder="Buscar por nombre, teléfono o correo..."
-                    />
-                  </div>
+                  <input
+                    type="text"
+                    value={busquedaExpediente}
+                    onChange={(e) => setBusquedaExpediente(e.target.value)}
+                    className="w-full rounded-2xl border border-slate-200 py-3 pl-12 pr-4 text-sm outline-none focus:ring-2 focus:ring-sky-500"
+                    placeholder="Buscar por nombre, teléfono o correo..."
+                  />
+                </div>
 
-                  {expedienteSeleccionado && (
-                    <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <div className="mb-1 inline-flex items-center gap-2 rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">
-                            <UserCheck size={14} />
-                            Expediente seleccionado
-                          </div>
-
-                          <p className="font-bold text-slate-800">
-                            {expedienteSeleccionado.nombre_paciente}
-                          </p>
-
-                          <p className="mt-1 text-xs text-slate-600">
-                            Expediente #{expedienteSeleccionado.id_expediente}
-                          </p>
+                {expedienteSeleccionado && (
+                  <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="mb-1 inline-flex items-center gap-2 rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">
+                          <UserCheck size={14} />
+                          Expediente seleccionado
                         </div>
 
+                        <p className="font-bold text-slate-800">
+                          {expedienteSeleccionado.nombre_paciente}
+                        </p>
+
+                        <p className="mt-1 text-xs text-slate-600">
+                          Expediente #{expedienteSeleccionado.id_expediente}
+                        </p>
                       </div>
+
                     </div>
-                  )}
-
-                  <div className="mt-4 max-h-72 space-y-3 overflow-y-auto pr-1">
-                    {cargandoExpedientes ? (
-                      <div className="flex items-center gap-2 rounded-2xl bg-white p-4 text-sm font-bold text-slate-600">
-                        <Loader2 size={18} className="animate-spin" />
-                        Buscando expedientes...
-                      </div>
-                    ) : busquedaExpediente.trim().length < 2 ? (
-                      <p className="rounded-2xl bg-white p-4 text-sm text-slate-500">
-                        Escribe al menos 2 caracteres para buscar expedientes.
-                      </p>
-                    ) : expedientes.length === 0 ? (
-                      <p className="rounded-2xl bg-white p-4 text-sm text-slate-500">
-                        No se encontraron expedientes.
-                      </p>
-                    ) : (
-                      expedientes.map((expediente) => (
-                        <button
-                          key={expediente.id_expediente}
-                          type="button"
-                          onClick={() => seleccionarExpediente(expediente)}
-                          className={`w-full rounded-2xl border p-4 text-left transition ${expedienteSeleccionado?.id_expediente === expediente.id_expediente
-                            ? 'border-sky-400 bg-white shadow-sm'
-                            : 'border-slate-200 bg-white hover:border-sky-300'
-                            }`}
-                        >
-                          <p className="font-bold text-slate-800">
-                            {expediente.nombre_paciente}
-                          </p>
-
-                          <p className="mt-1 text-xs text-slate-500">
-                            Teléfono: {expediente.telefono || 'Sin teléfono'} · Edad:{' '}
-                            {expediente.edad || 'N/A'} · Sexo:{' '}
-                            {expediente.sexo || 'No especificado'}
-                          </p>
-
-                          {(expediente.enfermedades_condiciones ||
-                            expediente.alergias ||
-                            expediente.medicamentos_actuales) && (
-                              <div className="mt-2 space-y-1 text-xs text-amber-700">
-                                {expediente.enfermedades_condiciones && (
-                                  <p>Condición: {expediente.enfermedades_condiciones}</p>
-                                )}
-
-                                {expediente.alergias && <p>Alergias: {expediente.alergias}</p>}
-
-                                {expediente.medicamentos_actuales && (
-                                  <p>Medicamentos actuales: {expediente.medicamentos_actuales}</p>
-                                )}
-                              </div>
-                            )}
-                        </button>
-                      ))
-                    )}
                   </div>
+                )}
+
+                <div className="mt-4 max-h-72 space-y-3 overflow-y-auto pr-1">
+                  {cargandoExpedientes ? (
+                    <div className="flex items-center gap-2 rounded-2xl bg-white p-4 text-sm font-bold text-slate-600">
+                      <Loader2 size={18} className="animate-spin" />
+                      Buscando expedientes...
+                    </div>
+                  ) : busquedaExpediente.trim().length < 2 ? (
+                    <p className="rounded-2xl bg-white p-4 text-sm text-slate-500">
+                      Escribe al menos 2 caracteres para buscar expedientes.
+                    </p>
+                  ) : expedientes.length === 0 ? (
+                    <p className="rounded-2xl bg-white p-4 text-sm text-slate-500">
+                      No se encontraron expedientes.
+                    </p>
+                  ) : (
+                    expedientes.map((expediente) => (
+                      <button
+                        key={expediente.id_expediente}
+                        type="button"
+                        onClick={() => seleccionarExpediente(expediente)}
+                        className={`w-full rounded-2xl border p-4 text-left transition ${expedienteSeleccionado?.id_expediente === expediente.id_expediente
+                          ? 'border-sky-400 bg-white shadow-sm'
+                          : 'border-slate-200 bg-white hover:border-sky-300'
+                          }`}
+                      >
+                        <p className="font-bold text-slate-800">
+                          {expediente.nombre_paciente}
+                        </p>
+
+                        <p className="mt-1 text-xs text-slate-500">
+                          Teléfono: {expediente.telefono || 'Sin teléfono'} · Edad:{' '}
+                          {expediente.edad || 'N/A'} · Sexo:{' '}
+                          {expediente.sexo || 'No especificado'}
+                        </p>
+
+                        {(expediente.enfermedades_condiciones ||
+                          expediente.alergias ||
+                          expediente.medicamentos_actuales) && (
+                            <div className="mt-2 space-y-1 text-xs text-amber-700">
+                              {expediente.enfermedades_condiciones && (
+                                <p>Condición: {expediente.enfermedades_condiciones}</p>
+                              )}
+
+                              {expediente.alergias && <p>Alergias: {expediente.alergias}</p>}
+
+                              {expediente.medicamentos_actuales && (
+                                <p>Medicamentos actuales: {expediente.medicamentos_actuales}</p>
+                              )}
+                            </div>
+                          )}
+                      </button>
+                    ))
+                  )}
                 </div>
+              </div>
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="md:col-span-2">
@@ -1821,7 +1823,7 @@ navigate('/app/doctor-shaddai/fila-espera');
 
             <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm">
               <div className="mb-5">
-                <h2 className="text-xl font-bold text-slate-800">Buscar producto</h2>
+                <h2 className="text-xl font-bold text-slate-800">Buscar producto / Servicio</h2>
                 <p className="mt-1 text-sm text-slate-500">
                   Busca medicamentos o productos disponibles en inventario.
                 </p>

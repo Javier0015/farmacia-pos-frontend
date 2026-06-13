@@ -40,6 +40,8 @@ import FilaEsperaPOS from '../pages/filaEspera/FilaEsperaPOS';
 
 import ReportesCierreCaja from '../pages/caja/ReportesCierreCaja';
 
+import ControlSanitario from '../pages/control-sanitario/ControlSanitario';
+
 export default function AppRouter() {
   return (
     <BrowserRouter>
@@ -164,6 +166,15 @@ export default function AppRouter() {
             element={
               <RoleRoute modulo="ventas">
                 <Ventas />
+              </RoleRoute>
+            }
+          />
+
+          <Route
+            path="control-sanitario"
+            element={
+              <RoleRoute modulo="control-sanitario">
+                <ControlSanitario />
               </RoleRoute>
             }
           />

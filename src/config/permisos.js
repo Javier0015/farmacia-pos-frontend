@@ -21,6 +21,7 @@ export const permisosPorRol = {
     'catalogo-admin',
     'fila-espera',
     'reportes-cierre-caja',
+    'control-sanitario',
 
 /*    // Doctor Shaddai
     'doctor-shaddai-perfil',
@@ -61,6 +62,7 @@ export const permisosPorRol = {
     'categorias',
     'proveedores',
     'compras',
+    'control-sanitario',
   ],
 
   ALMACEN: [
