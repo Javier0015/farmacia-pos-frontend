@@ -228,12 +228,12 @@ const links = [
     modulo: 'doctor-shaddai-recetas',
   },*/
 
-  {
+ /* {
     to: '/app/doctor-shaddai/historial-recetas',
     label: 'Historial recetas',
     icon: ClipboardList,
     modulo: 'doctor-shaddai-recetas',
-  },
+  },*/
 
 
   {

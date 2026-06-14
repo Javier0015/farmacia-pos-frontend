@@ -95,7 +95,7 @@ export const permisosPorRol = {
     'expedientes-clinicos',
     'doctor-shaddai-recetas',
     'doctor-shaddai-fila-espera',
-    'doctor-shaddai-laboratorio',
+    /*'doctor-shaddai-laboratorio',*/
   ],
 };
 

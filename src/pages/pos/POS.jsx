@@ -170,6 +170,22 @@ export default function POS() {
   const [detallesRecetasCache, setDetallesRecetasCache] = useState({});
   const [cargandoDetalleReceta, setCargandoDetalleReceta] = useState(false);
 
+  const [modalControladoAbierto, setModalControladoAbierto] = useState(false);
+  const [productoControladoPendiente, setProductoControladoPendiente] = useState(null);
+  const [datosControlProducto, setDatosControlProducto] = useState({
+    numero_receta: '',
+    fecha_receta: '',
+    medico_nombre: '',
+    medico_cedula: '',
+    paciente_nombre: '',
+    paciente_telefono: '',
+    cantidad_recetada: '',
+    cantidad_surtida: '1',
+    tipo_surtido: 'COMPLETO',
+    cantidad_pendiente: 0,
+    observaciones: '',
+  });
+
   const [modalServiciosAbierto, setModalServiciosAbierto] = useState(false);
   const [serviciosPendientes, setServiciosPendientes] = useState([]);
   const [cargandoServicios, setCargandoServicios] = useState(false);
@@ -278,6 +294,62 @@ export default function POS() {
   const obtenerKeyCarrito = (idProducto, idLote) => {
     return `${Number(idProducto)}-${idLote ? Number(idLote) : 'FEFO'}`;
   };
+
+  const obtenerCantidadRecetadaDetalle = (detalle) => {
+    return Number(
+      detalle?.cantidad_recetada ??
+      detalle?.cantidad_solicitada ??
+      detalle?.cantidad ??
+      1
+    );
+  };
+
+  const obtenerCantidadSurtidaDetalle = (detalle) => {
+    return Number(
+      detalle?.cantidad_surtida ??
+      detalle?.total_surtido ??
+      detalle?.surtido ??
+      0
+    );
+  };
+
+  const obtenerCantidadEnCarritoDetalle = (detalle, carritoBase = carrito) => {
+    if (!detalle) return 0;
+
+    const idDetalle = Number(
+      detalle.id_detalle ||
+      detalle.id_detalle_receta ||
+      detalle.id_detalle_receta_shaddai ||
+      0
+    );
+
+    return (Array.isArray(carritoBase) ? carritoBase : [])
+      .filter((item) => {
+        const idDetalleItem = Number(item.id_detalle_receta_shaddai || 0);
+        return idDetalle > 0 && idDetalleItem === idDetalle;
+      })
+      .reduce((acc, item) => acc + Number(item.cantidad || 0), 0);
+  };
+
+  const obtenerEstadoSurtidoDetallePOS = (detalle, carritoBase = carrito) => {
+    const cantidadRecetada = obtenerCantidadRecetadaDetalle(detalle);
+    const cantidadSurtidaPrevia = obtenerCantidadSurtidaDetalle(detalle);
+    const cantidadEnCarrito = obtenerCantidadEnCarritoDetalle(detalle, carritoBase);
+    const cantidadTotalConsiderada = cantidadSurtidaPrevia + cantidadEnCarrito;
+    const cantidadPendiente = Math.max(cantidadRecetada - cantidadTotalConsiderada, 0);
+
+    return {
+      cantidadRecetada,
+      cantidadSurtidaPrevia,
+      cantidadEnCarrito,
+      cantidadTotalConsiderada,
+      cantidadPendiente,
+      vendidoCompleto: cantidadRecetada > 0 && cantidadTotalConsiderada >= cantidadRecetada,
+      vendidoParcial: cantidadTotalConsiderada > 0 && cantidadTotalConsiderada < cantidadRecetada,
+    };
+  };
+
+
 
   const porcentajeClientePuntos = Number(configuracionPuntos?.porcentaje_cliente || 0);
   const puntosClienteActivo =
@@ -612,6 +684,125 @@ export default function POS() {
     await cargarServiciosPendientes();
   };
 
+  const abrirModalControlado = (producto) => {
+    setProductoControladoPendiente(producto);
+    setDatosControlProducto({
+      numero_receta: '',
+      fecha_receta: '',
+      medico_nombre: '',
+      medico_cedula: '',
+      paciente_nombre: '',
+      paciente_telefono: '',
+      cantidad_recetada: '',
+      cantidad_surtida: '1',
+      tipo_surtido: 'COMPLETO',
+      cantidad_pendiente: 0,
+      observaciones: '',
+    });
+    setModalControladoAbierto(true);
+  };
+
+  const confirmarDatosControlado = async () => {
+    if (!productoControladoPendiente) return;
+
+    const esControlado = esProductoControlado(productoControladoPendiente);
+    const requiereReceta = productoRequiereReceta(productoControladoPendiente);
+
+    if ((esControlado || requiereReceta) && !datosControlProducto.numero_receta.trim()) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Número de receta requerido',
+        text: 'Captura el número de receta antes de continuar.',
+      });
+      return;
+    }
+
+    if (!datosControlProducto.medico_nombre.trim()) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Médico requerido',
+        text: 'Captura el nombre del médico.',
+      });
+      return;
+    }
+
+    if (!datosControlProducto.medico_cedula.trim()) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Cédula requerida',
+        text: 'Captura la cédula profesional del médico.',
+      });
+      return;
+    }
+
+    if (!datosControlProducto.paciente_nombre.trim()) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Paciente requerido',
+        text: 'Captura el nombre del paciente.',
+      });
+      return;
+    }
+
+    const cantidadRecetadaExterna = Number(datosControlProducto.cantidad_recetada || 0);
+    const cantidadSurtidaExterna = Number(datosControlProducto.cantidad_surtida || 0);
+
+    if (cantidadRecetadaExterna <= 0) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Cantidad indicada requerida',
+        text: 'Captura cuántas piezas/cajas indica la receta externa.',
+      });
+      return;
+    }
+
+    if (cantidadSurtidaExterna <= 0) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Cantidad a surtir requerida',
+        text: 'Captura cuántas piezas/cajas se van a surtir ahora.',
+      });
+      return;
+    }
+
+    if (cantidadSurtidaExterna > cantidadRecetadaExterna) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Cantidad no válida',
+        text: 'La cantidad a surtir no puede ser mayor que la cantidad indicada en la receta.',
+      });
+      return;
+    }
+
+    const cantidadPendienteExterna = Math.max(cantidadRecetadaExterna - cantidadSurtidaExterna, 0);
+    const tipoSurtidoExterno = cantidadPendienteExterna === 0 ? 'COMPLETO' : 'PARCIAL';
+
+    const productoConControl = {
+      ...productoControladoPendiente,
+      cantidad_control_sanitario_sugerida: cantidadSurtidaExterna,
+      datos_control_sanitario: {
+        ...datosControlProducto,
+        tipo_receta: 'EXTERNA',
+        cantidad_recetada: cantidadRecetadaExterna,
+        cantidad_surtida: cantidadSurtidaExterna,
+        cantidad_pendiente: cantidadPendienteExterna,
+        tipo_surtido: tipoSurtidoExterno,
+      },
+    };
+
+    setModalControladoAbierto(false);
+    setProductoControladoPendiente(null);
+
+    await abrirModalLotesParaProducto({
+      producto: productoConControl,
+      receta: null,
+      detalle: null,
+      omitirValidacionControlado: true,
+    });
+  };
+
+
+
   const validarProductoEspecial = async (producto) => {
     const esControlado = esProductoControlado(producto);
     const requiereReceta = productoRequiereReceta(producto);
@@ -642,9 +833,23 @@ export default function POS() {
     return confirmacion.isConfirmed;
   };
 
-  const abrirModalLotesParaProducto = async ({ producto, receta = null, detalle = null }) => {
+  const abrirModalLotesParaProducto = async ({
+    producto,
+    receta = null,
+    detalle = null,
+    omitirValidacionControlado = false,
+  }) => {
     if (!sesionAbierta) {
       Swal.fire({ icon: 'warning', title: 'Caja no abierta', text: 'Primero abre una caja para poder vender.' });
+      return;
+    }
+
+    if (
+      !receta &&
+      !omitirValidacionControlado &&
+      (esProductoControlado(producto) || productoRequiereReceta(producto))
+    ) {
+      abrirModalControlado(producto);
       return;
     }
 
@@ -654,7 +859,7 @@ export default function POS() {
       return;
     }
 
-    if (!receta) {
+    if (!receta && !omitirValidacionControlado) {
       const puedeAgregar = await validarProductoEspecial(producto);
       if (!puedeAgregar) return;
     }
@@ -721,6 +926,77 @@ export default function POS() {
 
     const receta = contextoLoteReceta?.receta || null;
     const detalle = contextoLoteReceta?.detalle || null;
+    const datosControlSanitarioBase = producto.datos_control_sanitario || null;
+
+    const esProductoDeReceta = !!(receta?.id_receta && detalle);
+    const cantidadRecetada = esProductoDeReceta
+      ? obtenerCantidadRecetadaDetalle(detalle)
+      : null;
+    const cantidadSurtidaPrevia = esProductoDeReceta
+      ? obtenerCantidadSurtidaDetalle(detalle)
+      : null;
+    const cantidadEnCarritoPrevia = esProductoDeReceta
+      ? obtenerCantidadEnCarritoDetalle(detalle)
+      : 0;
+    const cantidadPendienteAntes = esProductoDeReceta
+      ? Math.max(cantidadRecetada - cantidadSurtidaPrevia - cantidadEnCarritoPrevia, 0)
+      : null;
+
+    if (esProductoDeReceta && cantidadPendienteAntes <= 0) {
+      Swal.fire({
+        icon: 'info',
+        title: 'Sin pendiente por surtir',
+        text: 'Este producto de la receta ya fue surtido por completo.',
+      });
+      return;
+    }
+
+    if (esProductoDeReceta && cantidadAgregar > cantidadPendienteAntes) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Cantidad mayor a la pendiente',
+        text: `Solo quedan ${formatoNumero(cantidadPendienteAntes)} pieza(s) pendientes de esta receta.`,
+      });
+      return;
+    }
+
+    const cantidadPendienteDespues = esProductoDeReceta
+      ? Math.max(cantidadPendienteAntes - cantidadAgregar, 0)
+      : null;
+    const tipoSurtidoReceta = esProductoDeReceta
+      ? cantidadPendienteDespues === 0
+        ? 'COMPLETA'
+        : 'PARCIAL'
+      : null;
+    const estatusDetalleReceta = esProductoDeReceta
+      ? cantidadPendienteDespues === 0
+        ? 'SURTIDO'
+        : 'SURTIDO_PARCIAL'
+      : null;
+
+    const datosControlSanitarioActualizado = datosControlSanitarioBase
+      ? (() => {
+        const cantidadRecetadaExterna = Number(datosControlSanitarioBase.cantidad_recetada || 0);
+        const cantidadSurtidaExterna = cantidadAgregar;
+        const cantidadPendienteExterna = cantidadRecetadaExterna > 0
+          ? Math.max(cantidadRecetadaExterna - cantidadSurtidaExterna, 0)
+          : null;
+        const tipoSurtidoExterno = cantidadRecetadaExterna > 0
+          ? cantidadPendienteExterna === 0
+            ? 'COMPLETO'
+            : 'PARCIAL'
+          : datosControlSanitarioBase.tipo_surtido || null;
+
+        return {
+          ...datosControlSanitarioBase,
+          tipo_receta: datosControlSanitarioBase.tipo_receta || 'EXTERNA',
+          cantidad_recetada: cantidadRecetadaExterna || datosControlSanitarioBase.cantidad_recetada || null,
+          cantidad_surtida: cantidadSurtidaExterna,
+          cantidad_pendiente: cantidadPendienteExterna,
+          tipo_surtido: tipoSurtidoExterno,
+        };
+      })()
+      : null;
 
     setCarrito((prev) => {
       const existe = prev.find((item) => item.key_carrito === keyCarrito);
@@ -747,6 +1023,21 @@ export default function POS() {
                 receta?.folio_receta || receta?.id_receta || item.folio_receta_shaddai || null,
               paciente_receta_shaddai: receta?.nombre_paciente || item.paciente_receta_shaddai || null,
               id_detalle_receta_shaddai: detalle?.id_detalle || item.id_detalle_receta_shaddai || null,
+              datos_control_sanitario:
+                datosControlSanitarioActualizado || item.datos_control_sanitario || null,
+              cantidad_recetada_shaddai: cantidadRecetada ?? item.cantidad_recetada_shaddai ?? null,
+              cantidad_surtida_previa_shaddai:
+                cantidadSurtidaPrevia ?? item.cantidad_surtida_previa_shaddai ?? null,
+              cantidad_en_carrito_previa_shaddai:
+                cantidadEnCarritoPrevia ?? item.cantidad_en_carrito_previa_shaddai ?? null,
+              cantidad_pendiente_previa_shaddai:
+                cantidadPendienteAntes ?? item.cantidad_pendiente_previa_shaddai ?? null,
+              cantidad_surtida_actual_shaddai:
+                Number(item.cantidad_surtida_actual_shaddai || 0) + cantidadAgregar,
+              cantidad_pendiente_despues_shaddai: cantidadPendienteDespues ?? item.cantidad_pendiente_despues_shaddai ?? null,
+              tipo_surtido_receta_shaddai: tipoSurtidoReceta || item.tipo_surtido_receta_shaddai || null,
+              estatus_detalle_receta_shaddai:
+                estatusDetalleReceta || item.estatus_detalle_receta_shaddai || null,
             }
             : item
         );
@@ -781,6 +1072,15 @@ export default function POS() {
           cantidad: cantidadAgregar,
           controlado: esProductoControlado(producto),
           requiere_receta: productoRequiereReceta(producto),
+          datos_control_sanitario: datosControlSanitarioActualizado,
+          cantidad_recetada_shaddai: cantidadRecetada,
+          cantidad_surtida_previa_shaddai: cantidadSurtidaPrevia,
+          cantidad_en_carrito_previa_shaddai: cantidadEnCarritoPrevia,
+          cantidad_pendiente_previa_shaddai: cantidadPendienteAntes,
+          cantidad_surtida_actual_shaddai: esProductoDeReceta ? cantidadAgregar : null,
+          cantidad_pendiente_despues_shaddai: cantidadPendienteDespues,
+          tipo_surtido_receta_shaddai: tipoSurtidoReceta,
+          estatus_detalle_receta_shaddai: estatusDetalleReceta,
 
           id_receta_shaddai: receta?.id_receta || null,
           folio_receta_shaddai: receta?.folio_receta || receta?.id_receta || null,
@@ -1018,6 +1318,17 @@ export default function POS() {
   const agregarDetalleRecetaConLote = async (detalle) => {
     if (!recetaSeleccionada || !detalle) return;
 
+    const estadoDetalle = obtenerEstadoSurtidoDetallePOS(detalle);
+
+    if (estadoDetalle.cantidadPendiente <= 0) {
+      Swal.fire({
+        icon: 'info',
+        title: 'Receta ya surtida',
+        text: 'Este producto ya no tiene cantidad pendiente por surtir.',
+      });
+      return;
+    }
+
     const productoInventario = inventario.find(
       (item) => Number(item.id_producto) === Number(detalle.id_producto)
     );
@@ -1033,7 +1344,10 @@ export default function POS() {
 
     const productoParaVenta = {
       ...productoInventario,
-      cantidad_receta: Number(detalle.cantidad || 1),
+      cantidad_receta: estadoDetalle.cantidadRecetada,
+      cantidad_surtida_previa_receta: estadoDetalle.cantidadSurtidaPrevia,
+      cantidad_en_carrito_receta: estadoDetalle.cantidadEnCarrito,
+      cantidad_pendiente_receta: estadoDetalle.cantidadPendiente,
       dosis_receta: detalle.dosis,
       frecuencia_receta: detalle.frecuencia,
       duracion_receta: detalle.duracion,
@@ -1043,7 +1357,13 @@ export default function POS() {
     await abrirModalLotesParaProducto({
       producto: productoParaVenta,
       receta: recetaSeleccionada,
-      detalle,
+      detalle: {
+        ...detalle,
+        cantidad_recetada: estadoDetalle.cantidadRecetada,
+        cantidad_surtida_previa_receta: estadoDetalle.cantidadSurtidaPrevia,
+        cantidad_en_carrito_receta: estadoDetalle.cantidadEnCarrito,
+        cantidad_pendiente_receta: estadoDetalle.cantidadPendiente,
+      },
     });
   };
 
@@ -1056,16 +1376,49 @@ export default function POS() {
           return { ...item, cantidad: Number(item.cantidad) + 1 };
         }
 
-        if (Number(item.cantidad) >= Number(item.stock_actual)) {
+        const stockMaximo = Number(item.stock_actual || 0);
+        const pendienteReceta = item.cantidad_pendiente_previa_shaddai ?? null;
+        const limiteReceta =
+          pendienteReceta !== null && pendienteReceta !== undefined
+            ? Number(pendienteReceta)
+            : null;
+        const limiteCantidad =
+          limiteReceta !== null && !Number.isNaN(limiteReceta)
+            ? Math.min(stockMaximo, limiteReceta)
+            : stockMaximo;
+
+        if (Number(item.cantidad) >= limiteCantidad) {
           Swal.fire({
             icon: 'warning',
-            title: 'Stock insuficiente',
-            text: `Solo hay ${formatoNumero(item.stock_actual)} piezas disponibles en este lote.`,
+            title: limiteReceta !== null ? 'Cantidad máxima de la receta' : 'Stock insuficiente',
+            text:
+              limiteReceta !== null
+                ? `Solo quedan ${formatoNumero(limiteReceta)} pieza(s) pendientes de esta receta.`
+                : `Solo hay ${formatoNumero(item.stock_actual)} piezas disponibles en este lote.`,
           });
           return item;
         }
 
-        return { ...item, cantidad: Number(item.cantidad) + 1 };
+        const nuevaCantidad = Number(item.cantidad) + 1;
+        const cantidadPendienteDespues =
+          limiteReceta !== null ? Math.max(limiteReceta - nuevaCantidad, 0) : item.cantidad_pendiente_despues_shaddai ?? null;
+
+        return {
+          ...item,
+          cantidad: nuevaCantidad,
+          cantidad_surtida_actual_shaddai: item.id_detalle_receta_shaddai ? nuevaCantidad : item.cantidad_surtida_actual_shaddai ?? null,
+          cantidad_pendiente_despues_shaddai: item.id_detalle_receta_shaddai ? cantidadPendienteDespues : item.cantidad_pendiente_despues_shaddai ?? null,
+          tipo_surtido_receta_shaddai: item.id_detalle_receta_shaddai
+            ? cantidadPendienteDespues === 0
+              ? 'COMPLETA'
+              : 'PARCIAL'
+            : item.tipo_surtido_receta_shaddai || null,
+          estatus_detalle_receta_shaddai: item.id_detalle_receta_shaddai
+            ? cantidadPendienteDespues === 0
+              ? 'SURTIDO'
+              : 'SURTIDO_PARCIAL'
+            : item.estatus_detalle_receta_shaddai || null,
+        };
       })
     );
   };
@@ -1090,16 +1443,49 @@ export default function POS() {
           return { ...item, cantidad: cantidadNueva };
         }
 
-        if (cantidadNueva > Number(item.stock_actual)) {
+        const stockMaximo = Number(item.stock_actual || 0);
+        const pendienteReceta = item.cantidad_pendiente_previa_shaddai ?? null;
+        const limiteReceta =
+          pendienteReceta !== null && pendienteReceta !== undefined
+            ? Number(pendienteReceta)
+            : null;
+        const limiteCantidad =
+          limiteReceta !== null && !Number.isNaN(limiteReceta)
+            ? Math.min(stockMaximo, limiteReceta)
+            : stockMaximo;
+
+        const cantidadFinal = cantidadNueva > limiteCantidad ? limiteCantidad : cantidadNueva;
+
+        if (cantidadNueva > limiteCantidad) {
           Swal.fire({
             icon: 'warning',
-            title: 'Stock insuficiente',
-            text: `Solo hay ${formatoNumero(item.stock_actual)} piezas disponibles en este lote.`,
+            title: limiteReceta !== null ? 'Cantidad máxima de la receta' : 'Stock insuficiente',
+            text:
+              limiteReceta !== null
+                ? `Solo quedan ${formatoNumero(limiteReceta)} pieza(s) pendientes de esta receta.`
+                : `Solo hay ${formatoNumero(item.stock_actual)} piezas disponibles en este lote.`,
           });
-          return { ...item, cantidad: Number(item.stock_actual) };
         }
 
-        return { ...item, cantidad: cantidadNueva };
+        const cantidadPendienteDespues =
+          limiteReceta !== null ? Math.max(limiteReceta - cantidadFinal, 0) : item.cantidad_pendiente_despues_shaddai ?? null;
+
+        return {
+          ...item,
+          cantidad: cantidadFinal,
+          cantidad_surtida_actual_shaddai: item.id_detalle_receta_shaddai ? cantidadFinal : item.cantidad_surtida_actual_shaddai ?? null,
+          cantidad_pendiente_despues_shaddai: item.id_detalle_receta_shaddai ? cantidadPendienteDespues : item.cantidad_pendiente_despues_shaddai ?? null,
+          tipo_surtido_receta_shaddai: item.id_detalle_receta_shaddai
+            ? cantidadPendienteDespues === 0
+              ? 'COMPLETA'
+              : 'PARCIAL'
+            : item.tipo_surtido_receta_shaddai || null,
+          estatus_detalle_receta_shaddai: item.id_detalle_receta_shaddai
+            ? cantidadPendienteDespues === 0
+              ? 'SURTIDO'
+              : 'SURTIDO_PARCIAL'
+            : item.estatus_detalle_receta_shaddai || null,
+        };
       })
     );
   };
@@ -1486,6 +1872,17 @@ export default function POS() {
           id_oferta: item.id_oferta ? Number(item.id_oferta) : null,
           id_receta_shaddai: item.id_receta_shaddai || null,
           id_detalle_receta_shaddai: item.id_detalle_receta_shaddai || null,
+          controlado: item.controlado || false,
+          requiere_receta: item.requiere_receta || false,
+          datos_control_sanitario: item.datos_control_sanitario || null,
+          cantidad_recetada_shaddai: item.cantidad_recetada_shaddai ?? null,
+          cantidad_surtida_previa_shaddai: item.cantidad_surtida_previa_shaddai ?? null,
+          cantidad_en_carrito_previa_shaddai: item.cantidad_en_carrito_previa_shaddai ?? null,
+          cantidad_pendiente_previa_shaddai: item.cantidad_pendiente_previa_shaddai ?? null,
+          cantidad_surtida_actual_shaddai: item.cantidad_surtida_actual_shaddai ?? null,
+          cantidad_pendiente_despues_shaddai: item.cantidad_pendiente_despues_shaddai ?? null,
+          tipo_surtido_receta_shaddai: item.tipo_surtido_receta_shaddai || null,
+          estatus_detalle_receta_shaddai: item.estatus_detalle_receta_shaddai || null,
         })),
         servicios: serviciosAntesDeCobrar.map((item) => ({
           id_solicitud_servicio: Number(item.id_solicitud_servicio),
@@ -1551,7 +1948,7 @@ export default function POS() {
         setMontoRecibido('');
         setPagoMixtoActivo(false);
         setPagosMixtos(PAGOS_MIXTOS_INICIALES);
-        setCobrarImpuesto(true);
+        setCobrarImpuesto(false);
         setTarjetaPuntos(null);
         setCodigoTarjeta('');
         setMetodoPago('EFECTIVO');
@@ -2040,6 +2437,19 @@ export default function POS() {
             </button>
           </div>
         </section>
+      )}
+
+      {modalControladoAbierto && (
+        <ModalDatosControlado
+          producto={productoControladoPendiente}
+          datos={datosControlProducto}
+          setDatos={setDatosControlProducto}
+          onClose={() => {
+            setModalControladoAbierto(false);
+            setProductoControladoPendiente(null);
+          }}
+          onConfirmar={confirmarDatosControlado}
+        />
       )}
 
       {modalLotesProducto && (
@@ -2734,6 +3144,232 @@ function ResumenLinea({ label, valor, destacado = null }) {
 }
 
 
+function ModalDatosControlado({
+  producto,
+  datos,
+  setDatos,
+  onClose,
+  onConfirmar,
+}) {
+  const actualizarCampo = (campo, valor) => {
+    setDatos((prev) => ({
+      ...prev,
+      [campo]: valor,
+    }));
+  };
+
+  const cantidadRecetada = Number(datos.cantidad_recetada || 0);
+  const cantidadSurtida = Number(datos.cantidad_surtida || 0);
+  const cantidadPendiente = Math.max(cantidadRecetada - cantidadSurtida, 0);
+  const surtimientoValido = cantidadRecetada > 0 && cantidadSurtida > 0 && cantidadSurtida <= cantidadRecetada;
+  const tipoSurtidoCalculado = surtimientoValido
+    ? cantidadPendiente === 0
+      ? 'COMPLETO'
+      : 'PARCIAL'
+    : null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
+      <div className="w-full max-w-3xl overflow-hidden rounded-[2rem] bg-white shadow-2xl">
+        <div className="border-b border-slate-100 bg-amber-50 px-6 py-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-black uppercase tracking-wide text-amber-700">
+                Control sanitario
+              </p>
+              <h2 className="mt-1 text-2xl font-black text-slate-900">
+                Datos para medicamento controlado
+              </h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Producto:{' '}
+                <span className="font-black">
+                  {producto?.producto || producto?.nombre || 'Producto seleccionado'}
+                </span>
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-2xl bg-white p-2 text-slate-500 shadow-sm transition hover:bg-slate-100 hover:text-slate-800"
+            >
+              <X size={22} />
+            </button>
+          </div>
+        </div>
+
+        <div className="grid max-h-[70vh] grid-cols-1 gap-4 overflow-y-auto p-6 md:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-xs font-black uppercase text-slate-500">
+              Número de receta <span className="text-red-500">*</span>
+            </label>
+            <input
+              value={datos.numero_receta}
+              onChange={(e) => actualizarCampo('numero_receta', e.target.value)}
+              className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-sky-500"
+              placeholder="Ej. RX-0001"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-black uppercase text-slate-500">
+              Fecha de receta
+            </label>
+            <input
+              type="date"
+              value={datos.fecha_receta}
+              onChange={(e) => actualizarCampo('fecha_receta', e.target.value)}
+              className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-sky-500"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-black uppercase text-slate-500">
+              Nombre del médico <span className="text-red-500">*</span>
+            </label>
+            <input
+              value={datos.medico_nombre}
+              onChange={(e) => actualizarCampo('medico_nombre', e.target.value)}
+              className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-sky-500"
+              placeholder="Nombre completo"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-black uppercase text-slate-500">
+              Cédula profesional <span className="text-red-500">*</span>
+            </label>
+            <input
+              value={datos.medico_cedula}
+              onChange={(e) => actualizarCampo('medico_cedula', e.target.value)}
+              className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-sky-500"
+              placeholder="Cédula"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-black uppercase text-slate-500">
+              Nombre del paciente <span className="text-red-500">*</span>
+            </label>
+            <input
+              value={datos.paciente_nombre}
+              onChange={(e) => actualizarCampo('paciente_nombre', e.target.value)}
+              className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-sky-500"
+              placeholder="Nombre completo"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-black uppercase text-slate-500">
+              Teléfono del paciente
+            </label>
+            <input
+              value={datos.paciente_telefono}
+              onChange={(e) => actualizarCampo('paciente_telefono', e.target.value)}
+              className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-sky-500"
+              placeholder="Opcional"
+            />
+          </div>
+
+          <div className="rounded-2xl border border-sky-100 bg-sky-50 p-4 md:col-span-2">
+            <p className="text-xs font-black uppercase tracking-wide text-sky-700">
+              Surtimiento de receta externa
+            </p>
+            <p className="mt-1 text-sm text-sky-900">
+              Usa estos campos cuando la receta viene de un médico externo y no existe dentro de Doctor Shaddai.
+            </p>
+
+            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs font-black uppercase text-slate-500">
+                  Cantidad indicada en receta <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={datos.cantidad_recetada}
+                  onChange={(e) => actualizarCampo('cantidad_recetada', e.target.value)}
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-sky-500"
+                  placeholder="Ej. 3"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-black uppercase text-slate-500">
+                  Cantidad a surtir ahora <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max={cantidadRecetada > 0 ? cantidadRecetada : undefined}
+                  step="1"
+                  value={datos.cantidad_surtida}
+                  onChange={(e) => actualizarCampo('cantidad_surtida', e.target.value)}
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-sky-500"
+                  placeholder="Ej. 1"
+                />
+              </div>
+            </div>
+
+            <div className={`mt-4 rounded-2xl p-4 text-sm font-bold ${
+              !surtimientoValido
+                ? 'bg-slate-100 text-slate-600'
+                : tipoSurtidoCalculado === 'COMPLETO'
+                  ? 'bg-emerald-100 text-emerald-800'
+                  : 'bg-orange-100 text-orange-800'
+            }`}>
+              {!surtimientoValido
+                ? 'Captura cantidades válidas para calcular si la venta será completa o parcial.'
+                : tipoSurtidoCalculado === 'COMPLETO'
+                  ? 'Resultado: venta completa. Se surtirá toda la cantidad indicada en la receta.'
+                  : `Resultado: venta parcial. Quedarán ${cantidadPendiente} pieza(s)/caja(s) pendientes.`}
+            </div>
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="mb-1 block text-xs font-black uppercase text-slate-500">
+              Observaciones
+            </label>
+            <textarea
+              value={datos.observaciones}
+              onChange={(e) => actualizarCampo('observaciones', e.target.value)}
+              rows={3}
+              className="w-full resize-none rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-sky-500"
+              placeholder="Notas internas, receta retenida, autorización, etc."
+            />
+          </div>
+
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 md:col-span-2">
+            <p className="font-black">Importante</p>
+            <p className="mt-1">
+                Recuerda que hay casos donde es necesario guardar la receta físicamente. 
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3 border-t border-slate-100 bg-slate-50 px-6 py-5 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-2xl bg-white px-5 py-3 text-sm font-black text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-100"
+          >
+            Cancelar
+          </button>
+
+          <button
+            type="button"
+            onClick={onConfirmar}
+            className="rounded-2xl bg-amber-600 px-5 py-3 text-sm font-black text-white transition hover:bg-amber-700"
+          >
+            Guardar y seleccionar lote
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ModalLotesProducto({
   producto,
   lotes,
@@ -2745,12 +3381,78 @@ function ModalLotesProducto({
   formatoNumero,
   formatoFechaCorta,
 }) {
-  const cantidadSugerida = Number(contextoReceta?.detalle?.cantidad || 1);
+  const esReceta = !!contextoReceta?.receta;
+  const cantidadRecetada = Number(
+    contextoReceta?.detalle?.cantidad_recetada ??
+    contextoReceta?.detalle?.cantidad_solicitada ??
+    contextoReceta?.detalle?.cantidad ??
+    producto?.cantidad_receta ??
+    1
+  );
+  const cantidadSurtidaPrevia = Number(
+    contextoReceta?.detalle?.cantidad_surtida_previa_receta ??
+    contextoReceta?.detalle?.cantidad_surtida ??
+    contextoReceta?.detalle?.total_surtido ??
+    contextoReceta?.detalle?.surtido ??
+    producto?.cantidad_surtida_previa_receta ??
+    0
+  );
+  const cantidadEnCarritoPrevia = Number(
+    contextoReceta?.detalle?.cantidad_en_carrito_receta ??
+    producto?.cantidad_en_carrito_receta ??
+    0
+  );
+  const cantidadPendienteReceta = esReceta
+    ? Math.max(cantidadRecetada - cantidadSurtidaPrevia - cantidadEnCarritoPrevia, 0)
+    : null;
+
+  const cantidadControlSanitarioSugerida = Number(producto?.cantidad_control_sanitario_sugerida || 0);
+  const cantidadSugerida = esReceta
+    ? Math.max(cantidadPendienteReceta, 1)
+    : cantidadControlSanitarioSugerida > 0
+      ? cantidadControlSanitarioSugerida
+      : 1;
+  const [modoSurtido, setModoSurtido] = useState(esReceta ? 'COMPLETA' : 'NORMAL');
   const [cantidad, setCantidad] = useState(cantidadSugerida || 1);
 
   useEffect(() => {
-    setCantidad(cantidadSugerida || 1);
-  }, [cantidadSugerida]);
+    const nuevaCantidad = esReceta
+      ? Math.max(cantidadPendienteReceta, 1)
+      : cantidadControlSanitarioSugerida > 0
+        ? cantidadControlSanitarioSugerida
+        : 1;
+    setCantidad(nuevaCantidad);
+    setModoSurtido(esReceta ? 'COMPLETA' : 'NORMAL');
+  }, [esReceta, cantidadPendienteReceta, cantidadControlSanitarioSugerida]);
+
+  const normalizarCantidad = (valor) => {
+    const numero = Math.max(Number(valor || 1), 1);
+    if (!esReceta) return numero;
+    return Math.min(numero, Math.max(cantidadPendienteReceta, 1));
+  };
+
+  const actualizarCantidad = (valor) => {
+    setCantidad(normalizarCantidad(valor));
+    if (esReceta) setModoSurtido('PARCIAL');
+  };
+
+  const seleccionarModoCompleto = () => {
+    if (!esReceta) return;
+    setModoSurtido('COMPLETA');
+    setCantidad(Math.max(cantidadPendienteReceta, 1));
+  };
+
+  const seleccionarModoParcial = () => {
+    if (!esReceta) return;
+    setModoSurtido('PARCIAL');
+    setCantidad((prev) => Math.min(normalizarCantidad(prev), Math.max(cantidadPendienteReceta, 1)));
+  };
+
+  const cantidadNumericaActual = normalizarCantidad(cantidad);
+  const cantidadPendienteDespues = esReceta
+    ? Math.max(cantidadPendienteReceta - cantidadNumericaActual, 0)
+    : null;
+  const ventaCompletaReceta = esReceta && cantidadPendienteDespues === 0;
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
@@ -2759,7 +3461,7 @@ function ModalLotesProducto({
           <div>
             <h2 className="text-xl font-bold text-slate-800">Seleccionar lote</h2>
             <p className="text-sm text-slate-500">
-              {contextoReceta ? 'Producto tomado desde receta Doctor Shaddai.' : 'Elige el lote que deseas descontar.'}
+              {esReceta ? 'Producto tomado desde receta Doctor Shaddai.' : 'Elige el lote que deseas descontar.'}
             </p>
           </div>
           <button type="button" onClick={onClose} className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200">
@@ -2772,19 +3474,79 @@ function ModalLotesProducto({
             <p className="font-black text-slate-900">{producto?.producto || producto?.nombre || 'Producto'}</p>
             <p className="mt-1 text-xs text-slate-500">Código: {producto?.codigo_barras || '—'} · Presentación: {producto?.presentacion || '—'}</p>
             <p className="mt-2 text-sm font-bold text-sky-700">{formatoMoneda(producto?.precio_con_descuento || producto?.precio_venta || 0)}</p>
-            {contextoReceta?.receta && (
-              <div className="mt-3 rounded-xl bg-sky-50 p-3 text-xs text-sky-800">
-                <p><b>Receta:</b> {contextoReceta.receta.folio_receta || contextoReceta.receta.id_receta}</p>
-                <p><b>Paciente:</b> {contextoReceta.receta.nombre_paciente || 'N/A'}</p>
-                <p><b>Cantidad indicada:</b> {contextoReceta.detalle?.cantidad || 1}</p>
+            {esReceta && (
+              <div className="mt-3 rounded-2xl border border-sky-100 bg-sky-50 p-4 text-xs text-sky-900">
+                <div className="grid gap-2 md:grid-cols-2">
+                  <p><b>Receta:</b> {contextoReceta.receta.folio_receta || contextoReceta.receta.id_receta}</p>
+                  <p><b>Paciente:</b> {contextoReceta.receta.nombre_paciente || 'N/A'}</p>
+                  <p><b>Recetado:</b> {formatoNumero(cantidadRecetada)}</p>
+                  <p><b>Ya surtido:</b> {formatoNumero(cantidadSurtidaPrevia)}</p>
+                  <p><b>En carrito:</b> {formatoNumero(cantidadEnCarritoPrevia)}</p>
+                  <p><b>Pendiente:</b> {formatoNumero(cantidadPendienteReceta)}</p>
+                </div>
               </div>
             )}
           </div>
 
-          <div>
-            <label className="mb-2 block text-sm font-bold text-slate-700">Cantidad a agregar</label>
-            <input type="number" min="1" value={cantidad} onChange={(e) => setCantidad(e.target.value)} className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-sky-500" />
-          </div>
+          {esReceta && cantidadPendienteReceta <= 0 ? (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-bold text-emerald-700">
+              Este producto ya está completamente surtido en la receta.
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-slate-100 bg-white p-4">
+              {esReceta && (
+                <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={seleccionarModoCompleto}
+                    className={`rounded-2xl border px-4 py-3 text-left text-sm font-black transition ${modoSurtido === 'COMPLETA'
+                      ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
+                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                      }`}
+                  >
+                    Venta completa
+                    <span className="mt-1 block text-xs font-bold opacity-80">
+                      Agrega todo lo pendiente: {formatoNumero(cantidadPendienteReceta)}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={seleccionarModoParcial}
+                    className={`rounded-2xl border px-4 py-3 text-left text-sm font-black transition ${modoSurtido === 'PARCIAL'
+                      ? 'border-orange-300 bg-orange-50 text-orange-800'
+                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                      }`}
+                  >
+                    Venta parcial
+                    <span className="mt-1 block text-xs font-bold opacity-80">
+                      Permite vender menos de lo pendiente
+                    </span>
+                  </button>
+                </div>
+              )}
+
+              <label className="mb-2 block text-sm font-bold text-slate-700">
+                {esReceta ? 'Cantidad a surtir de la receta' : 'Cantidad a agregar'}
+              </label>
+              <input
+                type="number"
+                min="1"
+                max={esReceta ? cantidadPendienteReceta : undefined}
+                value={cantidad}
+                onChange={(e) => actualizarCantidad(e.target.value)}
+                className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-sky-500"
+              />
+
+              {esReceta && (
+                <div className={`mt-3 rounded-2xl p-3 text-sm font-bold ${ventaCompletaReceta ? 'bg-emerald-50 text-emerald-700' : 'bg-orange-50 text-orange-700'}`}>
+                  {ventaCompletaReceta
+                    ? 'Con esta cantidad, el producto quedará surtido completamente.'
+                    : `Con esta cantidad, la receta quedará parcial. Pendiente después: ${formatoNumero(cantidadPendienteDespues)}.`}
+                </div>
+              )}
+            </div>
+          )}
 
           {cargando ? (
             <div className="flex items-center justify-center gap-2 rounded-2xl bg-slate-50 p-6 text-sm font-bold text-slate-600">
@@ -2797,10 +3559,11 @@ function ModalLotesProducto({
             <div className="space-y-3">
               {lotes.map((lote) => {
                 const stock = Number(lote.stock_actual || 0);
-                const cantidadNumerica = Math.max(Number(cantidad || 1), 1);
+                const cantidadNumerica = cantidadNumericaActual;
+                const excedePendiente = esReceta && cantidadNumerica > cantidadPendienteReceta;
                 const sinStock = stock < cantidadNumerica;
                 const estadoCaducidad = obtenerEstadoCaducidadLote(lote.fecha_caducidad);
-                const loteBloqueado = sinStock || estadoCaducidad.caducado;
+                const loteBloqueado = sinStock || estadoCaducidad.caducado || excedePendiente || (esReceta && cantidadPendienteReceta <= 0);
 
                 return (
                   <div
@@ -2828,6 +3591,12 @@ function ModalLotesProducto({
                             Stock disponible: {formatoNumero(stock)}
                           </p>
 
+                          {excedePendiente && (
+                            <p className="inline-flex rounded-full bg-orange-100 px-3 py-1 text-xs font-black text-orange-700">
+                              Excede pendiente de receta
+                            </p>
+                          )}
+
                           {estadoCaducidad.caducado && (
                             <p className="inline-flex rounded-full bg-red-600 px-3 py-1 text-xs font-black text-white">
                               No vendible
@@ -2847,10 +3616,14 @@ function ModalLotesProducto({
                         onClick={() => onAgregar(producto, lote, cantidadNumerica)}
                         disabled={loteBloqueado}
                         className={`inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-bold transition ${loteBloqueado
-                            ? 'cursor-not-allowed bg-slate-100 text-slate-400'
-                            : estadoCaducidad.proximoCaducar
-                              ? 'bg-amber-500 text-white hover:bg-amber-600'
-                              : 'bg-sky-700 text-white hover:bg-sky-800'
+                          ? 'cursor-not-allowed bg-slate-100 text-slate-400'
+                          : estadoCaducidad.proximoCaducar
+                            ? 'bg-amber-500 text-white hover:bg-amber-600'
+                            : ventaCompletaReceta
+                              ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                              : esReceta
+                                ? 'bg-orange-500 text-white hover:bg-orange-600'
+                                : 'bg-sky-700 text-white hover:bg-sky-800'
                           }`}
                       >
                         <Plus size={18} />
@@ -2858,9 +3631,15 @@ function ModalLotesProducto({
                           ? 'Lote caducado'
                           : sinStock
                             ? 'Stock insuficiente'
-                            : estadoCaducidad.proximoCaducar
-                              ? 'Agregar con alerta'
-                              : 'Agregar este lote'}
+                            : excedePendiente
+                              ? 'Cantidad no válida'
+                              : estadoCaducidad.proximoCaducar
+                                ? 'Agregar con alerta'
+                                : esReceta
+                                  ? ventaCompletaReceta
+                                    ? 'Surtir completo'
+                                    : 'Surtir parcial'
+                                  : 'Agregar este lote'}
                       </button>
                     </div>
                   </div>
@@ -2873,7 +3652,6 @@ function ModalLotesProducto({
     </div>
   );
 }
-
 
 function ModalServiciosPendientes({
   serviciosPendientes,
@@ -3271,7 +4049,7 @@ function ModalRecetasPendientes({
                   <div className="mb-4 flex items-center justify-between gap-3">
                     <div>
                       <h3 className="text-lg font-black text-slate-900">Productos de la receta</h3>
-                      <p className="text-sm text-slate-500">Cada botón abre la pantalla de selección de lotes del POS.</p>
+                      <p className="text-sm text-slate-500">Cada botón abre la selección de lote, donde puedes surtir completo o parcial.</p>
                     </div>
                     <Package className="text-slate-400" />
                   </div>
@@ -3383,7 +4161,7 @@ function ModalRecetasPendientes({
                                 {estadoSurtido.vendidoCompleto
                                   ? 'Ya vendido'
                                   : estadoSurtido.vendidoParcial
-                                    ? 'Completar pendiente'
+                                    ? 'Surtir pendiente'
                                     : estadoSurtido.agregadoAlCarrito
                                       ? 'Agregar otro lote'
                                       : 'Elegir lote y agregar'}
