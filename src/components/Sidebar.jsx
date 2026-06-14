@@ -22,6 +22,8 @@ import {
   HeartPulse,
   FlaskConical,
   Files,
+
+  Stethoscope,
 } from 'lucide-react';
 
 import { useAuth } from '../context/AuthContext';
@@ -89,6 +91,12 @@ const links = [
     modulo: 'inventario',
   },
   {
+    to: '/app/catalogo-servicios-clinicos',
+    label: 'Catálogo servicios clínicos',
+    icon: Stethoscope,
+    modulo: 'catalogo-servicios-clinicos',
+  },
+  {
     to: '/app/stock-sucursales',
     label: 'Consultar stock',
     icon: Search,
@@ -132,11 +140,18 @@ const links = [
     modulo: 'ventas',
   },
   {
+    to: '/app/ventas-servicios-clinicos',
+    label: 'Ventas servicios clínicos',
+    icon: Stethoscope,
+    modulo: 'ventas-servicios-clinicos',
+  },
+
+  {
     to: '/app/control-sanitario',
     label: 'Control sanitario',
     icon: ClipboardList,
     modulo: 'control-sanitario',
-  },  
+  },
   {
     to: '/app/proveedores',
     label: 'Proveedores',

@@ -7,11 +7,9 @@ import api from '../api/axios';
 
 const rolesDisponibles = [
   { value: 'SUPER_ADMIN', label: 'Super administrador' },
-  { value: 'ADMIN_SUCURSAL', label: 'Administrador sucursal' },
   { value: 'CAJERO', label: 'Cajero' },
-  { value: 'ALMACEN', label: 'Almacén' },
-  { value: 'COMPRAS', label: 'Compras' },
-  { value: 'LECTURA', label: 'Lectura' },
+  { value: 'DOCTOR', label: 'Doctor' },
+  { value: 'DOCTOR_SHADDAI', label: 'Doctor Shaddai' },
 ];
 
 export default function MainLayout() {

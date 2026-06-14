@@ -42,6 +42,10 @@ import ReportesCierreCaja from '../pages/caja/ReportesCierreCaja';
 
 import ControlSanitario from '../pages/control-sanitario/ControlSanitario';
 
+import VentasServiciosClinicos from '../pages/ventas/VentasServiciosClinicos';
+
+import CatalogoServiciosClinicos from '../pages/doctorShaddai/CatalogoServiciosClinicos';
+
 export default function AppRouter() {
   return (
     <BrowserRouter>
@@ -177,6 +181,16 @@ export default function AppRouter() {
                 <ControlSanitario />
               </RoleRoute>
             }
+          />
+
+          <Route
+            path="/app/ventas-servicios-clinicos"
+            element={<VentasServiciosClinicos />}
+          />
+
+          <Route
+            path="/app/catalogo-servicios-clinicos"
+            element={<CatalogoServiciosClinicos />}
           />
 
           <Route

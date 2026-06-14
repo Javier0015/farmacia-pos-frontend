@@ -54,6 +54,7 @@ const METODOS_PAGO_POS = [
   { id: 'PUNTOS', label: 'Puntos', icono: Coins },
 ];
 
+
 const DIAS_ALERTA_CADUCIDAD_POS = 30;
 
 const normalizarFechaLocal = (fecha) => {
@@ -169,21 +170,12 @@ export default function POS() {
   const [detallesRecetasCache, setDetallesRecetasCache] = useState({});
   const [cargandoDetalleReceta, setCargandoDetalleReceta] = useState(false);
 
-  const [modalControladoAbierto, setModalControladoAbierto] = useState(false);
-  const [productoControladoPendiente, setProductoControladoPendiente] = useState(null);
-  const [datosControlProducto, setDatosControlProducto] = useState({
-    numero_receta: '',
-    fecha_receta: '',
-    medico_nombre: '',
-    medico_cedula: '',
-    paciente_nombre: '',
-    paciente_telefono: '',
-    cantidad_recetada: '',
-    cantidad_surtida: '1',
-    tipo_surtido: 'COMPLETO',
-    cantidad_pendiente: 0,
-    observaciones: '',
-  });
+  const [modalServiciosAbierto, setModalServiciosAbierto] = useState(false);
+  const [serviciosPendientes, setServiciosPendientes] = useState([]);
+  const [cargandoServicios, setCargandoServicios] = useState(false);
+  const [servicioSeleccionado, setServicioSeleccionado] = useState(null);
+  const [detalleServicio, setDetalleServicio] = useState([]);
+  const [cargandoDetalleServicio, setCargandoDetalleServicio] = useState(false);
 
   const sucursalActual = useMemo(() => {
     return sucursales.find((s) => Number(s.id_sucursal) === Number(idSucursal));
@@ -285,61 +277,6 @@ export default function POS() {
 
   const obtenerKeyCarrito = (idProducto, idLote) => {
     return `${Number(idProducto)}-${idLote ? Number(idLote) : 'FEFO'}`;
-  };
-
-
-  const obtenerCantidadRecetadaDetalle = (detalle) => {
-    return Number(
-      detalle?.cantidad_recetada ??
-      detalle?.cantidad_solicitada ??
-      detalle?.cantidad ??
-      1
-    );
-  };
-
-  const obtenerCantidadSurtidaDetalle = (detalle) => {
-    return Number(
-      detalle?.cantidad_surtida ??
-      detalle?.total_surtido ??
-      detalle?.surtido ??
-      0
-    );
-  };
-
-  const obtenerCantidadEnCarritoDetalle = (detalle, carritoBase = carrito) => {
-    if (!detalle) return 0;
-
-    const idDetalle = Number(
-      detalle.id_detalle ||
-      detalle.id_detalle_receta ||
-      detalle.id_detalle_receta_shaddai ||
-      0
-    );
-
-    return (Array.isArray(carritoBase) ? carritoBase : [])
-      .filter((item) => {
-        const idDetalleItem = Number(item.id_detalle_receta_shaddai || 0);
-        return idDetalle > 0 && idDetalleItem === idDetalle;
-      })
-      .reduce((acc, item) => acc + Number(item.cantidad || 0), 0);
-  };
-
-  const obtenerEstadoSurtidoDetallePOS = (detalle, carritoBase = carrito) => {
-    const cantidadRecetada = obtenerCantidadRecetadaDetalle(detalle);
-    const cantidadSurtidaPrevia = obtenerCantidadSurtidaDetalle(detalle);
-    const cantidadEnCarrito = obtenerCantidadEnCarritoDetalle(detalle, carritoBase);
-    const cantidadTotalConsiderada = cantidadSurtidaPrevia + cantidadEnCarrito;
-    const cantidadPendiente = Math.max(cantidadRecetada - cantidadTotalConsiderada, 0);
-
-    return {
-      cantidadRecetada,
-      cantidadSurtidaPrevia,
-      cantidadEnCarrito,
-      cantidadTotalConsiderada,
-      cantidadPendiente,
-      vendidoCompleto: cantidadRecetada > 0 && cantidadTotalConsiderada >= cantidadRecetada,
-      vendidoParcial: cantidadTotalConsiderada > 0 && cantidadTotalConsiderada < cantidadRecetada,
-    };
   };
 
   const porcentajeClientePuntos = Number(configuracionPuntos?.porcentaje_cliente || 0);
@@ -606,6 +543,31 @@ export default function POS() {
     }
   };
 
+  const cargarServiciosPendientes = async () => {
+    try {
+      setCargandoServicios(true);
+
+      const { data } = await api.get('/doctor-shaddai/servicios-clinicos', {
+        params: { estatus: 'PENDIENTE_CAJERO' },
+      });
+
+      if (data.ok) {
+        setServiciosPendientes(data.servicios || []);
+      }
+    } catch (error) {
+      console.error('Error al cargar servicios clínicos pendientes:', error);
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text:
+          error.response?.data?.mensaje ||
+          'No se pudieron cargar los servicios clínicos pendientes.',
+      });
+    } finally {
+      setCargandoServicios(false);
+    }
+  };
+
   useEffect(() => {
     if (usuario) {
       cargarSucursales();
@@ -620,6 +582,8 @@ export default function POS() {
       setSesionAbierta(null);
       setCarrito([]);
       setDetallesRecetasCache({});
+      setServicioSeleccionado(null);
+      setDetalleServicio([]);
       setTarjetaPuntos(null);
       setCodigoTarjeta('');
       setMetodoPago('EFECTIVO');
@@ -629,6 +593,7 @@ export default function POS() {
       cargarCajas();
       cargarInventario();
       cargarRecetasPendientes();
+      cargarServiciosPendientes();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idSucursal]);
@@ -644,25 +609,7 @@ export default function POS() {
     await cargarSesionAbierta();
     await cargarInventario();
     await cargarRecetasPendientes();
-  };
-
-
-  const abrirModalControlado = (producto) => {
-    setProductoControladoPendiente(producto);
-    setDatosControlProducto({
-      numero_receta: '',
-      fecha_receta: '',
-      medico_nombre: '',
-      medico_cedula: '',
-      paciente_nombre: '',
-      paciente_telefono: '',
-      cantidad_recetada: '',
-      cantidad_surtida: '1',
-      tipo_surtido: 'COMPLETO',
-      cantidad_pendiente: 0,
-      observaciones: '',
-    });
-    setModalControladoAbierto(true);
+    await cargarServiciosPendientes();
   };
 
   const validarProductoEspecial = async (producto) => {
@@ -695,117 +642,9 @@ export default function POS() {
     return confirmacion.isConfirmed;
   };
 
-  const confirmarDatosControlado = async () => {
-    if (!productoControladoPendiente) return;
-
-    const esControlado = esProductoControlado(productoControladoPendiente);
-    const requiereReceta = productoRequiereReceta(productoControladoPendiente);
-
-    if ((esControlado || requiereReceta) && !datosControlProducto.numero_receta.trim()) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Número de receta requerido',
-        text: 'Captura el número de receta antes de continuar.',
-      });
-      return;
-    }
-
-    if (!datosControlProducto.medico_nombre.trim()) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Médico requerido',
-        text: 'Captura el nombre del médico.',
-      });
-      return;
-    }
-
-    if (!datosControlProducto.medico_cedula.trim()) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Cédula requerida',
-        text: 'Captura la cédula profesional del médico.',
-      });
-      return;
-    }
-
-    if (!datosControlProducto.paciente_nombre.trim()) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Paciente requerido',
-        text: 'Captura el nombre del paciente.',
-      });
-      return;
-    }
-
-    const cantidadRecetadaExterna = Number(datosControlProducto.cantidad_recetada || 0);
-    const cantidadSurtidaExterna = Number(datosControlProducto.cantidad_surtida || 0);
-
-    if (cantidadRecetadaExterna <= 0) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Cantidad indicada requerida',
-        text: 'Captura cuántas piezas/cajas indica la receta externa.',
-      });
-      return;
-    }
-
-    if (cantidadSurtidaExterna <= 0) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Cantidad a surtir requerida',
-        text: 'Captura cuántas piezas/cajas se van a surtir ahora.',
-      });
-      return;
-    }
-
-    if (cantidadSurtidaExterna > cantidadRecetadaExterna) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Cantidad no válida',
-        text: 'La cantidad a surtir no puede ser mayor que la cantidad indicada en la receta.',
-      });
-      return;
-    }
-
-    const cantidadPendienteExterna = Math.max(cantidadRecetadaExterna - cantidadSurtidaExterna, 0);
-    const tipoSurtidoExterno = cantidadPendienteExterna === 0 ? 'COMPLETO' : 'PARCIAL';
-
-    const productoConControl = {
-      ...productoControladoPendiente,
-      cantidad_control_sanitario_sugerida: cantidadSurtidaExterna,
-      datos_control_sanitario: {
-        ...datosControlProducto,
-        tipo_receta: 'EXTERNA',
-        cantidad_recetada: cantidadRecetadaExterna,
-        cantidad_surtida: cantidadSurtidaExterna,
-        cantidad_pendiente: cantidadPendienteExterna,
-        tipo_surtido: tipoSurtidoExterno,
-      },
-    };
-
-    setModalControladoAbierto(false);
-    setProductoControladoPendiente(null);
-
-    await abrirModalLotesParaProducto({
-      producto: productoConControl,
-      receta: null,
-      detalle: null,
-      omitirValidacionControlado: true,
-    });
-  };
-
-  const abrirModalLotesParaProducto = async ({
-    producto,
-    receta = null,
-    detalle = null,
-    omitirValidacionControlado = false,
-  }) => {
-    if (
-      !receta &&
-      !omitirValidacionControlado &&
-      (esProductoControlado(producto) || productoRequiereReceta(producto))
-    ) {
-      abrirModalControlado(producto);
+  const abrirModalLotesParaProducto = async ({ producto, receta = null, detalle = null }) => {
+    if (!sesionAbierta) {
+      Swal.fire({ icon: 'warning', title: 'Caja no abierta', text: 'Primero abre una caja para poder vender.' });
       return;
     }
 
@@ -815,7 +654,7 @@ export default function POS() {
       return;
     }
 
-    if (!receta && !omitirValidacionControlado) {
+    if (!receta) {
       const puedeAgregar = await validarProductoEspecial(producto);
       if (!puedeAgregar) return;
     }
@@ -882,77 +721,6 @@ export default function POS() {
 
     const receta = contextoLoteReceta?.receta || null;
     const detalle = contextoLoteReceta?.detalle || null;
-    const datosControlSanitarioBase = producto.datos_control_sanitario || null;
-
-    const esProductoDeReceta = !!(receta?.id_receta && detalle);
-    const cantidadRecetada = esProductoDeReceta
-      ? obtenerCantidadRecetadaDetalle(detalle)
-      : null;
-    const cantidadSurtidaPrevia = esProductoDeReceta
-      ? obtenerCantidadSurtidaDetalle(detalle)
-      : null;
-    const cantidadEnCarritoPrevia = esProductoDeReceta
-      ? obtenerCantidadEnCarritoDetalle(detalle)
-      : 0;
-    const cantidadPendienteAntes = esProductoDeReceta
-      ? Math.max(cantidadRecetada - cantidadSurtidaPrevia - cantidadEnCarritoPrevia, 0)
-      : null;
-
-    if (esProductoDeReceta && cantidadPendienteAntes <= 0) {
-      Swal.fire({
-        icon: 'info',
-        title: 'Sin pendiente por surtir',
-        text: 'Este producto de la receta ya fue surtido por completo.',
-      });
-      return;
-    }
-
-    if (esProductoDeReceta && cantidadAgregar > cantidadPendienteAntes) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Cantidad mayor a la pendiente',
-        text: `Solo quedan ${formatoNumero(cantidadPendienteAntes)} pieza(s) pendientes de esta receta.`,
-      });
-      return;
-    }
-
-    const cantidadPendienteDespues = esProductoDeReceta
-      ? Math.max(cantidadPendienteAntes - cantidadAgregar, 0)
-      : null;
-    const tipoSurtidoReceta = esProductoDeReceta
-      ? cantidadPendienteDespues === 0
-        ? 'COMPLETA'
-        : 'PARCIAL'
-      : null;
-    const estatusDetalleReceta = esProductoDeReceta
-      ? cantidadPendienteDespues === 0
-        ? 'SURTIDO'
-        : 'SURTIDO_PARCIAL'
-      : null;
-
-    const datosControlSanitarioActualizado = datosControlSanitarioBase
-      ? (() => {
-        const cantidadRecetadaExterna = Number(datosControlSanitarioBase.cantidad_recetada || 0);
-        const cantidadSurtidaExterna = cantidadAgregar;
-        const cantidadPendienteExterna = cantidadRecetadaExterna > 0
-          ? Math.max(cantidadRecetadaExterna - cantidadSurtidaExterna, 0)
-          : null;
-        const tipoSurtidoExterno = cantidadRecetadaExterna > 0
-          ? cantidadPendienteExterna === 0
-            ? 'COMPLETO'
-            : 'PARCIAL'
-          : datosControlSanitarioBase.tipo_surtido || null;
-
-        return {
-          ...datosControlSanitarioBase,
-          tipo_receta: datosControlSanitarioBase.tipo_receta || 'EXTERNA',
-          cantidad_recetada: cantidadRecetadaExterna || datosControlSanitarioBase.cantidad_recetada || null,
-          cantidad_surtida: cantidadSurtidaExterna,
-          cantidad_pendiente: cantidadPendienteExterna,
-          tipo_surtido: tipoSurtidoExterno,
-        };
-      })()
-      : null;
 
     setCarrito((prev) => {
       const existe = prev.find((item) => item.key_carrito === keyCarrito);
@@ -979,21 +747,6 @@ export default function POS() {
                 receta?.folio_receta || receta?.id_receta || item.folio_receta_shaddai || null,
               paciente_receta_shaddai: receta?.nombre_paciente || item.paciente_receta_shaddai || null,
               id_detalle_receta_shaddai: detalle?.id_detalle || item.id_detalle_receta_shaddai || null,
-              datos_control_sanitario:
-                datosControlSanitarioActualizado || item.datos_control_sanitario || null,
-              cantidad_recetada_shaddai: cantidadRecetada ?? item.cantidad_recetada_shaddai ?? null,
-              cantidad_surtida_previa_shaddai:
-                cantidadSurtidaPrevia ?? item.cantidad_surtida_previa_shaddai ?? null,
-              cantidad_en_carrito_previa_shaddai:
-                cantidadEnCarritoPrevia ?? item.cantidad_en_carrito_previa_shaddai ?? null,
-              cantidad_pendiente_previa_shaddai:
-                cantidadPendienteAntes ?? item.cantidad_pendiente_previa_shaddai ?? null,
-              cantidad_surtida_actual_shaddai:
-                Number(item.cantidad_surtida_actual_shaddai || 0) + cantidadAgregar,
-              cantidad_pendiente_despues_shaddai: cantidadPendienteDespues ?? item.cantidad_pendiente_despues_shaddai ?? null,
-              tipo_surtido_receta_shaddai: tipoSurtidoReceta || item.tipo_surtido_receta_shaddai || null,
-              estatus_detalle_receta_shaddai:
-                estatusDetalleReceta || item.estatus_detalle_receta_shaddai || null,
             }
             : item
         );
@@ -1028,15 +781,6 @@ export default function POS() {
           cantidad: cantidadAgregar,
           controlado: esProductoControlado(producto),
           requiere_receta: productoRequiereReceta(producto),
-          datos_control_sanitario: datosControlSanitarioActualizado,
-          cantidad_recetada_shaddai: cantidadRecetada,
-          cantidad_surtida_previa_shaddai: cantidadSurtidaPrevia,
-          cantidad_en_carrito_previa_shaddai: cantidadEnCarritoPrevia,
-          cantidad_pendiente_previa_shaddai: cantidadPendienteAntes,
-          cantidad_surtida_actual_shaddai: esProductoDeReceta ? cantidadAgregar : null,
-          cantidad_pendiente_despues_shaddai: cantidadPendienteDespues,
-          tipo_surtido_receta_shaddai: tipoSurtidoReceta,
-          estatus_detalle_receta_shaddai: estatusDetalleReceta,
 
           id_receta_shaddai: receta?.id_receta || null,
           folio_receta_shaddai: receta?.folio_receta || receta?.id_receta || null,
@@ -1085,6 +829,161 @@ export default function POS() {
     setDetalleReceta([]);
   };
 
+  const abrirModalServicios = async () => {
+    if (!sesionAbierta) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Caja no abierta',
+        text: 'Primero abre una caja para cobrar servicios clínicos.',
+      });
+      return;
+    }
+
+    setModalServiciosAbierto(true);
+    setServicioSeleccionado(null);
+    setDetalleServicio([]);
+    await cargarServiciosPendientes();
+  };
+
+  const cerrarModalServicios = () => {
+    setModalServiciosAbierto(false);
+    setServicioSeleccionado(null);
+    setDetalleServicio([]);
+  };
+
+  const verDetalleServicioPOS = async (servicio) => {
+    const idSolicitud = Number(servicio?.id_solicitud_servicio || 0);
+
+    if (!idSolicitud) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Servicio inválido',
+        text: 'No se pudo identificar la solicitud del servicio clínico.',
+      });
+      return;
+    }
+
+    try {
+      setCargandoDetalleServicio(true);
+      setServicioSeleccionado(servicio);
+      setDetalleServicio([]);
+
+      const { data } = await api.get(`/doctor-shaddai/servicios-clinicos/${idSolicitud}`);
+
+      if (data.ok) {
+        setServicioSeleccionado(data.solicitud || data.servicio || servicio);
+        setDetalleServicio(data.detalles || data.detalle || []);
+      }
+    } catch (error) {
+      console.error('Error al cargar detalle del servicio clínico:', error);
+
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text:
+          error.response?.data?.mensaje ||
+          error.response?.data?.error ||
+          'No se pudo cargar el detalle del servicio clínico.',
+      });
+    } finally {
+      setCargandoDetalleServicio(false);
+    }
+  };
+
+  const agregarDetalleServicioAlCarrito = (detalle) => {
+    if (!servicioSeleccionado || !detalle) return;
+
+    const idSolicitud = Number(
+      servicioSeleccionado.id_solicitud_servicio ||
+      servicioSeleccionado.id_solicitud ||
+      detalle.id_solicitud_servicio ||
+      0
+    );
+
+    const idDetalleServicio = Number(
+      detalle.id_detalle_servicio ||
+      detalle.id_detalle ||
+      detalle.id_servicio_detalle ||
+      0
+    );
+
+    const idServicio = detalle.id_servicio ? Number(detalle.id_servicio) : null;
+
+    if (!idSolicitud || !idDetalleServicio) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Servicio inválido',
+        text: 'No se pudo identificar la solicitud o el detalle del servicio.',
+      });
+      return;
+    }
+
+    const keyCarrito = `SERV-${idSolicitud}-${idDetalleServicio}`;
+    const cantidad = Number(detalle.cantidad || 1);
+    const precioUnitario = Number(detalle.precio_unitario || detalle.precio || 0);
+
+    if (cantidad <= 0 || precioUnitario < 0) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Servicio inválido',
+        text: 'La cantidad o precio del servicio no es válido.',
+      });
+      return;
+    }
+
+    setCarrito((prev) => {
+      const existe = prev.some((item) => item.key_carrito === keyCarrito);
+
+      if (existe) {
+        Swal.fire({
+          icon: 'info',
+          title: 'Servicio ya agregado',
+          text: 'Este servicio clínico ya se encuentra en el carrito.',
+          timer: 1300,
+          showConfirmButton: false,
+        });
+        return prev;
+      }
+
+      return [
+        ...prev,
+        {
+          key_carrito: keyCarrito,
+          tipo_item: 'SERVICIO',
+          id_solicitud_servicio: idSolicitud,
+          id_detalle_servicio: idDetalleServicio,
+          id_servicio: idServicio,
+          nombre: detalle.nombre_servicio || detalle.nombre || 'Servicio clínico',
+          folio_servicio:
+            servicioSeleccionado.folio_servicio ||
+            detalle.folio_servicio ||
+            `SERV-${idSolicitud}`,
+          paciente_servicio:
+            servicioSeleccionado.nombre_paciente ||
+            detalle.nombre_paciente ||
+            'Paciente',
+          cantidad,
+          precio_original: precioUnitario,
+          precio_venta: precioUnitario,
+          descuento_unitario: 0,
+          porcentaje_descuento: 0,
+          id_oferta: null,
+          stock_actual: 999999,
+          indicaciones_servicio: detalle.indicaciones || null,
+          observaciones_servicio: detalle.observaciones || null,
+        },
+      ];
+    });
+
+    Swal.fire({
+      icon: 'success',
+      title: 'Servicio agregado',
+      text: 'El servicio clínico se agregó al carrito.',
+      timer: 1200,
+      showConfirmButton: false,
+    });
+  };
+
   const verDetalleRecetaPOS = async (receta) => {
     try {
       setCargandoDetalleReceta(true);
@@ -1119,17 +1018,6 @@ export default function POS() {
   const agregarDetalleRecetaConLote = async (detalle) => {
     if (!recetaSeleccionada || !detalle) return;
 
-    const estadoDetalle = obtenerEstadoSurtidoDetallePOS(detalle);
-
-    if (estadoDetalle.cantidadPendiente <= 0) {
-      Swal.fire({
-        icon: 'info',
-        title: 'Receta ya surtida',
-        text: 'Este producto ya no tiene cantidad pendiente por surtir.',
-      });
-      return;
-    }
-
     const productoInventario = inventario.find(
       (item) => Number(item.id_producto) === Number(detalle.id_producto)
     );
@@ -1145,10 +1033,7 @@ export default function POS() {
 
     const productoParaVenta = {
       ...productoInventario,
-      cantidad_receta: estadoDetalle.cantidadRecetada,
-      cantidad_surtida_previa_receta: estadoDetalle.cantidadSurtidaPrevia,
-      cantidad_en_carrito_receta: estadoDetalle.cantidadEnCarrito,
-      cantidad_pendiente_receta: estadoDetalle.cantidadPendiente,
+      cantidad_receta: Number(detalle.cantidad || 1),
       dosis_receta: detalle.dosis,
       frecuencia_receta: detalle.frecuencia,
       duracion_receta: detalle.duracion,
@@ -1158,13 +1043,7 @@ export default function POS() {
     await abrirModalLotesParaProducto({
       producto: productoParaVenta,
       receta: recetaSeleccionada,
-      detalle: {
-        ...detalle,
-        cantidad_recetada: estadoDetalle.cantidadRecetada,
-        cantidad_surtida_previa_receta: estadoDetalle.cantidadSurtidaPrevia,
-        cantidad_en_carrito_receta: estadoDetalle.cantidadEnCarrito,
-        cantidad_pendiente_receta: estadoDetalle.cantidadPendiente,
-      },
+      detalle,
     });
   };
 
@@ -1172,6 +1051,10 @@ export default function POS() {
     setCarrito((prev) =>
       prev.map((item) => {
         if (item.key_carrito !== keyCarrito) return item;
+
+        if (item.tipo_item === 'SERVICIO') {
+          return { ...item, cantidad: Number(item.cantidad) + 1 };
+        }
 
         if (Number(item.cantidad) >= Number(item.stock_actual)) {
           Swal.fire({
@@ -1203,6 +1086,10 @@ export default function POS() {
       prev.map((item) => {
         if (item.key_carrito !== keyCarrito) return item;
 
+        if (item.tipo_item === 'SERVICIO') {
+          return { ...item, cantidad: cantidadNueva };
+        }
+
         if (cantidadNueva > Number(item.stock_actual)) {
           Swal.fire({
             icon: 'warning',
@@ -1228,7 +1115,7 @@ export default function POS() {
     setMontoRecibido('');
     setPagoMixtoActivo(false);
     setPagosMixtos(PAGOS_MIXTOS_INICIALES);
-    setCobrarImpuesto(false);
+    setCobrarImpuesto(true);
     setVentaFinalizada(null);
     setTarjetaPuntos(null);
     setCodigoTarjeta('');
@@ -1396,7 +1283,7 @@ export default function POS() {
     }
 
     if (carrito.length === 0) {
-      Swal.fire({ icon: 'warning', title: 'Carrito vacío', text: 'Agrega al menos un producto a la venta.' });
+      Swal.fire({ icon: 'warning', title: 'Carrito vacío', text: 'Agrega al menos un producto o servicio a la venta.' });
       return;
     }
 
@@ -1494,6 +1381,12 @@ export default function POS() {
 
     const recetaAntesDeCobrar = recetaEnCarrito;
     const carritoAntesDeCobrar = [...carrito];
+    const productosAntesDeCobrar = carritoAntesDeCobrar.filter(
+      (item) => item.tipo_item !== 'SERVICIO'
+    );
+    const serviciosAntesDeCobrar = carritoAntesDeCobrar.filter(
+      (item) => item.tipo_item === 'SERVICIO'
+    );
     const detalleRecetaAntesDeCobrar = recetaAntesDeCobrar?.id_receta
       ? detallesRecetasCache[Number(recetaAntesDeCobrar.id_receta)] ||
       (recetaSeleccionada?.id_receta &&
@@ -1509,6 +1402,21 @@ export default function POS() {
         carritoActual: carritoAntesDeCobrar,
       })
       : null;
+
+    const detalleServiciosHtml = serviciosAntesDeCobrar.length > 0
+      ? `
+        <hr style="margin:10px 0" />
+        <p><b>Servicios clínicos:</b></p>
+        ${serviciosAntesDeCobrar
+        .map(
+          (servicio) =>
+            `<p>${servicio.folio_servicio || 'Servicio'} · ${servicio.nombre} · ${formatoMoneda(
+              Number(servicio.cantidad || 0) * Number(servicio.precio_venta || 0)
+            )}</p>`
+        )
+        .join('')}
+      `
+      : '';
 
     const detallePagosHtml = pagoMixtoActivo
       ? `
@@ -1528,7 +1436,8 @@ export default function POS() {
       title: '¿Cobrar venta?',
       html: `
         <div style="text-align:left">
-          ${recetaAntesDeCobrar ? `<p><b>Receta:</b> ${recetaAntesDeCobrar.folio}</p><p><b>Paciente:</b> ${recetaAntesDeCobrar.paciente || 'N/A'}</p><p><b>Estatus al cobrar:</b> ${estatusRecetaFinal === 'SURTIDA' ? 'Surtida completamente' : 'Surtida parcialmente'}</p><p><b>Modo:</b> Se calculará según las cantidades surtidas en carrito.</p><hr style="margin:10px 0" />` : ''}
+          ${recetaAntesDeCobrar ? `<p><b>Receta:</b> ${recetaAntesDeCobrar.folio}</p><p><b>Paciente:</b> ${recetaAntesDeCobrar.paciente || 'N/A'}</p><p><b>Estatus al cobrar:</b> ${estatusRecetaFinal === 'SURTIDA' ? 'Surtida completamente' : 'Surtida parcialmente'}</p><hr style="margin:10px 0" />` : ''}
+          ${detalleServiciosHtml}
           <p><b>Total:</b> ${formatoMoneda(resumen.total)}</p>
           ${resumen.descuentoOfertas > 0 ? `<p><b>Descuento por ofertas:</b> -${formatoMoneda(resumen.descuentoOfertas)}</p>` : ''}
           <p><b>IVA:</b> ${cobrarImpuesto ? `Aplicado (${formatoMoneda(resumen.impuesto)})` : 'No aplicado'}</p>
@@ -1566,7 +1475,7 @@ export default function POS() {
         subtotal_sin_descuento: Number(resumen.subtotalSinDescuento || 0),
         impuesto: Number(resumen.impuesto || 0),
         id_receta_shaddai: recetaAntesDeCobrar?.id_receta || null,
-        productos: carritoAntesDeCobrar.map((item) => ({
+        productos: productosAntesDeCobrar.map((item) => ({
           id_producto: Number(item.id_producto),
           id_lote: item.id_lote ? Number(item.id_lote) : null,
           cantidad: Number(item.cantidad),
@@ -1577,17 +1486,16 @@ export default function POS() {
           id_oferta: item.id_oferta ? Number(item.id_oferta) : null,
           id_receta_shaddai: item.id_receta_shaddai || null,
           id_detalle_receta_shaddai: item.id_detalle_receta_shaddai || null,
-          controlado: item.controlado || false,
-          requiere_receta: item.requiere_receta || false,
-          datos_control_sanitario: item.datos_control_sanitario || null,
-          cantidad_recetada_shaddai: item.cantidad_recetada_shaddai ?? null,
-          cantidad_surtida_previa_shaddai: item.cantidad_surtida_previa_shaddai ?? null,
-          cantidad_en_carrito_previa_shaddai: item.cantidad_en_carrito_previa_shaddai ?? null,
-          cantidad_pendiente_previa_shaddai: item.cantidad_pendiente_previa_shaddai ?? null,
-          cantidad_surtida_actual_shaddai: item.cantidad_surtida_actual_shaddai ?? null,
-          cantidad_pendiente_despues_shaddai: item.cantidad_pendiente_despues_shaddai ?? null,
-          tipo_surtido_receta_shaddai: item.tipo_surtido_receta_shaddai || null,
-          estatus_detalle_receta_shaddai: item.estatus_detalle_receta_shaddai || null,
+        })),
+        servicios: serviciosAntesDeCobrar.map((item) => ({
+          id_solicitud_servicio: Number(item.id_solicitud_servicio),
+          id_detalle_servicio: Number(item.id_detalle_servicio),
+          id_servicio: item.id_servicio ? Number(item.id_servicio) : null,
+          nombre_servicio: item.nombre,
+          cantidad: Number(item.cantidad || 1),
+          precio_unitario: Number(item.precio_venta || 0),
+          folio_servicio: item.folio_servicio || null,
+          nombre_paciente: item.paciente_servicio || null,
         })),
       };
 
@@ -1643,7 +1551,7 @@ export default function POS() {
         setMontoRecibido('');
         setPagoMixtoActivo(false);
         setPagosMixtos(PAGOS_MIXTOS_INICIALES);
-        setCobrarImpuesto(false);
+        setCobrarImpuesto(true);
         setTarjetaPuntos(null);
         setCodigoTarjeta('');
         setMetodoPago('EFECTIVO');
@@ -1652,6 +1560,7 @@ export default function POS() {
         await cargarInventario();
         await cargarSesionAbierta();
         await cargarRecetasPendientes();
+        await cargarServiciosPendientes();
       }
     } catch (error) {
       console.error(error);
@@ -1665,141 +1574,143 @@ export default function POS() {
     }
   };
 
-  const API_IMPRESION_LOCAL = 'http://localhost:3030';
-  const PRINTER_KEY = 'shaddai-printer-2026';
-
-  const imprimirTicketPOS = async (ventaData = null) => {
+  const imprimirTicketPOS = (ventaData = null) => {
     const datosTicket = ventaData || ventaFinalizada;
-
     if (!datosTicket?.venta) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Sin venta',
-        text: 'No hay una venta reciente para imprimir.',
-      });
+      Swal.fire({ icon: 'warning', title: 'Sin venta', text: 'No hay una venta reciente para imprimir.' });
       return;
     }
 
-    try {
-      Swal.fire({
-        title: 'Imprimiendo ticket...',
-        html: `
-        <div style="text-align:center">
-          <p>Enviando ticket a la impresora local.</p>
-          <p style="font-size:13px;color:#64748b;margin-top:6px">
-            No cierres esta ventana hasta que termine la impresión.
-          </p>
-        </div>
-      `,
-        allowOutsideClick: false,
-        allowEscapeKey: false,
-        showConfirmButton: false,
-        didOpen: () => {
-          Swal.showLoading();
-        },
-      });
+    const venta = datosTicket.venta;
+    const resumenVenta = datosTicket.resumen;
+    const productosVenta = venta.productos || [];
+    const serviciosVenta = venta.servicios || [];
 
-      console.log('Enviando ticket a API local:', datosTicket);
+    const pagosTicket = Array.isArray(venta.pagos)
+      ? venta.pagos
+      : Array.isArray(datosTicket.pagos)
+        ? datosTicket.pagos
+        : [];
 
-      const response = await fetch(`${API_IMPRESION_LOCAL}/imprimir-ticket`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-printer-key': PRINTER_KEY,
-        },
-        body: JSON.stringify(datosTicket),
-      });
+    const metodoPagoTicket = venta.metodo_pago === 'PUNTOS' ? 'PAGAR CON PUNTOS' : venta.metodo_pago || metodoPago || '—';
+    const ventana = window.open('', '_blank', 'width=420,height=650');
 
-      const data = await response.json();
-
-      console.log('Respuesta API local:', data);
-
-      if (!response.ok || !data.ok) {
-        throw new Error(data.message || 'No se pudo imprimir el ticket');
+    ventana.document.write(`
+      <html>
+        <head>
+          <title>Ticket ${venta.folio}</title>
+          <style>
+            * { box-sizing: border-box; }
+            body { margin: 0; padding: 12px; font-family: Arial, sans-serif; color: #111827; background: #ffffff; }
+            .ticket { width: 280px; margin: 0 auto; }
+            .center { text-align: center; }
+            .title { font-size: 17px; font-weight: bold; margin-bottom: 4px; }
+            .small { font-size: 11px; }
+            .line { border-top: 1px dashed #111827; margin: 10px 0; }
+            table { width: 100%; border-collapse: collapse; font-size: 11px; }
+            th, td { padding: 3px 0; vertical-align: top; }
+            th { text-align: left; border-bottom: 1px dashed #111827; }
+            .right { text-align: right; }
+            .bold { font-weight: bold; }
+            .total { font-size: 14px; font-weight: bold; }
+            .muted { color: #4b5563; }
+            .offer { color: #047857; font-weight: bold; }
+            @page { margin: 4mm; }
+            @media print { body { margin: 0; padding: 0; } }
+          </style>
+        </head>
+        <body>
+          <div class="ticket">
+            <div class="center">
+              <div class="title">FARMACIA SHADDAI</div>
+              <div class="small">${venta.sucursal || sucursalActual?.nombre || 'Sucursal'}</div>
+              <div class="small">Punto de venta</div>
+            </div>
+            <div class="line"></div>
+            <table>
+              <tbody>
+                <tr><td class="bold">Folio:</td><td class="right">${venta.folio}</td></tr>
+                <tr><td class="bold">Caja:</td><td class="right">${venta.caja || cajaActual?.nombre || idCaja || '—'}</td></tr>
+                <tr><td class="bold">Cajero:</td><td class="right">${venta.usuario || usuario?.nombre || usuario?.usuario || '—'}</td></tr>
+                <tr><td class="bold">Fecha:</td><td class="right">${new Date(venta.fecha_venta || Date.now()).toLocaleString('es-MX')}</td></tr>
+              </tbody>
+            </table>
+            <div class="line"></div>
+            <table>
+              <thead><tr><th>Producto / Servicio</th><th class="right">Cant.</th><th class="right">Importe</th></tr></thead>
+              <tbody>
+                ${productosVenta
+        .map((item) => {
+          const precioOriginal = Number(item.precio_original || item.precio_unitario || 0);
+          const precioUnitario = Number(item.precio_unitario || 0);
+          const porcentajeDescuento = Number(item.porcentaje_descuento || 0);
+          const tieneOfertaTicket = porcentajeDescuento > 0;
+          return `
+                      <tr>
+                        <td>
+                          <div class="bold">${item.nombre || item.producto || 'Producto'}</div>
+                          ${item.lote ? `<div class="small muted">Lote: ${item.lote}${item.fecha_caducidad ? ` · Cad: ${new Date(item.fecha_caducidad).toLocaleDateString('es-MX')}` : ''}</div>` : ''}
+                          <div class="small muted">${Number(item.cantidad || 0).toLocaleString('es-MX')} x ${precioUnitario.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}</div>
+                          ${tieneOfertaTicket ? `<div class="small offer">Oferta -${porcentajeDescuento.toLocaleString('es-MX')}%</div><div class="small muted">Antes: ${precioOriginal.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}</div>` : ''}
+                        </td>
+                        <td class="right">${Number(item.cantidad || 0).toLocaleString('es-MX')}</td>
+                        <td class="right">${Number(item.subtotal || 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}</td>
+                      </tr>
+                    `;
+        })
+        .join('')}
+                ${serviciosVenta
+        .map((item) => {
+          const precioUnitario = Number(item.precio_unitario || 0);
+          const cantidad = Number(item.cantidad || 0);
+          return `
+                      <tr>
+                        <td>
+                          <div class="bold">${item.nombre_servicio || item.nombre || 'Servicio clínico'}</div>
+                          <div class="small muted">Servicio clínico${item.folio_servicio ? ` · ${item.folio_servicio}` : ''}</div>
+                          ${item.nombre_paciente ? `<div class="small muted">Paciente: ${item.nombre_paciente}</div>` : ''}
+                          <div class="small muted">${cantidad.toLocaleString('es-MX')} x ${precioUnitario.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}</div>
+                        </td>
+                        <td class="right">${cantidad.toLocaleString('es-MX')}</td>
+                        <td class="right">${Number(item.subtotal || cantidad * precioUnitario || 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}</td>
+                      </tr>
+                    `;
+        })
+        .join('')}
+              </tbody>
+            </table>
+            <div class="line"></div>
+            <table>
+              <tbody>
+                <tr><td>Subtotal:</td><td class="right">${Number(resumenVenta?.subtotal || 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}</td></tr>
+                <tr><td>Impuesto:</td><td class="right">${Number(resumenVenta?.impuesto || 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}</td></tr>
+                <tr><td class="total">TOTAL:</td><td class="right total">${Number(resumenVenta?.total || 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}</td></tr>
+              </tbody>
+            </table>
+            <div class="line"></div>
+            <table>
+              <tbody>
+                <tr><td>Método:</td><td class="right">${metodoPagoTicket}</td></tr>
+                ${pagosTicket.length > 0
+        ? pagosTicket.map((pago) => `<tr><td>${pago.metodo_pago}:</td><td class="right">${Number(pago.monto || 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}</td></tr>`).join('')
+        : ''
       }
+                <tr><td>Recibido:</td><td class="right">${Number(resumenVenta?.monto_recibido || 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}</td></tr>
+                <tr><td>Cambio:</td><td class="right">${Number(resumenVenta?.cambio || 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}</td></tr>
+              </tbody>
+            </table>
+            <div class="line"></div>
+            <div class="center small">Gracias por su compra</div>
+            <div class="center small">Este ticket no es comprobante fiscal</div>
+          </div>
+          <script>
+            window.onload = function() { window.print(); window.onafterprint = function() { window.close(); }; };
+          </script>
+        </body>
+      </html>
+    `);
 
-      Swal.fire({
-        icon: 'success',
-        title: 'Ticket impreso',
-        text: 'El ticket se imprimió correctamente.',
-        timer: 1300,
-        showConfirmButton: false,
-      });
-    } catch (error) {
-      console.error('Error de impresión local:', error);
-
-      Swal.fire({
-        icon: 'error',
-        title: 'Error de impresión',
-        text:
-          error.message ||
-          'No se pudo imprimir el ticket. Verifica que la app local de impresión esté abierta.',
-      });
-    }
-  };
-
-  const abrirCajaPOS = async () => {
-    try {
-      const confirmacion = await Swal.fire({
-        icon: 'question',
-        title: '¿Abrir caja?',
-        text: 'Se enviará el comando de apertura a la caja registradora.',
-        showCancelButton: true,
-        confirmButtonText: 'Sí, abrir caja',
-        cancelButtonText: 'Cancelar',
-        confirmButtonColor: '#059669',
-        cancelButtonColor: '#64748b',
-      });
-
-      if (!confirmacion.isConfirmed) return;
-
-      Swal.fire({
-        title: 'Abriendo caja...',
-        html: `
-        <div style="text-align:center">
-          <p>Enviando comando a la caja registradora.</p>
-        </div>
-      `,
-        allowOutsideClick: false,
-        allowEscapeKey: false,
-        showConfirmButton: false,
-        didOpen: () => {
-          Swal.showLoading();
-        },
-      });
-
-      const response = await fetch(`${API_IMPRESION_LOCAL}/abrir-caja`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-printer-key': PRINTER_KEY,
-        },
-      });
-
-      const data = await response.json();
-
-      if (!response.ok || !data.ok) {
-        throw new Error(data.message || 'No se pudo abrir la caja');
-      }
-
-      Swal.fire({
-        icon: 'success',
-        title: 'Caja abierta',
-        text: 'La caja fue abierta correctamente.',
-        timer: 1200,
-        showConfirmButton: false,
-      });
-    } catch (error) {
-      console.error('Error al abrir caja:', error);
-
-      Swal.fire({
-        icon: 'error',
-        title: 'No se pudo abrir la caja',
-        text:
-          error.message ||
-          'Verifica que la app local de impresión esté abierta y que la caja esté conectada.',
-      });
-    }
+    ventana.document.close();
   };
 
   const abrirEscanerProducto = () => {
@@ -1865,17 +1776,6 @@ export default function POS() {
           </div>
 
           <div className="flex flex-col gap-2 sm:flex-row">
-
-            <button
-              type="button"
-              onClick={abrirCajaPOS}
-              disabled={!sesionAbierta}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-black text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Banknote size={18} />
-              Abrir caja
-            </button>
-
             <button
               type="button"
               onClick={abrirModalRecetas}
@@ -1890,6 +1790,21 @@ export default function POS() {
                 </span>
               )}
             </button>
+            <button
+              type="button"
+              onClick={abrirModalServicios}
+              disabled={!sesionAbierta}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-50 px-5 py-3 text-sm font-black text-emerald-700 ring-1 ring-emerald-100 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <FileText size={18} />
+              Servicios pendientes
+              {serviciosPendientes.length > 0 && (
+                <span className="rounded-full bg-emerald-700 px-2 py-0.5 text-xs text-white">
+                  {serviciosPendientes.length}
+                </span>
+              )}
+            </button>
+
             <button
               onClick={refrescarTodo}
               className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800"
@@ -2015,7 +1930,7 @@ export default function POS() {
               </button>
             </div>
 
-            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-4">
               <button
                 type="button"
                 onClick={abrirModalRecetas}
@@ -2027,6 +1942,19 @@ export default function POS() {
                   <p className="text-xs text-sky-700">{recetasPendientes.length} pendiente(s)</p>
                 </div>
                 <ClipboardList className="text-sky-700" size={22} />
+              </button>
+
+              <button
+                type="button"
+                onClick={abrirModalServicios}
+                disabled={!sesionAbierta}
+                className="flex items-center justify-between rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-left transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <div>
+                  <p className="text-sm font-black text-emerald-900">Cobrar servicio</p>
+                  <p className="text-xs text-emerald-700">{serviciosPendientes.length} pendiente(s)</p>
+                </div>
+                <FileText className="text-emerald-700" size={22} />
               </button>
 
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -2114,19 +2042,6 @@ export default function POS() {
         </section>
       )}
 
-      {modalControladoAbierto && (
-        <ModalDatosControlado
-          producto={productoControladoPendiente}
-          datos={datosControlProducto}
-          setDatos={setDatosControlProducto}
-          onClose={() => {
-            setModalControladoAbierto(false);
-            setProductoControladoPendiente(null);
-          }}
-          onConfirmar={confirmarDatosControlado}
-        />
-      )}
-
       {modalLotesProducto && (
         <ModalLotesProducto
           producto={productoSeleccionadoLotes}
@@ -2153,6 +2068,24 @@ export default function POS() {
           verDetalleRecetaPOS={verDetalleRecetaPOS}
           agregarDetalleRecetaConLote={agregarDetalleRecetaConLote}
           carrito={carrito}
+          formatoNumero={formatoNumero}
+          formatearFecha={formatearFecha}
+        />
+      )}
+
+      {modalServiciosAbierto && (
+        <ModalServiciosPendientes
+          serviciosPendientes={serviciosPendientes}
+          cargandoServicios={cargandoServicios}
+          servicioSeleccionado={servicioSeleccionado}
+          detalleServicio={detalleServicio}
+          cargandoDetalleServicio={cargandoDetalleServicio}
+          onClose={cerrarModalServicios}
+          cargarServiciosPendientes={cargarServiciosPendientes}
+          verDetalleServicioPOS={verDetalleServicioPOS}
+          agregarDetalleServicioAlCarrito={agregarDetalleServicioAlCarrito}
+          carrito={carrito}
+          formatoMoneda={formatoMoneda}
           formatoNumero={formatoNumero}
           formatearFecha={formatearFecha}
         />
@@ -2432,7 +2365,7 @@ function CarritoPOS({
         <div className="mt-1 flex items-center justify-between gap-3">
           <div>
             <h2 className="text-xl font-black">Cobrar venta</h2>
-            <p className="text-sm text-slate-300">{carrito.length} producto(s) en carrito</p>
+            <p className="text-sm text-slate-300">{carrito.length} item(s) en carrito</p>
           </div>
           <div className="rounded-2xl bg-white/10 p-3">
             <ReceiptText size={24} />
@@ -2451,8 +2384,8 @@ function CarritoPOS({
       <section className="border-b border-slate-100 p-4 sm:p-5">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-black text-slate-900">Productos agregados</p>
-            <p className="text-xs font-semibold text-slate-500">Revisa cantidades y lotes antes de cobrar.</p>
+            <p className="text-sm font-black text-slate-900">Productos / servicios agregados</p>
+            <p className="text-xs font-semibold text-slate-500">Revisa cantidades, lotes y servicios antes de cobrar.</p>
           </div>
           {carrito.length > 0 && (
             <button
@@ -2469,7 +2402,7 @@ function CarritoPOS({
           <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
             <ShoppingCart className="mx-auto text-slate-400" size={30} />
             <p className="mt-3 font-black text-slate-700">Carrito vacío</p>
-            <p className="mt-1 text-sm text-slate-500">Agrega productos desde la lista de la izquierda.</p>
+            <p className="mt-1 text-sm text-slate-500">Agrega productos o servicios desde la lista de la izquierda.</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -2479,7 +2412,9 @@ function CarritoPOS({
                   <div className="min-w-0">
                     <p className="break-words text-sm font-black text-slate-900">{item.nombre}</p>
                     <p className="mt-1 text-xs font-semibold text-slate-500">
-                      {item.lote ? `Lote ${item.lote}` : 'Sin lote'} · Cad. {formatoFechaCorta(item.fecha_caducidad)}
+                      {item.tipo_item === 'SERVICIO'
+                        ? `${item.folio_servicio || 'Servicio clínico'} · ${item.paciente_servicio || 'Paciente'}`
+                        : `${item.lote ? `Lote ${item.lote}` : 'Sin lote'} · Cad. ${formatoFechaCorta(item.fecha_caducidad)}`}
                     </p>
                     <p className="mt-1 text-xs font-bold text-sky-700">
                       {formatoMoneda(item.precio_venta)} c/u
@@ -2488,7 +2423,7 @@ function CarritoPOS({
                   <button
                     onClick={() => quitarDelCarrito(item.key_carrito)}
                     className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-600 transition hover:bg-red-100"
-                    title="Quitar producto"
+                    title="Quitar del carrito"
                   >
                     <Trash2 size={17} />
                   </button>
@@ -2526,8 +2461,9 @@ function CarritoPOS({
                   </div>
                 </div>
 
-                {(item.controlado || item.requiere_receta || item.tiene_oferta) && (
+                {(item.tipo_item === 'SERVICIO' || item.controlado || item.requiere_receta || item.tiene_oferta) && (
                   <div className="mt-3 flex flex-wrap gap-1.5">
+                    {item.tipo_item === 'SERVICIO' && <span className="rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-black text-emerald-700">Servicio clínico</span>}
                     {item.controlado && <span className="rounded-full bg-red-100 px-2 py-1 text-[10px] font-black text-red-700">Controlado</span>}
                     {item.requiere_receta && <span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-black text-amber-700">Receta</span>}
                     {item.tiene_oferta && <span className="rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-black text-emerald-700">Oferta</span>}
@@ -2634,8 +2570,8 @@ function CarritoPOS({
                     type="button"
                     onClick={() => seleccionarMetodoPago(metodo.id)}
                     className={`flex items-center justify-center gap-2 rounded-2xl px-3 py-3 text-xs font-black transition ${activo
-                      ? 'bg-sky-700 text-white shadow-lg shadow-sky-700/20'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        ? 'bg-sky-700 text-white shadow-lg shadow-sky-700/20'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                       }`}
                   >
                     <Icono size={16} />
@@ -2798,233 +2734,6 @@ function ResumenLinea({ label, valor, destacado = null }) {
 }
 
 
-
-function ModalDatosControlado({
-  producto,
-  datos,
-  setDatos,
-  onClose,
-  onConfirmar,
-}) {
-  const actualizarCampo = (campo, valor) => {
-    setDatos((prev) => ({
-      ...prev,
-      [campo]: valor,
-    }));
-  };
-
-  const cantidadRecetada = Number(datos.cantidad_recetada || 0);
-  const cantidadSurtida = Number(datos.cantidad_surtida || 0);
-  const cantidadPendiente = Math.max(cantidadRecetada - cantidadSurtida, 0);
-  const surtimientoValido = cantidadRecetada > 0 && cantidadSurtida > 0 && cantidadSurtida <= cantidadRecetada;
-  const tipoSurtidoCalculado = surtimientoValido
-    ? cantidadPendiente === 0
-      ? 'COMPLETO'
-      : 'PARCIAL'
-    : null;
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
-      <div className="w-full max-w-3xl overflow-hidden rounded-[2rem] bg-white shadow-2xl">
-        <div className="border-b border-slate-100 bg-amber-50 px-6 py-5">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-xs font-black uppercase tracking-wide text-amber-700">
-                Control sanitario
-              </p>
-              <h2 className="mt-1 text-2xl font-black text-slate-900">
-                Datos para medicamento controlado
-              </h2>
-              <p className="mt-1 text-sm text-slate-600">
-                Producto:{' '}
-                <span className="font-black">
-                  {producto?.producto || producto?.nombre || 'Producto seleccionado'}
-                </span>
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-2xl bg-white p-2 text-slate-500 shadow-sm transition hover:bg-slate-100 hover:text-slate-800"
-            >
-              <X size={22} />
-            </button>
-          </div>
-        </div>
-
-        <div className="grid max-h-[70vh] grid-cols-1 gap-4 overflow-y-auto p-6 md:grid-cols-2">
-          <div>
-            <label className="mb-1 block text-xs font-black uppercase text-slate-500">
-              Número de receta <span className="text-red-500">*</span>
-            </label>
-            <input
-              value={datos.numero_receta}
-              onChange={(e) => actualizarCampo('numero_receta', e.target.value)}
-              className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-sky-500"
-              placeholder="Ej. RX-0001"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-black uppercase text-slate-500">
-              Fecha de receta
-            </label>
-            <input
-              type="date"
-              value={datos.fecha_receta}
-              onChange={(e) => actualizarCampo('fecha_receta', e.target.value)}
-              className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-sky-500"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-black uppercase text-slate-500">
-              Nombre del médico <span className="text-red-500">*</span>
-            </label>
-            <input
-              value={datos.medico_nombre}
-              onChange={(e) => actualizarCampo('medico_nombre', e.target.value)}
-              className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-sky-500"
-              placeholder="Nombre completo"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-black uppercase text-slate-500">
-              Cédula profesional <span className="text-red-500">*</span>
-            </label>
-            <input
-              value={datos.medico_cedula}
-              onChange={(e) => actualizarCampo('medico_cedula', e.target.value)}
-              className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-sky-500"
-              placeholder="Cédula"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-black uppercase text-slate-500">
-              Nombre del paciente <span className="text-red-500">*</span>
-            </label>
-            <input
-              value={datos.paciente_nombre}
-              onChange={(e) => actualizarCampo('paciente_nombre', e.target.value)}
-              className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-sky-500"
-              placeholder="Nombre completo"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-black uppercase text-slate-500">
-              Teléfono del paciente
-            </label>
-            <input
-              value={datos.paciente_telefono}
-              onChange={(e) => actualizarCampo('paciente_telefono', e.target.value)}
-              className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-sky-500"
-              placeholder="Opcional"
-            />
-          </div>
-
-          <div className="rounded-2xl border border-sky-100 bg-sky-50 p-4 md:col-span-2">
-            <p className="text-xs font-black uppercase tracking-wide text-sky-700">
-              Surtimiento de receta externa
-            </p>
-            <p className="mt-1 text-sm text-sky-900">
-              Usa estos campos cuando la receta viene de un médico externo y no existe dentro de Doctor Shaddai.
-            </p>
-
-            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-xs font-black uppercase text-slate-500">
-                  Cantidad indicada en receta <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={datos.cantidad_recetada}
-                  onChange={(e) => actualizarCampo('cantidad_recetada', e.target.value)}
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-sky-500"
-                  placeholder="Ej. 3"
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs font-black uppercase text-slate-500">
-                  Cantidad a surtir ahora <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max={cantidadRecetada > 0 ? cantidadRecetada : undefined}
-                  step="1"
-                  value={datos.cantidad_surtida}
-                  onChange={(e) => actualizarCampo('cantidad_surtida', e.target.value)}
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-sky-500"
-                  placeholder="Ej. 1"
-                />
-              </div>
-            </div>
-
-            <div className={`mt-4 rounded-2xl p-4 text-sm font-bold ${
-              !surtimientoValido
-                ? 'bg-slate-100 text-slate-600'
-                : tipoSurtidoCalculado === 'COMPLETO'
-                  ? 'bg-emerald-100 text-emerald-800'
-                  : 'bg-orange-100 text-orange-800'
-            }`}>
-              {!surtimientoValido
-                ? 'Captura cantidades válidas para calcular si la venta será completa o parcial.'
-                : tipoSurtidoCalculado === 'COMPLETO'
-                  ? 'Resultado: venta completa. Se surtirá toda la cantidad indicada en la receta.'
-                  : `Resultado: venta parcial. Quedarán ${cantidadPendiente} pieza(s)/caja(s) pendientes.`}
-            </div>
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="mb-1 block text-xs font-black uppercase text-slate-500">
-              Observaciones
-            </label>
-            <textarea
-              value={datos.observaciones}
-              onChange={(e) => actualizarCampo('observaciones', e.target.value)}
-              rows={3}
-              className="w-full resize-none rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-sky-500"
-              placeholder="Notas internas, receta retenida, autorización, etc."
-            />
-          </div>
-
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 md:col-span-2">
-            <p className="font-black">Importante</p>
-            <p className="mt-1">
-                Recuerda que hay casos donde es necesario guardar la receta físicamente. 
-            </p>
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-3 border-t border-slate-100 bg-slate-50 px-6 py-5 sm:flex-row sm:justify-end">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-2xl bg-white px-5 py-3 text-sm font-black text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-100"
-          >
-            Cancelar
-          </button>
-
-          <button
-            type="button"
-            onClick={onConfirmar}
-            className="rounded-2xl bg-amber-600 px-5 py-3 text-sm font-black text-white transition hover:bg-amber-700"
-          >
-            Guardar y seleccionar lote
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function ModalLotesProducto({
   producto,
   lotes,
@@ -3036,78 +2745,12 @@ function ModalLotesProducto({
   formatoNumero,
   formatoFechaCorta,
 }) {
-  const esReceta = !!contextoReceta?.receta;
-  const cantidadRecetada = Number(
-    contextoReceta?.detalle?.cantidad_recetada ??
-    contextoReceta?.detalle?.cantidad_solicitada ??
-    contextoReceta?.detalle?.cantidad ??
-    producto?.cantidad_receta ??
-    1
-  );
-  const cantidadSurtidaPrevia = Number(
-    contextoReceta?.detalle?.cantidad_surtida_previa_receta ??
-    contextoReceta?.detalle?.cantidad_surtida ??
-    contextoReceta?.detalle?.total_surtido ??
-    contextoReceta?.detalle?.surtido ??
-    producto?.cantidad_surtida_previa_receta ??
-    0
-  );
-  const cantidadEnCarritoPrevia = Number(
-    contextoReceta?.detalle?.cantidad_en_carrito_receta ??
-    producto?.cantidad_en_carrito_receta ??
-    0
-  );
-  const cantidadPendienteReceta = esReceta
-    ? Math.max(cantidadRecetada - cantidadSurtidaPrevia - cantidadEnCarritoPrevia, 0)
-    : null;
-
-  const cantidadControlSanitarioSugerida = Number(producto?.cantidad_control_sanitario_sugerida || 0);
-  const cantidadSugerida = esReceta
-    ? Math.max(cantidadPendienteReceta, 1)
-    : cantidadControlSanitarioSugerida > 0
-      ? cantidadControlSanitarioSugerida
-      : 1;
-  const [modoSurtido, setModoSurtido] = useState(esReceta ? 'COMPLETA' : 'NORMAL');
+  const cantidadSugerida = Number(contextoReceta?.detalle?.cantidad || 1);
   const [cantidad, setCantidad] = useState(cantidadSugerida || 1);
 
   useEffect(() => {
-    const nuevaCantidad = esReceta
-      ? Math.max(cantidadPendienteReceta, 1)
-      : cantidadControlSanitarioSugerida > 0
-        ? cantidadControlSanitarioSugerida
-        : 1;
-    setCantidad(nuevaCantidad);
-    setModoSurtido(esReceta ? 'COMPLETA' : 'NORMAL');
-  }, [esReceta, cantidadPendienteReceta, cantidadControlSanitarioSugerida]);
-
-  const normalizarCantidad = (valor) => {
-    const numero = Math.max(Number(valor || 1), 1);
-    if (!esReceta) return numero;
-    return Math.min(numero, Math.max(cantidadPendienteReceta, 1));
-  };
-
-  const actualizarCantidad = (valor) => {
-    setCantidad(normalizarCantidad(valor));
-    if (esReceta) setModoSurtido('PARCIAL');
-  };
-
-  const seleccionarModoCompleto = () => {
-    if (!esReceta) return;
-    setModoSurtido('COMPLETA');
-    setCantidad(Math.max(cantidadPendienteReceta, 1));
-  };
-
-  const seleccionarModoParcial = () => {
-    if (!esReceta) return;
-    setModoSurtido('PARCIAL');
-    setCantidad((prev) => Math.min(normalizarCantidad(prev), Math.max(cantidadPendienteReceta, 1)));
-  };
-
-  const cantidadNumericaActual = normalizarCantidad(cantidad);
-  const cantidadPendienteDespues = esReceta
-    ? Math.max(cantidadPendienteReceta - cantidadNumericaActual, 0)
-    : null;
-  const ventaCompletaReceta = esReceta && cantidadPendienteDespues === 0;
+    setCantidad(cantidadSugerida || 1);
+  }, [cantidadSugerida]);
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
@@ -3116,7 +2759,7 @@ function ModalLotesProducto({
           <div>
             <h2 className="text-xl font-bold text-slate-800">Seleccionar lote</h2>
             <p className="text-sm text-slate-500">
-              {esReceta ? 'Producto tomado desde receta Doctor Shaddai.' : 'Elige el lote que deseas descontar.'}
+              {contextoReceta ? 'Producto tomado desde receta Doctor Shaddai.' : 'Elige el lote que deseas descontar.'}
             </p>
           </div>
           <button type="button" onClick={onClose} className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200">
@@ -3129,79 +2772,19 @@ function ModalLotesProducto({
             <p className="font-black text-slate-900">{producto?.producto || producto?.nombre || 'Producto'}</p>
             <p className="mt-1 text-xs text-slate-500">Código: {producto?.codigo_barras || '—'} · Presentación: {producto?.presentacion || '—'}</p>
             <p className="mt-2 text-sm font-bold text-sky-700">{formatoMoneda(producto?.precio_con_descuento || producto?.precio_venta || 0)}</p>
-            {esReceta && (
-              <div className="mt-3 rounded-2xl border border-sky-100 bg-sky-50 p-4 text-xs text-sky-900">
-                <div className="grid gap-2 md:grid-cols-2">
-                  <p><b>Receta:</b> {contextoReceta.receta.folio_receta || contextoReceta.receta.id_receta}</p>
-                  <p><b>Paciente:</b> {contextoReceta.receta.nombre_paciente || 'N/A'}</p>
-                  <p><b>Recetado:</b> {formatoNumero(cantidadRecetada)}</p>
-                  <p><b>Ya surtido:</b> {formatoNumero(cantidadSurtidaPrevia)}</p>
-                  <p><b>En carrito:</b> {formatoNumero(cantidadEnCarritoPrevia)}</p>
-                  <p><b>Pendiente:</b> {formatoNumero(cantidadPendienteReceta)}</p>
-                </div>
+            {contextoReceta?.receta && (
+              <div className="mt-3 rounded-xl bg-sky-50 p-3 text-xs text-sky-800">
+                <p><b>Receta:</b> {contextoReceta.receta.folio_receta || contextoReceta.receta.id_receta}</p>
+                <p><b>Paciente:</b> {contextoReceta.receta.nombre_paciente || 'N/A'}</p>
+                <p><b>Cantidad indicada:</b> {contextoReceta.detalle?.cantidad || 1}</p>
               </div>
             )}
           </div>
 
-          {esReceta && cantidadPendienteReceta <= 0 ? (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-bold text-emerald-700">
-              Este producto ya está completamente surtido en la receta.
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-slate-100 bg-white p-4">
-              {esReceta && (
-                <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <button
-                    type="button"
-                    onClick={seleccionarModoCompleto}
-                    className={`rounded-2xl border px-4 py-3 text-left text-sm font-black transition ${modoSurtido === 'COMPLETA'
-                      ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
-                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                      }`}
-                  >
-                    Venta completa
-                    <span className="mt-1 block text-xs font-bold opacity-80">
-                      Agrega todo lo pendiente: {formatoNumero(cantidadPendienteReceta)}
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={seleccionarModoParcial}
-                    className={`rounded-2xl border px-4 py-3 text-left text-sm font-black transition ${modoSurtido === 'PARCIAL'
-                      ? 'border-orange-300 bg-orange-50 text-orange-800'
-                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                      }`}
-                  >
-                    Venta parcial
-                    <span className="mt-1 block text-xs font-bold opacity-80">
-                      Permite vender menos de lo pendiente
-                    </span>
-                  </button>
-                </div>
-              )}
-
-              <label className="mb-2 block text-sm font-bold text-slate-700">
-                {esReceta ? 'Cantidad a surtir de la receta' : 'Cantidad a agregar'}
-              </label>
-              <input
-                type="number"
-                min="1"
-                max={esReceta ? cantidadPendienteReceta : undefined}
-                value={cantidad}
-                onChange={(e) => actualizarCantidad(e.target.value)}
-                className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-sky-500"
-              />
-
-              {esReceta && (
-                <div className={`mt-3 rounded-2xl p-3 text-sm font-bold ${ventaCompletaReceta ? 'bg-emerald-50 text-emerald-700' : 'bg-orange-50 text-orange-700'}`}>
-                  {ventaCompletaReceta
-                    ? 'Con esta cantidad, el producto quedará surtido completamente.'
-                    : `Con esta cantidad, la receta quedará parcial. Pendiente después: ${formatoNumero(cantidadPendienteDespues)}.`}
-                </div>
-              )}
-            </div>
-          )}
+          <div>
+            <label className="mb-2 block text-sm font-bold text-slate-700">Cantidad a agregar</label>
+            <input type="number" min="1" value={cantidad} onChange={(e) => setCantidad(e.target.value)} className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-sky-500" />
+          </div>
 
           {cargando ? (
             <div className="flex items-center justify-center gap-2 rounded-2xl bg-slate-50 p-6 text-sm font-bold text-slate-600">
@@ -3214,11 +2797,10 @@ function ModalLotesProducto({
             <div className="space-y-3">
               {lotes.map((lote) => {
                 const stock = Number(lote.stock_actual || 0);
-                const cantidadNumerica = cantidadNumericaActual;
-                const excedePendiente = esReceta && cantidadNumerica > cantidadPendienteReceta;
+                const cantidadNumerica = Math.max(Number(cantidad || 1), 1);
                 const sinStock = stock < cantidadNumerica;
                 const estadoCaducidad = obtenerEstadoCaducidadLote(lote.fecha_caducidad);
-                const loteBloqueado = sinStock || estadoCaducidad.caducado || excedePendiente || (esReceta && cantidadPendienteReceta <= 0);
+                const loteBloqueado = sinStock || estadoCaducidad.caducado;
 
                 return (
                   <div
@@ -3246,12 +2828,6 @@ function ModalLotesProducto({
                             Stock disponible: {formatoNumero(stock)}
                           </p>
 
-                          {excedePendiente && (
-                            <p className="inline-flex rounded-full bg-orange-100 px-3 py-1 text-xs font-black text-orange-700">
-                              Excede pendiente de receta
-                            </p>
-                          )}
-
                           {estadoCaducidad.caducado && (
                             <p className="inline-flex rounded-full bg-red-600 px-3 py-1 text-xs font-black text-white">
                               No vendible
@@ -3271,14 +2847,10 @@ function ModalLotesProducto({
                         onClick={() => onAgregar(producto, lote, cantidadNumerica)}
                         disabled={loteBloqueado}
                         className={`inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-bold transition ${loteBloqueado
-                          ? 'cursor-not-allowed bg-slate-100 text-slate-400'
-                          : estadoCaducidad.proximoCaducar
-                            ? 'bg-amber-500 text-white hover:bg-amber-600'
-                            : ventaCompletaReceta
-                              ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                              : esReceta
-                                ? 'bg-orange-500 text-white hover:bg-orange-600'
-                                : 'bg-sky-700 text-white hover:bg-sky-800'
+                            ? 'cursor-not-allowed bg-slate-100 text-slate-400'
+                            : estadoCaducidad.proximoCaducar
+                              ? 'bg-amber-500 text-white hover:bg-amber-600'
+                              : 'bg-sky-700 text-white hover:bg-sky-800'
                           }`}
                       >
                         <Plus size={18} />
@@ -3286,15 +2858,9 @@ function ModalLotesProducto({
                           ? 'Lote caducado'
                           : sinStock
                             ? 'Stock insuficiente'
-                            : excedePendiente
-                              ? 'Cantidad no válida'
-                              : estadoCaducidad.proximoCaducar
-                                ? 'Agregar con alerta'
-                                : esReceta
-                                  ? ventaCompletaReceta
-                                    ? 'Surtir completo'
-                                    : 'Surtir parcial'
-                                  : 'Agregar este lote'}
+                            : estadoCaducidad.proximoCaducar
+                              ? 'Agregar con alerta'
+                              : 'Agregar este lote'}
                       </button>
                     </div>
                   </div>
@@ -3302,6 +2868,255 @@ function ModalLotesProducto({
               })}
             </div>
           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+function ModalServiciosPendientes({
+  serviciosPendientes,
+  cargandoServicios,
+  servicioSeleccionado,
+  detalleServicio,
+  cargandoDetalleServicio,
+  onClose,
+  cargarServiciosPendientes,
+  verDetalleServicioPOS,
+  agregarDetalleServicioAlCarrito,
+  carrito,
+  formatoMoneda,
+  formatoNumero,
+  formatearFecha,
+}) {
+  const servicioYaAgregado = (detalle) => {
+    const idSolicitud = Number(
+      servicioSeleccionado?.id_solicitud_servicio ||
+      detalle?.id_solicitud_servicio ||
+      0
+    );
+
+    const idDetalle = Number(
+      detalle?.id_detalle_servicio ||
+      detalle?.id_detalle ||
+      detalle?.id_servicio_detalle ||
+      0
+    );
+
+    return carrito.some(
+      (item) =>
+        item.tipo_item === 'SERVICIO' &&
+        Number(item.id_solicitud_servicio) === idSolicitud &&
+        Number(item.id_detalle_servicio) === idDetalle
+    );
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+      <div className="max-h-[92vh] w-full max-w-6xl overflow-hidden rounded-3xl bg-white shadow-2xl flex flex-col">
+        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+          <div>
+            <h2 className="text-xl font-bold text-slate-800">Servicios clínicos pendientes</h2>
+            <p className="text-sm text-slate-500">Selecciona una solicitud y agrega sus servicios al carrito.</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[0.85fr_1.15fr]">
+          <aside className="overflow-y-auto border-r border-slate-100 p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <p className="text-sm font-black uppercase tracking-wide text-slate-500">Pendientes</p>
+              <button
+                type="button"
+                onClick={cargarServiciosPendientes}
+                className="inline-flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-200"
+              >
+                <RefreshCw size={14} />
+                Actualizar
+              </button>
+            </div>
+
+            {cargandoServicios ? (
+              <div className="flex items-center gap-2 rounded-2xl bg-slate-50 p-4 text-sm font-bold text-slate-600">
+                <Loader2 size={18} className="animate-spin" />
+                Cargando servicios...
+              </div>
+            ) : serviciosPendientes.length === 0 ? (
+              <div className="rounded-2xl bg-slate-50 p-5 text-center text-sm text-slate-500">
+                No hay servicios clínicos pendientes.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {serviciosPendientes.map((servicio) => (
+                  <button
+                    key={servicio.id_solicitud_servicio || servicio.id_solicitud || servicio.folio_servicio}
+                    type="button"
+                    onClick={() => verDetalleServicioPOS(servicio)}
+                    className={`w-full rounded-2xl border p-4 text-left transition ${Number(servicioSeleccionado?.id_solicitud_servicio) === Number(servicio.id_solicitud_servicio)
+                        ? 'border-emerald-300 bg-emerald-50'
+                        : 'border-slate-100 bg-white hover:border-emerald-200 hover:bg-slate-50'
+                      }`}
+                  >
+                    <div className="mb-2 flex items-start justify-between gap-3">
+                      <p className="font-black text-slate-900">{servicio.folio_servicio || servicio.id_solicitud_servicio}</p>
+                      <span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-black text-amber-700">
+                        {servicio.estatus || 'PENDIENTE_CAJERO'}
+                      </span>
+                    </div>
+                    <p className="text-sm font-bold text-slate-700">{servicio.nombre_paciente || 'Paciente sin nombre'}</p>
+                    <p className="mt-1 text-xs text-slate-500">{formatearFecha(servicio.fecha_creacion)}</p>
+                    <p className="mt-2 text-xs font-semibold text-slate-500">
+                      Total: {formatoMoneda(servicio.total || servicio.total_servicios || 0)}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </aside>
+
+          <section className="min-h-0 overflow-y-auto p-4 sm:p-6">
+            {!servicioSeleccionado ? (
+              <div className="flex min-h-[420px] flex-col items-center justify-center rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center">
+                <FileText size={42} className="mb-3 text-slate-400" />
+                <p className="font-black text-slate-800">Selecciona una solicitud</p>
+                <p className="mt-1 text-sm text-slate-500">El detalle aparecerá aquí para agregarlo al carrito.</p>
+              </div>
+            ) : cargandoDetalleServicio ? (
+              <div className="flex min-h-[420px] items-center justify-center rounded-3xl bg-slate-50">
+                <div className="flex items-center gap-2 text-sm font-bold text-slate-600">
+                  <Loader2 size={20} className="animate-spin" />
+                  Cargando detalle...
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-5">
+                <div className="rounded-3xl border border-emerald-100 bg-gradient-to-r from-emerald-50 to-teal-50 p-5">
+                  <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Folio</p>
+                      <h3 className="mt-1 text-2xl font-black text-slate-900">
+                        {servicioSeleccionado.folio_servicio || servicioSeleccionado.id_solicitud_servicio}
+                      </h3>
+                      <p className="mt-2 text-sm text-slate-600">
+                        Paciente: <span className="font-bold">{servicioSeleccionado.nombre_paciente || 'N/A'}</span>
+                      </p>
+                    </div>
+                    <div className="text-sm text-slate-600 md:text-right">
+                      <p className="font-bold">{formatearFecha(servicioSeleccionado.fecha_creacion)}</p>
+                      <p>Total: <span className="font-black">{formatoMoneda(servicioSeleccionado.total || 0)}</span></p>
+                    </div>
+                  </div>
+                </div>
+
+                {(servicioSeleccionado.diagnostico || servicioSeleccionado.observaciones) && (
+                  <div className="rounded-2xl border border-slate-100 bg-white p-4">
+                    {servicioSeleccionado.diagnostico && (
+                      <p className="text-sm text-slate-700"><b>Diagnóstico:</b> {servicioSeleccionado.diagnostico}</p>
+                    )}
+                    {servicioSeleccionado.observaciones && (
+                      <p className="mt-1 text-sm text-slate-700"><b>Observaciones:</b> {servicioSeleccionado.observaciones}</p>
+                    )}
+                  </div>
+                )}
+
+                <div className="rounded-3xl border border-slate-100 bg-white p-5">
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-lg font-black text-slate-900">Servicios de la solicitud</h3>
+                      <p className="text-sm text-slate-500">Agrega los servicios al carrito para cobrarlos.</p>
+                    </div>
+                    <FileText className="text-slate-400" />
+                  </div>
+
+                  {detalleServicio.length === 0 ? (
+                    <div className="rounded-2xl bg-slate-50 p-5 text-sm text-slate-500">
+                      La solicitud no tiene servicios registrados.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {detalleServicio.map((servicio) => {
+                        const agregado = servicioYaAgregado(servicio);
+                        const cantidad = Number(servicio.cantidad || 1);
+                        const precio = Number(servicio.precio_unitario || servicio.precio || 0);
+                        const subtotal = Number(servicio.subtotal || cantidad * precio || 0);
+
+                        return (
+                          <div
+                            key={servicio.id_detalle_servicio || servicio.id_detalle || servicio.nombre_servicio}
+                            className={`rounded-2xl border p-4 transition ${agregado ? 'border-emerald-200 bg-emerald-50' : 'border-slate-100 bg-slate-50'
+                              }`}
+                          >
+                            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="font-black text-slate-900">
+                                    {servicio.nombre_servicio || servicio.nombre || 'Servicio clínico'}
+                                  </p>
+
+                                  {agregado && (
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-[11px] font-black text-emerald-700">
+                                      <CheckCircle size={13} />
+                                      En carrito
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                                  <span className="rounded-full bg-white px-3 py-1 font-bold text-slate-600">
+                                    Cantidad: {formatoNumero(cantidad)}
+                                  </span>
+                                  <span className="rounded-full bg-white px-3 py-1 font-bold text-slate-600">
+                                    Precio: {formatoMoneda(precio)}
+                                  </span>
+                                  <span className="rounded-full bg-emerald-100 px-3 py-1 font-bold text-emerald-700">
+                                    Subtotal: {formatoMoneda(subtotal)}
+                                  </span>
+                                </div>
+
+                                {servicio.indicaciones && (
+                                  <p className="mt-2 rounded-xl bg-white p-3 text-xs text-slate-700"><b>Indicaciones:</b> {servicio.indicaciones}</p>
+                                )}
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => agregarDetalleServicioAlCarrito(servicio)}
+                                disabled={agregado}
+                                className={`inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-80 ${agregado
+                                    ? 'bg-emerald-100 text-emerald-700'
+                                    : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                                  }`}
+                              >
+                                {agregado ? <CheckCircle size={18} /> : <Plus size={18} />}
+                                {agregado ? 'Agregado' : 'Agregar al carrito'}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-100 px-5 py-3 text-sm font-bold text-slate-700 hover:bg-slate-200"
+                  >
+                    Cerrar
+                  </button>
+                </div>
+              </div>
+            )}
+          </section>
         </div>
       </div>
     </div>
@@ -3456,7 +3271,7 @@ function ModalRecetasPendientes({
                   <div className="mb-4 flex items-center justify-between gap-3">
                     <div>
                       <h3 className="text-lg font-black text-slate-900">Productos de la receta</h3>
-                      <p className="text-sm text-slate-500">Cada botón abre la selección de lote, donde puedes surtir completo o parcial.</p>
+                      <p className="text-sm text-slate-500">Cada botón abre la pantalla de selección de lotes del POS.</p>
                     </div>
                     <Package className="text-slate-400" />
                   </div>
@@ -3568,7 +3383,7 @@ function ModalRecetasPendientes({
                                 {estadoSurtido.vendidoCompleto
                                   ? 'Ya vendido'
                                   : estadoSurtido.vendidoParcial
-                                    ? 'Surtir pendiente'
+                                    ? 'Completar pendiente'
                                     : estadoSurtido.agregadoAlCarrito
                                       ? 'Agregar otro lote'
                                       : 'Elegir lote y agregar'}

@@ -36,6 +36,7 @@ import { notasMedicasService } from '../../services/notasMedicasService';
 import ModalConsentimientoInformado from '../../components/doctores/ModalConsentimientoInformado';
 import ModalHojaViolenciaLesion from '../../components/doctores/ModalHojaViolenciaLesion';
 import ModalReferenciaContrarreferencia from '../../components/doctores/ModalReferenciaContrarreferencia';
+import ModalServicioClinico from '../../components/doctores/ModalServicioClinico';
 
 
 const pacienteInicial = {
@@ -191,6 +192,8 @@ export default function DoctorShaddaiRecetas() {
   const [modalHistorialNotasAbierto, setModalHistorialNotasAbierto] = useState(false);
 
   const [servicioRapidoGuardado, setServicioRapidoGuardado] = useState(false);
+  const [modalServicioClinicoAbierto, setModalServicioClinicoAbierto] = useState(false);
+  const [servicioClinicoActual, setServicioClinicoActual] = useState(null);
 
   const totalProductosReceta = receta.length;
 
@@ -1246,17 +1249,53 @@ export default function DoctorShaddaiRecetas() {
   };
 
   const registrarServicioRapidoPendiente = () => {
+    if (!perfilDoctorCompleto) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Perfil médico incompleto',
+        text: 'Debes completar tu perfil de Doctor Shaddai antes de registrar servicios clínicos.',
+        showCancelButton: true,
+        confirmButtonText: 'Ir a mi perfil',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#0284c7',
+      }).then((result) => {
+        if (result.isConfirmed) {
+          navigate('/app/doctor-shaddai/perfil');
+        }
+      });
+
+      return;
+    }
+
+    if (!expedienteSeleccionado?.id_expediente) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Expediente requerido',
+        text: 'Selecciona o carga un expediente clínico antes de registrar el servicio.',
+        confirmButtonColor: '#0284c7',
+      });
+
+      return;
+    }
+
+    setModalServicioClinicoAbierto(true);
+  };
+
+  const manejarServicioClinicoGuardado = async (data) => {
+    setServicioClinicoActual(data?.solicitud || null);
+    setServicioRapidoGuardado(true);
+    setModalServicioClinicoAbierto(false);
+
     Swal.fire({
-      icon: 'info',
-      title: 'Registro de servicio pendiente',
+      icon: 'success',
+      title: 'Servicio enviado a caja',
       html: `
-        <div style="text-align:left; font-size:14px; line-height:1.6;">
-          <p>Este flujo requiere registrar el servicio clínico realizado.</p>
-          <p>Ejemplos: aplicación de inyección, curación, toma de presión, toma de glucosa o nebulización.</p>
-          <p>El siguiente paso será crear la tabla y módulo de servicios clínicos.</p>
-        </div>
+        <p>El servicio clínico se registró correctamente.</p>
+        <p><strong>Folio:</strong> ${data?.solicitud?.folio_servicio || 'N/A'}</p>
+        <p>Quedó con estatus <strong>PENDIENTE_CAJERO</strong>.</p>
       `,
-      confirmButtonColor: '#0284c7',
+      timer: 1800,
+      showConfirmButton: false,
     });
   };
 
@@ -1368,49 +1407,53 @@ export default function DoctorShaddaiRecetas() {
 
   return (
     <>
-      <style>
-        {`
-          @media print {
-            body * {
-              visibility: hidden !important;
-            }
+<style>
+  {`
+    @media print {
+      body * {
+        visibility: hidden !important;
+      }
 
-            #receta-imprimible,
-            #receta-imprimible *,
-            #nota-medica-imprimible,
-            #nota-medica-imprimible * {
-              visibility: visible !important;
-            }
+      #receta-imprimible,
+      #receta-imprimible *,
+      #nota-medica-imprimible,
+      #nota-medica-imprimible * {
+        visibility: visible !important;
+      }
 
-            #receta-imprimible,
-            #nota-medica-imprimible {
-              position: absolute !important;
-              left: 0 !important;
-              top: 0 !important;
-              width: 100% !important;
-              padding: 0 !important;
-              margin: 0 !important;
-              background: white !important;
-              overflow: visible !important;
-            }
+      #receta-imprimible,
+      #nota-medica-imprimible {
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100% !important;
+        height: auto !important;
+        min-height: 100vh !important;
+        max-height: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        background: white !important;
+        overflow: visible !important;
+      }
 
-            #receta-imprimible {
-              height: 50vh !important;
-              max-height: 50vh !important;
-              overflow: hidden !important;
-            }
+      #receta-imprimible > div {
+        min-height: calc(100vh - 16mm) !important;
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
+      }
 
-            .no-print {
-              display: none !important;
-            }
+      .no-print {
+        display: none !important;
+      }
 
-            @page {
-              size: letter portrait;
-              margin: 8mm;
-            }
-          }
-        `}
-      </style>
+      @page {
+        size: letter portrait;
+        margin: 8mm;
+      }
+    }
+  `}
+</style>
 
       <div className="space-y-6">
         <section className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-sky-700 via-cyan-600 to-teal-500 p-7 text-white shadow-lg shadow-sky-900/20">
@@ -1579,17 +1622,23 @@ export default function DoctorShaddaiRecetas() {
                   </button>
                 )}
 
-                {/*   {tipoAtencionActual.value === 'SERVICIO_RAPIDO' && (
-                  <button
-                    type="button"
-                    onClick={registrarServicioRapidoPendiente}
-                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-black text-emerald-700 shadow-sm transition hover:bg-emerald-50"
-                  >
-                    <ClipboardList size={18} />
-                    Registrar servicio
-                  </button>
-                )}
-                */}
+                {(tipoAtencionActual.value === 'SERVICIO_RAPIDO' ||
+                  tipoAtencionActual.value === 'CONSULTA_MEDICA') && (
+                    <button
+                      type="button"
+                      onClick={registrarServicioRapidoPendiente}
+                      className={`inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-black shadow-sm transition ${servicioRapidoGuardado
+                        ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                        : 'bg-white text-emerald-700 hover:bg-emerald-50'
+                        }`}
+                    >
+                      {servicioRapidoGuardado ? <BadgeCheck size={18} /> : <ClipboardList size={18} />}
+                      {servicioRapidoGuardado
+                        ? `Servicio enviado${servicioClinicoActual?.folio_servicio ? ` · ${servicioClinicoActual.folio_servicio}` : ''}`
+                        : 'Registrar servicio'}
+                    </button>
+                  )}
+
 
                 {tipoAtencionActual.value === 'LABORATORIO' && (
                   <button
@@ -2463,6 +2512,31 @@ export default function DoctorShaddaiRecetas() {
         </div>
       )}
 
+      <ModalServicioClinico
+        abierto={modalServicioClinicoAbierto}
+        onClose={() => setModalServicioClinicoAbierto(false)}
+        expediente={expedienteSeleccionado}
+        paciente={{
+          ...paciente,
+          id_expediente:
+            expedienteSeleccionado?.id_expediente ||
+            Number(idExpedienteUrl) ||
+            null,
+          id_fila: idFilaUrl ? Number(idFilaUrl) : null,
+          id_sucursal: expedienteSeleccionado?.id_sucursal || null,
+        }}
+        perfilDoctor={perfilDoctor}
+        idExpediente={
+          expedienteSeleccionado?.id_expediente ||
+          Number(idExpedienteUrl) ||
+          null
+        }
+        idFila={idFilaUrl ? Number(idFilaUrl) : null}
+        idSucursal={expedienteSeleccionado?.id_sucursal || null}
+        tipoAtencion={tipoAtencionActual.value}
+        onGuardado={manejarServicioClinicoGuardado}
+      />
+
       <ModalNotaMedica
         abierto={modalNotaMedicaAbierto}
         onClose={() => setModalNotaMedicaAbierto(false)}
@@ -2753,234 +2827,339 @@ function ModalSeguimientoReceta({ receta, detalles, cargando, onClose, formatear
   );
 }
 
-function RecetaImprimible({ recetaGenerada, fechaActual, perfilDoctor }) {
-  const paciente = recetaGenerada.paciente || {};
-  const productos = recetaGenerada.productos || [];
-  const receta = recetaGenerada.receta || {};
-  const expediente = recetaGenerada.expediente || null;
 
-  const folio = receta.folio_receta || (receta.id_receta ? `RX-${receta.id_receta}` : 'Vista previa');
+
+function RecetaImprimible({ recetaGenerada, fechaActual, perfilDoctor }) {
+  const paciente = recetaGenerada?.paciente || {};
+  const productos = recetaGenerada?.productos || [];
+  const detalles = recetaGenerada?.detalles || [];
+  const receta = recetaGenerada?.receta || {};
+  const expediente = recetaGenerada?.expediente || null;
+  const doctor = perfilDoctor || recetaGenerada?.doctor || {};
+
+  const folio =
+    receta.folio_receta ||
+    (receta.id_receta ? `RX-${receta.id_receta}` : 'Vista previa');
+
+  const fechaReceta = receta.fecha_creacion
+    ? new Date(receta.fecha_creacion).toLocaleDateString('es-MX', {
+        year: 'numeric',
+        month: 'long',
+        day: '2-digit',
+      })
+    : fechaActual;
+
+  const textoSeguro = (valor, fallback = 'N/A') => {
+    const texto = String(valor ?? '').trim();
+    return texto || fallback;
+  };
+
+  const nombrePaciente =
+    paciente.nombre_paciente ||
+    receta.nombre_paciente ||
+    expediente?.nombre_paciente ||
+    'Paciente no especificado';
+
+  const telefonoPaciente =
+    paciente.telefono ||
+    receta.telefono_paciente ||
+    expediente?.telefono ||
+    'N/A';
+
+  const edadPaciente =
+    paciente.edad ||
+    receta.edad_paciente ||
+    expediente?.edad ||
+    'N/A';
+
+  const sexoPaciente =
+    paciente.sexo ||
+    receta.sexo_paciente ||
+    expediente?.sexo ||
+    'N/A';
+
+  const diagnostico =
+    paciente.diagnostico ||
+    receta.diagnostico ||
+    recetaGenerada?.diagnostico ||
+    'Sin diagnóstico registrado';
+
+  const observaciones =
+    paciente.observaciones ||
+    receta.observaciones ||
+    recetaGenerada?.observaciones ||
+    '';
+
+  const productosReceta =
+    productos.length > 0
+      ? productos
+      : detalles.map((item) => ({
+          id_producto: item.id_producto,
+          nombre:
+            item.nombre ||
+            item.nombre_producto ||
+            item.producto ||
+            'Producto',
+          nombre_generico: item.nombre_generico || item.generico || '',
+          presentacion: item.presentacion || '',
+          forma_farmaceutica: item.forma_farmaceutica || '',
+          cantidad: item.cantidad || item.cantidad_recetada || 1,
+          dosis: item.dosis || '',
+          frecuencia: item.frecuencia || '',
+          duracion: item.duracion || '',
+          indicaciones: item.indicaciones || '',
+        }));
+
+  const totalPiezas = productosReceta.reduce(
+    (acc, item) => acc + Number(item.cantidad || 0),
+    0
+  );
 
   return (
-    <div id="receta-imprimible" className="mx-auto w-full max-w-5xl bg-white text-slate-900 print:max-w-none">
-      <div className="relative mx-auto h-[5.25in] max-h-[5.25in] w-full max-w-5xl overflow-hidden rounded-3xl border border-slate-300 bg-white shadow-sm print:h-[5.15in] print:max-h-[5.15in] print:rounded-none print:border-0 print:shadow-none">
-        <div className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-sky-100/60 blur-2xl print:hidden" />
-        <div className="pointer-events-none absolute -bottom-24 -left-24 h-64 w-64 rounded-full bg-cyan-100/60 blur-2xl print:hidden" />
-
-        <div className="relative grid grid-cols-[88px_1fr_170px] items-center gap-4 border-b border-slate-200 bg-gradient-to-r from-sky-50 via-white to-cyan-50 px-6 py-4 print:grid-cols-[76px_1fr_155px] print:px-4 print:py-3">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-slate-200 bg-white p-2 shadow-sm print:h-14 print:w-14">
-            <img src={logoFarmacia} alt="Farmacias Shaddai" className="h-full w-full object-contain" />
-          </div>
-
-          <div className="text-center">
-            <h1 className="text-2xl font-black uppercase tracking-wide text-slate-950 print:text-xl">
-              Farmacias Shaddai
-            </h1>
-
-            <p className="mt-0.5 text-sm font-bold uppercase tracking-[0.18em] text-sky-700 print:text-xs">
-              Receta Médica
-            </p>
-
-            <p className="mt-1 text-[11px] font-medium text-slate-500 print:text-[10px]">
-              Doctor Shaddai · Bienestar al alcance de todos
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-3 text-center shadow-sm print:p-2">
-            <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">Folio</p>
-
-            <p className="mt-1 break-words text-sm font-black text-slate-950 print:text-xs">
-              {folio}
-            </p>
-
-            <p className="mt-1 text-[10px] font-semibold text-slate-500">{fechaActual}</p>
-          </div>
-        </div>
-
-        <div className="relative px-6 py-4 print:px-4 print:py-3">
-          <div className="grid gap-3 text-[11px] md:grid-cols-[0.92fr_1.08fr] print:grid-cols-[0.92fr_1.08fr]">
-            <div className="space-y-3">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3 print:bg-white">
-                <div className="mb-2 flex items-center justify-between gap-2 border-b border-slate-200 pb-1.5">
-                  <h3 className="text-[11px] font-black uppercase tracking-wider text-slate-800">
-                    Médico
-                  </h3>
-                  <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[9px] font-bold text-sky-700 print:border print:border-slate-200 print:bg-white">
-                    Doctor Shaddai
-                  </span>
-                </div>
-
-                <div className="space-y-0.5 leading-tight">
-                  <p>
-                    <strong>Nombre:</strong> {perfilDoctor?.nombre_completo || 'Doctor Shaddai'}
-                  </p>
-                  <p>
-                    <strong>Institución:</strong> Farmacias Shaddai
-                  </p>
-                  <p>
-                    <strong>Especialidad:</strong> {perfilDoctor?.especialidad || 'N/A'}
-                  </p>
-                  <p>
-                    <strong>Cédula:</strong> {perfilDoctor?.cedula_profesional || 'N/A'}
-                  </p>
-                  <p className="line-clamp-2">
-                    <strong>Domicilio:</strong> {perfilDoctor?.direccion_consultorio || 'N/A'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-slate-200 bg-white p-3">
-                <div className="mb-2 flex items-center justify-between gap-2 border-b border-slate-200 pb-1.5">
-                  <h3 className="text-[11px] font-black uppercase tracking-wider text-slate-800">
-                    Paciente
-                  </h3>
-                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-bold text-emerald-700 print:border print:border-slate-200 print:bg-white">
-                    {expediente ? `Exp. #${expediente.id_expediente}` : 'Sin expediente'}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 leading-tight">
-                  <p className="col-span-2">
-                    <strong>Paciente:</strong> {paciente.nombre_paciente || 'N/A'}
-                  </p>
-                  <p>
-                    <strong>Tel:</strong> {paciente.telefono || 'N/A'}
-                  </p>
-                  <p>
-                    <strong>Edad:</strong> {paciente.edad || 'N/A'}
-                  </p>
-                  <p>
-                    <strong>Sexo:</strong> {paciente.sexo || 'N/A'}
-                  </p>
-                  <p>
-                    <strong>Fecha:</strong> {fechaActual}
-                  </p>
-                </div>
-              </div>
-
-              {expediente && (
-                <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-3 text-[10px] print:bg-white">
-                  <h3 className="mb-1.5 text-[10px] font-black uppercase tracking-wider text-amber-800 print:text-slate-800">
-                    Antecedentes relevantes
-                  </h3>
-
-                  <div className="space-y-0.5 leading-tight">
-                    <p className="line-clamp-1">
-                      <strong>Condiciones:</strong>{' '}
-                      {expediente.enfermedades_condiciones || 'Sin registro'}
-                    </p>
-                    <p className="line-clamp-1">
-                      <strong>Alergias:</strong> {expediente.alergias || 'Sin registro'}
-                    </p>
-                    <p className="line-clamp-1">
-                      <strong>Medicamentos actuales:</strong>{' '}
-                      {expediente.medicamentos_actuales || 'Sin registro'}
-                    </p>
-                  </div>
-                </div>
-              )}
+    <div
+      id="receta-imprimible"
+      className="mx-auto w-full max-w-5xl bg-white text-slate-900 print:max-w-none"
+    >
+      <div className="mx-auto flex min-h-[10.35in] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-slate-300 bg-white shadow-sm print:min-h-[10.35in] print:rounded-none print:border-0 print:shadow-none">
+        {/* Encabezado */}
+        <header className="border-b-4 border-sky-700 bg-gradient-to-r from-sky-50 via-white to-cyan-50 px-7 py-5 print:px-6 print:py-4">
+          <div className="grid grid-cols-[82px_1fr_210px] items-center gap-5">
+            <div className="flex h-20 w-20 items-center justify-center rounded-3xl border border-slate-200 bg-white p-2 shadow-sm print:h-16 print:w-16">
+              <img
+                src={logoFarmacia}
+                alt="Farmacias Shaddai"
+                className="h-full w-full object-contain"
+              />
             </div>
 
-            <div className="space-y-3">
-              <div className="rounded-2xl border border-slate-200 bg-white p-3">
-                <h3 className="mb-1.5 text-[11px] font-black uppercase tracking-wider text-slate-800">
-                  Diagnóstico
-                </h3>
+            <div className="text-center">
+              <h1 className="text-3xl font-black tracking-[0.18em] text-slate-950 print:text-2xl">
+                FARMACIAS SHADDAI
+              </h1>
+              <p className="mt-1 text-sm font-black uppercase tracking-[0.36em] text-sky-700">
+                Receta médica
+              </p>
+              <p className="mt-2 text-xs font-semibold text-slate-500">
+                Bienestar al alcance de todos
+              </p>
+            </div>
 
-                <div className="min-h-9 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-[11px] leading-tight print:bg-white">
-                  {paciente.diagnostico || 'Sin diagnóstico registrado'}
-                </div>
+            <div className="rounded-3xl border border-slate-200 bg-white px-4 py-4 text-center shadow-sm">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                Folio
+              </p>
+              <p className="mt-1 text-base font-black tracking-wide text-slate-950">
+                {folio}
+              </p>
+              <p className="mt-1 text-[11px] font-bold text-slate-500">
+                {fechaReceta}
+              </p>
+            </div>
+          </div>
+        </header>
+
+        {/* Cuerpo */}
+        <main className="flex flex-1 flex-col gap-4 px-7 py-5 print:px-6 print:py-4">
+          {/* Datos generales */}
+          <section className="grid grid-cols-[1fr_1.1fr] gap-4">
+            <div className="rounded-3xl border border-slate-200 bg-white p-4">
+              <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-2">
+                <h2 className="text-xs font-black uppercase tracking-widest text-sky-800">
+                  Médico
+                </h2>
+                <span className="rounded-full bg-sky-50 px-3 py-1 text-[10px] font-black text-sky-700">
+                  Doctor Shaddai
+                </span>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-white p-3">
-                <div className="mb-2 flex items-center justify-between border-b border-slate-200 pb-1.5">
-                  <h3 className="text-[11px] font-black uppercase tracking-wider text-slate-800">
-                    Prescripción
-                  </h3>
-                  <span className="text-[9px] font-bold text-slate-400">
-                    {productos.length} producto(s)
-                  </span>
-                </div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px] leading-tight text-slate-700">
+                <p className="col-span-2">
+                  <strong>Nombre:</strong>{' '}
+                  {textoSeguro(doctor.nombre_completo, 'Doctor Shaddai')}
+                </p>
+                <p>
+                  <strong>Especialidad:</strong>{' '}
+                  {textoSeguro(doctor.especialidad, 'Medicina general')}
+                </p>
+                <p>
+                  <strong>Cédula:</strong>{' '}
+                  {textoSeguro(doctor.cedula_profesional)}
+                </p>
+                <p className="col-span-2">
+                  <strong>Domicilio:</strong>{' '}
+                  {textoSeguro(doctor.direccion_consultorio, 'Farmacias Shaddai')}
+                </p>
+              </div>
+            </div>
 
-                <div className="space-y-2">
-                  {productos.slice(0, 4).map((item, index) => (
-                    <div key={`${item.id_producto || index}`} className="rounded-xl border border-slate-200 bg-slate-50 p-2 print:bg-white">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="text-[11px] font-black leading-tight text-slate-900">
-                            {index + 1}. {item.nombre}
-                          </p>
-                          <p className="mt-0.5 text-[9px] leading-tight text-slate-500">
-                            <strong>Genérica:</strong> {item.nombre_generico || '-'} ·{' '}
-                            <strong>Presentación:</strong> {item.presentacion || '-'} ·{' '}
-                            <strong>Forma:</strong> {item.forma_farmaceutica || '-'}
-                          </p>
-                        </div>
+            <div className="rounded-3xl border border-slate-200 bg-white p-4">
+              <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-2">
+                <h2 className="text-xs font-black uppercase tracking-widest text-sky-800">
+                  Paciente
+                </h2>
 
-                        <div className="rounded-lg bg-sky-100 px-2 py-1 text-center text-[10px] font-black text-sky-800 print:border print:border-slate-200 print:bg-white print:text-slate-900">
-                          x{item.cantidad}
-                        </div>
+                <span className="rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">
+                  {expediente?.id_expediente
+                    ? `Exp. #${expediente.id_expediente}`
+                    : 'Sin expediente'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px] leading-tight text-slate-700">
+                <p className="col-span-2">
+                  <strong>Paciente:</strong> {textoSeguro(nombrePaciente)}
+                </p>
+                <p>
+                  <strong>Tel:</strong> {textoSeguro(telefonoPaciente)}
+                </p>
+                <p>
+                  <strong>Edad:</strong> {textoSeguro(edadPaciente)}
+                </p>
+                <p>
+                  <strong>Sexo:</strong> {textoSeguro(sexoPaciente)}
+                </p>
+                <p>
+                  <strong>Fecha:</strong> {fechaReceta}
+                </p>
+              </div>
+            </div>
+          </section>
+
+          {/* Antecedentes y diagnóstico */}
+          <section className="grid grid-cols-[0.9fr_1.1fr] gap-4">
+            <div className="rounded-3xl border border-amber-200 bg-amber-50/70 p-4 print:bg-white">
+              <h2 className="mb-2 border-b border-amber-100 pb-2 text-xs font-black uppercase tracking-widest text-amber-800 print:text-slate-800">
+                Antecedentes relevantes
+              </h2>
+
+              <div className="space-y-1.5 text-[10.5px] leading-tight text-slate-700">
+                <p>
+                  <strong>Condiciones:</strong>{' '}
+                  {textoSeguro(expediente?.enfermedades_condiciones, 'Sin registro')}
+                </p>
+                <p>
+                  <strong>Alergias:</strong>{' '}
+                  {textoSeguro(expediente?.alergias, 'Sin registro')}
+                </p>
+                <p>
+                  <strong>Medicamentos actuales:</strong>{' '}
+                  {textoSeguro(expediente?.medicamentos_actuales, 'Sin registro')}
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-slate-200 bg-white p-4">
+              <h2 className="mb-2 text-xs font-black uppercase tracking-widest text-sky-800">
+                Diagnóstico
+              </h2>
+
+              <div className="min-h-[58px] rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-[11px] leading-snug text-slate-700 print:bg-white">
+                {diagnostico}
+              </div>
+            </div>
+          </section>
+
+          {/* Prescripción */}
+          <section className="rounded-3xl border border-slate-200 bg-white p-4">
+            <div className="mb-3 flex items-center justify-between border-b border-slate-200 pb-2">
+              <h2 className="text-xs font-black uppercase tracking-widest text-sky-800">
+                Prescripción
+              </h2>
+
+              <div className="text-[10px] font-black text-slate-500">
+                {productosReceta.length} producto(s) · {totalPiezas} pieza(s)
+              </div>
+            </div>
+
+            {productosReceta.length === 0 ? (
+              <div className="rounded-2xl bg-slate-50 px-4 py-6 text-center text-xs text-slate-500">
+                No hay productos registrados.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {productosReceta.map((item, index) => (
+                  <div
+                    key={`${item.id_producto || index}-${item.nombre}`}
+                    className="rounded-2xl border border-slate-200 bg-slate-50 p-3 print:bg-white"
+                  >
+                    <div className="grid grid-cols-[1fr_52px] gap-3">
+                      <div className="min-w-0">
+                        <p className="text-[12px] font-black leading-tight text-slate-950">
+                          {index + 1}. {textoSeguro(item.nombre, 'Producto')}
+                        </p>
+
+                        <p className="mt-1 text-[9.5px] leading-tight text-slate-500">
+                          <strong>Genérica:</strong>{' '}
+                          {textoSeguro(item.nombre_generico, '-')} ·{' '}
+                          <strong>Presentación:</strong>{' '}
+                          {textoSeguro(item.presentacion, '-')} ·{' '}
+                          <strong>Forma:</strong>{' '}
+                          {textoSeguro(item.forma_farmaceutica, '-')}
+                        </p>
                       </div>
 
-                      <div className="mt-1 grid grid-cols-3 gap-1 text-[9.5px] leading-tight text-slate-700">
-                        <p>
-                          <strong>Dosis:</strong> {item.dosis || '-'}
-                        </p>
-                        <p>
-                          <strong>Frecuencia:</strong> {item.frecuencia || '-'}
-                        </p>
-                        <p>
-                          <strong>Duración:</strong> {item.duracion || '-'}
-                        </p>
+                      <div className="flex items-center justify-center rounded-xl border border-sky-100 bg-sky-50 text-sm font-black text-sky-800 print:bg-white">
+                        x{Number(item.cantidad || 1)}
                       </div>
-
-                      {item.indicaciones && (
-                        <p className="mt-1 text-[9.5px] leading-tight text-slate-600">
-                          <strong>Tratamiento:</strong> {item.indicaciones}
-                        </p>
-                      )}
                     </div>
-                  ))}
 
-                  {productos.length > 4 && (
-                    <p className="text-[9px] font-bold text-slate-500">
-                      + {productos.length - 4} producto(s) adicional(es) registrado(s) en el sistema.
-                    </p>
-                  )}
-                </div>
+                    <div className="mt-2 grid grid-cols-3 gap-3 text-[10.5px] leading-tight text-slate-700">
+                      <p>
+                        <strong>Dosis:</strong> {textoSeguro(item.dosis, '-')}
+                      </p>
+                      <p>
+                        <strong>Frecuencia:</strong>{' '}
+                        {textoSeguro(item.frecuencia, '-')}
+                      </p>
+                      <p>
+                        <strong>Duración:</strong>{' '}
+                        {textoSeguro(item.duracion, '-')}
+                      </p>
+                    </div>
+
+                    {item.indicaciones && (
+                      <p className="mt-2 text-[10.5px] leading-tight text-slate-700">
+                        <strong>Tratamiento / indicaciones:</strong>{' '}
+                        {item.indicaciones}
+                      </p>
+                    )}
+                  </div>
+                ))}
               </div>
+            )}
+          </section>
 
-              {paciente.observaciones && (
-                <div className="rounded-2xl border border-slate-200 bg-white p-3">
-                  <h3 className="mb-1 text-[10px] font-black uppercase tracking-wider text-slate-800">
-                    Observaciones
-                  </h3>
-                  <p className="line-clamp-2 text-[10px] leading-tight text-slate-700">
-                    {paciente.observaciones}
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
+          {/* Bloque inferior para ocupar bien la hoja */}
+          <section className="mt-auto grid grid-cols-[1fr_280px] gap-4">
+            <div className="rounded-3xl border border-slate-200 bg-white p-4">
+              <h2 className="mb-2 text-xs font-black uppercase tracking-widest text-sky-800">
+                Observaciones
+              </h2>
 
-          <div className="mt-5 grid grid-cols-2 gap-8 text-center text-[10px]">
-            <div>
-              <div className="mx-auto mb-1.5 h-px w-48 bg-slate-500" />
-              <p className="font-black">Firma del médico</p>
-              <p className="text-slate-500">{perfilDoctor?.nombre_completo || ''}</p>
+              <div className="min-h-[76px] rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-[11px] leading-snug text-slate-700 print:bg-white">
+                {observaciones || 'Sin observaciones.'}
+              </div>
             </div>
 
-            <div>
-              <div className="mx-auto mb-1.5 h-px w-48 bg-slate-500" />
-              <p className="font-black">Cédula profesional</p>
-              <p className="text-slate-500">{perfilDoctor?.cedula_profesional || ''}</p>
-            </div>
-          </div>
+            <div className="rounded-3xl border border-slate-200 bg-white p-4 text-center">
+              <div className="mb-3 h-16 border-b border-slate-400" />
 
-          <p className="mt-3 text-center text-[9px] text-slate-400">
-            Documento generado desde el módulo Doctor Shaddai.
-          </p>
-        </div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-600">
+                Firma del médico
+              </p>
+              <p className="mt-1 text-xs font-black text-slate-900">
+                {textoSeguro(doctor.nombre_completo, 'Doctor Shaddai')}
+              </p>
+              <p className="text-[10px] text-slate-500">
+                Cédula: {textoSeguro(doctor.cedula_profesional)}
+              </p>
+            </div>
+          </section>
+
+          <footer className="border-t border-slate-200 pt-2 text-center text-[9px] leading-tight text-slate-400">
+           
+          </footer>
+        </main>
       </div>
     </div>
   );

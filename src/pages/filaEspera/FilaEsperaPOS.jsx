@@ -52,16 +52,7 @@ const tiposAtencion = [
     label: 'Servicio clínico rápido',
     descripcion: 'Inyección, curación, toma de presión, glucosa, etc.',
   },
-  {
-    value: 'SOLO_RECETA',
-    label: 'Solo receta',
-    descripcion: 'Generación de receta sin consulta completa.',
-  },
-  {
-    value: 'LABORATORIO',
-    label: 'Laboratorio',
-    descripcion: 'Solicitud de estudios de laboratorio.',
-  },
+ 
 ];
 
 const tipoAtencionStyles = {
@@ -73,14 +64,7 @@ const tipoAtencionStyles = {
     label: 'Servicio rápido',
     className: 'bg-emerald-100 text-emerald-700 border-emerald-200',
   },
-  SOLO_RECETA: {
-    label: 'Solo receta',
-    className: 'bg-purple-100 text-purple-700 border-purple-200',
-  },
-  LABORATORIO: {
-    label: 'Laboratorio',
-    className: 'bg-orange-100 text-orange-700 border-orange-200',
-  },
+ 
 };
 
 const formInicial = {

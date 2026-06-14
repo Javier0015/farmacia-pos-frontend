@@ -96,6 +96,10 @@ const tipoDocumentoStyles = {
     label: 'Servicio rápido',
     className: 'bg-lime-50 text-lime-700 border-lime-200',
   },
+  SERVICIO_CLINICO: {
+    label: 'Servicio clínico',
+    className: 'bg-sky-50 text-sky-700 border-sky-200',
+  },
   RECETA: {
     label: 'Receta médica',
     className: 'bg-purple-50 text-purple-700 border-purple-200',
@@ -2263,6 +2267,622 @@ const DoctorFilaEspera = () => {
     });
   };
 
+  const generarHtmlRecetaMedicaShaddai = ({
+    recetaGenerada,
+    fechaActual = formatearFechaCorta(new Date()),
+  }) => {
+    const paciente = recetaGenerada?.paciente || {};
+    const productos = recetaGenerada?.productos || [];
+    const detalles = recetaGenerada?.detalles || [];
+    const receta = recetaGenerada?.receta || {};
+    const expediente = recetaGenerada?.expediente || {};
+    const doctor = recetaGenerada?.doctor || {};
+
+    const folio =
+      receta.folio_receta ||
+      recetaGenerada?.folio ||
+      (receta.id_receta ? `RX-${receta.id_receta}` : 'RX-SIN-FOLIO');
+
+    const fechaReceta = receta.fecha_creacion
+      ? new Date(receta.fecha_creacion).toLocaleDateString('es-MX', {
+        year: 'numeric',
+        month: 'long',
+        day: '2-digit',
+      })
+      : fechaActual;
+
+    const texto = (valor, fallback = 'N/A') => {
+      const limpio = String(valor ?? '').trim();
+      return limpio || fallback;
+    };
+
+    const nombrePaciente = texto(
+      paciente.nombre_paciente ||
+      receta.nombre_paciente ||
+      expediente.nombre_paciente,
+      'Paciente no especificado'
+    );
+
+    const telefonoPaciente = texto(
+      paciente.telefono ||
+      receta.telefono_paciente ||
+      expediente.telefono
+    );
+
+    const edadPaciente = texto(
+      paciente.edad ||
+      receta.edad_paciente ||
+      expediente.edad
+    );
+
+    const sexoPaciente = texto(
+      paciente.sexo ||
+      receta.sexo_paciente ||
+      expediente.sexo
+    );
+
+    const diagnostico = texto(
+      paciente.diagnostico ||
+      receta.diagnostico ||
+      recetaGenerada?.diagnostico,
+      'Sin diagnóstico registrado'
+    );
+
+    const observaciones = texto(
+      paciente.observaciones ||
+      receta.observaciones ||
+      recetaGenerada?.observaciones,
+      'Sin observaciones.'
+    );
+
+    const productosReceta =
+      productos.length > 0
+        ? productos
+        : detalles.map((item) => ({
+          id_producto: item.id_producto,
+          nombre:
+            item.nombre ||
+            item.nombre_producto ||
+            item.producto ||
+            item.descripcion_producto ||
+            'Medicamento',
+          nombre_generico:
+            item.nombre_generico ||
+            item.generico ||
+            item.denominacion_generica ||
+            '',
+          presentacion:
+            item.presentacion ||
+            item.descripcion ||
+            '',
+          forma_farmaceutica:
+            item.forma_farmaceutica ||
+            item.forma ||
+            '',
+          cantidad:
+            item.cantidad ||
+            item.cantidad_recetada ||
+            item.cantidad_receta ||
+            1,
+          dosis: item.dosis || '',
+          frecuencia: item.frecuencia || '',
+          duracion: item.duracion || '',
+          indicaciones: item.indicaciones || '',
+        }));
+
+    const totalPiezas = productosReceta.reduce(
+      (acc, item) => acc + Number(item.cantidad || 0),
+      0
+    );
+
+    const filasProductos = productosReceta.length
+      ? productosReceta
+        .map(
+          (item, index) => `
+            <div class="producto">
+              <div class="producto-top">
+                <div>
+                  <div class="producto-nombre">
+                    ${index + 1}. ${escapeHtml(texto(item.nombre, 'Medicamento'))}
+                  </div>
+
+                  <div class="producto-meta">
+                    <strong>Genérica:</strong> ${escapeHtml(texto(item.nombre_generico, '-'))}
+                    · <strong>Presentación:</strong> ${escapeHtml(texto(item.presentacion, '-'))}
+                    · <strong>Forma:</strong> ${escapeHtml(texto(item.forma_farmaceutica, '-'))}
+                  </div>
+                </div>
+
+                <div class="cantidad">x${escapeHtml(Number(item.cantidad || 1))}</div>
+              </div>
+
+              <div class="indicaciones-grid">
+                <div><strong>Dosis:</strong> ${escapeHtml(texto(item.dosis, '-'))}</div>
+                <div><strong>Frecuencia:</strong> ${escapeHtml(texto(item.frecuencia, '-'))}</div>
+                <div><strong>Duración:</strong> ${escapeHtml(texto(item.duracion, '-'))}</div>
+              </div>
+
+              ${item.indicaciones
+              ? `<div class="tratamiento"><strong>Tratamiento / indicaciones:</strong> ${escapeHtml(item.indicaciones)}</div>`
+              : ''
+            }
+            </div>
+          `
+        )
+        .join('')
+      : `<div class="empty">No hay productos registrados.</div>`;
+
+    return `
+    <!doctype html>
+    <html lang="es">
+      <head>
+        <meta charset="utf-8" />
+        <title>Receta médica ${escapeHtml(folio)}</title>
+
+        <style>
+          @page {
+            size: letter portrait;
+            margin: 8mm;
+          }
+
+          * {
+            box-sizing: border-box;
+          }
+
+          html,
+          body {
+            margin: 0;
+            padding: 0;
+            background: white;
+            color: #0f172a;
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 11px;
+          }
+
+          body {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+
+          .hoja {
+            min-height: calc(279.4mm - 16mm);
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #dbe3ee;
+            border-radius: 16px;
+            overflow: hidden;
+            background: white;
+          }
+
+          .header {
+            border-bottom: 4px solid #0369a1;
+            padding: 16px 20px 14px;
+            display: grid;
+            grid-template-columns: 82px 1fr 190px;
+            gap: 16px;
+            align-items: center;
+            background: #ffffff;
+          }
+
+          .logo {
+            width: 66px;
+            height: 66px;
+            border: 1px solid #e2e8f0;
+            border-radius: 18px;
+            padding: 7px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+
+          .logo img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+          }
+
+          .marca {
+            text-align: center;
+          }
+
+          .marca h1 {
+            margin: 0;
+            font-size: 24px;
+            letter-spacing: 5px;
+            font-weight: 900;
+            color: #020617;
+          }
+
+          .marca .subtitulo {
+            margin-top: 4px;
+            font-size: 12px;
+            letter-spacing: 5px;
+            text-transform: uppercase;
+            font-weight: 900;
+            color: #0369a1;
+          }
+
+          .marca .slogan {
+            margin-top: 5px;
+            font-size: 10px;
+            font-weight: 700;
+            color: #334155;
+          }
+
+          .folio-box {
+            border: 1px solid #dbe3ee;
+            border-radius: 18px;
+            padding: 12px;
+            text-align: center;
+          }
+
+          .folio-box .label {
+            font-size: 9px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: #64748b;
+          }
+
+          .folio-box .folio {
+            margin-top: 5px;
+            font-size: 14px;
+            font-weight: 900;
+            color: #020617;
+          }
+
+          .folio-box .fecha {
+            margin-top: 4px;
+            font-size: 10px;
+            font-weight: 800;
+            color: #475569;
+          }
+
+          .contenido {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding: 14px 20px 12px;
+          }
+
+          .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1.1fr;
+            gap: 12px;
+          }
+
+          .grid-antecedente {
+            display: grid;
+            grid-template-columns: 0.9fr 1.1fr;
+            gap: 12px;
+          }
+
+          .card {
+            border: 1px solid #dbe3ee;
+            border-radius: 16px;
+            padding: 12px;
+            background: white;
+          }
+
+          .card-warning {
+            border-color: #fde68a;
+            background: #fffbeb;
+          }
+
+          .card-title {
+            margin: 0 0 8px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #e2e8f0;
+            color: #075985;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            font-size: 10px;
+            font-weight: 900;
+          }
+
+          .card-warning .card-title {
+            color: #92400e;
+            border-bottom-color: #fde68a;
+          }
+
+          .datos {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 5px 12px;
+            line-height: 1.3;
+          }
+
+          .datos .full {
+            grid-column: 1 / -1;
+          }
+
+          .texto-box {
+            min-height: 46px;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 10px;
+            line-height: 1.35;
+            background: #f8fafc;
+          }
+
+          .prescripcion {
+            flex: 1;
+            border: 1px solid #dbe3ee;
+            border-radius: 16px;
+            padding: 12px;
+            background: white;
+          }
+
+          .prescripcion-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            padding-bottom: 7px;
+            border-bottom: 1px solid #dbe3ee;
+            margin-bottom: 10px;
+          }
+
+          .prescripcion-head h2 {
+            margin: 0;
+            color: #075985;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            font-size: 10px;
+            font-weight: 900;
+          }
+
+          .prescripcion-head .totales {
+            font-size: 10px;
+            font-weight: 900;
+            color: #334155;
+          }
+
+          .productos {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+          }
+
+          .producto {
+            border: 1px solid #dbe3ee;
+            border-radius: 13px;
+            padding: 9px;
+            background: #f8fafc;
+          }
+
+          .producto-top {
+            display: grid;
+            grid-template-columns: 1fr 46px;
+            gap: 10px;
+          }
+
+          .producto-nombre {
+            font-size: 12px;
+            line-height: 1.25;
+            font-weight: 900;
+            color: #020617;
+          }
+
+          .producto-meta {
+            margin-top: 3px;
+            font-size: 9px;
+            line-height: 1.25;
+            color: #475569;
+          }
+
+          .cantidad {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #bae6fd;
+            border-radius: 12px;
+            background: #f0f9ff;
+            color: #075985;
+            font-size: 13px;
+            font-weight: 900;
+          }
+
+          .indicaciones-grid {
+            margin-top: 7px;
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 8px;
+            font-size: 10px;
+            color: #334155;
+          }
+
+          .tratamiento {
+            margin-top: 6px;
+            font-size: 10px;
+            line-height: 1.3;
+            color: #334155;
+          }
+
+          .empty {
+            padding: 18px;
+            text-align: center;
+            color: #64748b;
+            background: #f8fafc;
+            border-radius: 12px;
+          }
+
+          .inferior {
+            margin-top: auto;
+            display: grid;
+            grid-template-columns: 1fr 260px;
+            gap: 12px;
+          }
+
+          .observaciones {
+            min-height: 70px;
+          }
+
+          .firma {
+            text-align: center;
+          }
+
+          .firma-linea {
+            height: 52px;
+            border-bottom: 1px solid #334155;
+            margin-bottom: 8px;
+          }
+
+          .firma .titulo {
+            font-size: 10px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #334155;
+          }
+
+          .firma .doctor {
+            margin-top: 4px;
+            font-size: 11px;
+            font-weight: 900;
+            color: #020617;
+          }
+
+          .firma .cedula {
+            margin-top: 2px;
+            font-size: 9px;
+            color: #64748b;
+          }
+
+          .footer {
+            border-top: 1px solid #e2e8f0;
+            padding-top: 7px;
+            text-align: center;
+            font-size: 8.5px;
+            line-height: 1.3;
+            color: #64748b;
+          }
+        </style>
+      </head>
+
+      <body>
+        <main class="hoja">
+          <header class="header">
+            <div class="logo">
+              <img src="${logoFarmacia}" alt="Farmacias Shaddai" />
+            </div>
+
+            <div class="marca">
+              <h1>FARMACIAS SHADDAI</h1>
+              <div class="subtitulo">Receta médica</div>
+              <div class="slogan">Doctor Shaddai · Bienestar al alcance de todos</div>
+            </div>
+
+            <div class="folio-box">
+              <div class="label">Folio</div>
+              <div class="folio">${escapeHtml(folio)}</div>
+              <div class="fecha">${escapeHtml(fechaReceta)}</div>
+            </div>
+          </header>
+
+          <section class="contenido">
+            <div class="grid-2">
+              <div class="card">
+                <h2 class="card-title">Médico</h2>
+
+                <div class="datos">
+                  <div class="full"><strong>Nombre:</strong> ${escapeHtml(texto(doctor.nombre_completo, 'Doctor Shaddai'))}</div>
+                  <div><strong>Especialidad:</strong> ${escapeHtml(texto(doctor.especialidad, 'Medicina general'))}</div>
+                  <div><strong>Cédula:</strong> ${escapeHtml(texto(doctor.cedula_profesional))}</div>
+                  <div class="full"><strong>Domicilio:</strong> ${escapeHtml(texto(doctor.direccion_consultorio, 'Farmacias Shaddai'))}</div>
+                </div>
+              </div>
+
+              <div class="card">
+                <h2 class="card-title">Paciente</h2>
+
+                <div class="datos">
+                  <div class="full"><strong>Paciente:</strong> ${escapeHtml(nombrePaciente)}</div>
+                  <div><strong>Tel:</strong> ${escapeHtml(telefonoPaciente)}</div>
+                  <div><strong>Edad:</strong> ${escapeHtml(edadPaciente)}</div>
+                  <div><strong>Sexo:</strong> ${escapeHtml(sexoPaciente)}</div>
+                  <div><strong>Fecha:</strong> ${escapeHtml(fechaReceta)}</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid-antecedente">
+              <div class="card card-warning">
+                <h2 class="card-title">Antecedentes relevantes</h2>
+
+                <div class="datos">
+                  <div class="full"><strong>Condiciones:</strong> ${escapeHtml(texto(expediente.enfermedades_condiciones, 'Sin registro'))}</div>
+                  <div class="full"><strong>Alergias:</strong> ${escapeHtml(texto(expediente.alergias, 'Sin registro'))}</div>
+                  <div class="full"><strong>Medicamentos actuales:</strong> ${escapeHtml(texto(expediente.medicamentos_actuales, 'Sin registro'))}</div>
+                </div>
+              </div>
+
+              <div class="card">
+                <h2 class="card-title">Diagnóstico</h2>
+                <div class="texto-box">${escapeHtml(diagnostico)}</div>
+              </div>
+            </div>
+
+            <div class="prescripcion">
+              <div class="prescripcion-head">
+                <h2>Prescripción</h2>
+                <div class="totales">
+                  ${escapeHtml(productosReceta.length)} producto(s) · ${escapeHtml(totalPiezas)} pieza(s)
+                </div>
+              </div>
+
+              <div class="productos">
+                ${filasProductos}
+              </div>
+            </div>
+
+            <div class="inferior">
+              <div class="card">
+                <h2 class="card-title">Observaciones</h2>
+                <div class="texto-box observaciones">${escapeHtml(observaciones)}</div>
+              </div>
+
+              <div class="card firma">
+                <div class="firma-linea"></div>
+                <div class="titulo">Firma del médico</div>
+                <div class="doctor">${escapeHtml(texto(doctor.nombre_completo, 'Doctor Shaddai'))}</div>
+                <div class="cedula">Cédula: ${escapeHtml(texto(doctor.cedula_profesional))}</div>
+              </div>
+            </div>
+
+            <div class="footer">
+              Documento generado digitalmente por Farmacias Shaddai. Esta receta debe validarse conforme a las políticas internas de farmacia y normativa aplicable.
+            </div>
+          </section>
+        </main>
+
+        <script>
+          window.onload = function () {
+            const imagenes = Array.from(document.images || []);
+
+            Promise.all(
+              imagenes.map(function (img) {
+                if (img.complete) return Promise.resolve();
+
+                return new Promise(function (resolve) {
+                  img.onload = resolve;
+                  img.onerror = resolve;
+                });
+              })
+            ).then(function () {
+              setTimeout(function () {
+                window.focus();
+                window.print();
+              }, 350);
+            });
+          };
+        </script>
+      </body>
+    </html>
+  `;
+  };
+
   const reimprimirRecetaMedica = async (doc) => {
     const idReceta = doc?.id_origen || doc?.id;
 
@@ -2307,13 +2927,16 @@ const DoctorFilaEspera = () => {
 
       setDocumentoSeleccionado(docCompleto);
 
-      await new Promise((resolve) => {
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => setTimeout(resolve, 300));
-        });
+      const html = generarHtmlRecetaMedicaShaddai({
+        recetaGenerada,
+        fechaActual: formatearFechaCorta(
+          receta.fecha_creacion ||
+          doc.fecha ||
+          new Date()
+        ),
       });
 
-      imprimirNodoEnIframe('receta-imprimible');
+      abrirHtmlImpresion(html, `Receta médica ${receta.folio_receta || doc.folio || ''}`);
     } catch (error) {
       console.error('Error al reimprimir receta médica:', error);
 
@@ -2420,6 +3043,726 @@ const DoctorFilaEspera = () => {
     }
   };
 
+  const mapearServicioClinicoParaImpresion = ({
+    doc = {},
+    solicitud = {},
+    detalles = [],
+  }) => {
+    const metadata = normalizarMetadata(doc.metadata);
+
+    const servicioDetalles = Array.isArray(detalles) ? detalles : [];
+
+    return {
+      solicitud: {
+        id_solicitud_servicio:
+          solicitud.id_solicitud_servicio ||
+          doc.id_origen ||
+          doc.id,
+        folio_servicio:
+          solicitud.folio_servicio ||
+          doc.folio ||
+          metadata.folio_servicio ||
+          'SERV-SIN-FOLIO',
+        nombre_paciente:
+          solicitud.nombre_paciente ||
+          metadata.nombre_paciente ||
+          pacienteDocumentos?.nombre_paciente ||
+          'N/A',
+        telefono_paciente:
+          solicitud.telefono_paciente ||
+          metadata.telefono_paciente ||
+          pacienteDocumentos?.telefono ||
+          'N/A',
+        edad_paciente:
+          solicitud.edad_paciente ||
+          metadata.edad_paciente ||
+          pacienteDocumentos?.edad ||
+          'N/A',
+        sexo_paciente:
+          solicitud.sexo_paciente ||
+          metadata.sexo_paciente ||
+          pacienteDocumentos?.sexo ||
+          'N/A',
+        diagnostico:
+          solicitud.diagnostico ||
+          metadata.diagnostico ||
+          doc.data?.descripcion ||
+          'Sin diagnóstico registrado',
+        observaciones:
+          solicitud.observaciones ||
+          metadata.observaciones ||
+          doc.data?.descripcion ||
+          'Sin observaciones',
+        estatus:
+          solicitud.estatus ||
+          doc.estatus ||
+          'N/A',
+        total:
+          solicitud.total ||
+          metadata.total ||
+          0,
+        fecha_creacion:
+          solicitud.fecha_creacion ||
+          doc.fecha ||
+          doc.data?.fecha_documento ||
+          doc.data?.fecha_creacion,
+        fecha_pago:
+          solicitud.fecha_pago ||
+          metadata.fecha_pago ||
+          null,
+        fecha_realizado:
+          solicitud.fecha_realizado ||
+          metadata.fecha_realizado ||
+          null,
+      },
+
+      detalles: servicioDetalles.map((item) => ({
+        id_detalle_servicio: item.id_detalle_servicio,
+        id_servicio: item.id_servicio,
+        nombre_servicio:
+          item.nombre_servicio ||
+          item.nombre ||
+          item.servicio ||
+          'Servicio clínico',
+        descripcion:
+          item.descripcion_catalogo ||
+          item.descripcion ||
+          '',
+        cantidad:
+          item.cantidad ||
+          1,
+        precio_unitario:
+          item.precio_unitario ||
+          item.precio ||
+          0,
+        subtotal:
+          item.subtotal ||
+          Number(item.cantidad || 1) * Number(item.precio_unitario || item.precio || 0),
+        indicaciones:
+          item.indicaciones ||
+          '',
+        observaciones:
+          item.observaciones ||
+          '',
+        nombre_producto:
+          item.nombre_producto ||
+          '',
+        codigo_barras:
+          item.codigo_barras ||
+          '',
+      })),
+
+      doctor: {
+        nombre_completo:
+          solicitud.nombre_doctor ||
+          solicitud.nombre_doctor_shaddai ||
+          solicitud.doctor_shaddai ||
+          metadata.doctor_nombre_completo ||
+          metadata.medico_responsable ||
+          pacienteDocumentos?.doctor_nombre ||
+          'Doctor Shaddai',
+        cedula_profesional:
+          solicitud.cedula_profesional ||
+          metadata.cedula_profesional ||
+          pacienteDocumentos?.cedula_profesional ||
+          'N/A',
+        especialidad:
+          solicitud.especialidad ||
+          metadata.especialidad ||
+          pacienteDocumentos?.doctor_especialidad ||
+          'Medicina general',
+      },
+
+      expediente: {
+        id_expediente:
+          solicitud.id_paciente_expediente ||
+          metadata.id_expediente ||
+          pacienteDocumentos?.id_expediente ||
+          'N/A',
+      },
+    };
+  };
+
+  const generarHtmlServicioClinicoShaddai = ({ servicioGenerado }) => {
+    const solicitud = servicioGenerado?.solicitud || {};
+    const detalles = servicioGenerado?.detalles || [];
+    const doctor = servicioGenerado?.doctor || {};
+    const expediente = servicioGenerado?.expediente || {};
+
+    const formatoMoneda = (valor) =>
+      Number(valor || 0).toLocaleString('es-MX', {
+        style: 'currency',
+        currency: 'MXN',
+      });
+
+    const fechaServicio = solicitud.fecha_creacion
+      ? new Date(solicitud.fecha_creacion).toLocaleDateString('es-MX', {
+        year: 'numeric',
+        month: 'long',
+        day: '2-digit',
+      })
+      : formatearFechaCorta(new Date());
+
+    const filasServicios = detalles.length
+      ? detalles
+        .map(
+          (item, index) => `
+            <tr>
+              <td class="center">${index + 1}</td>
+              <td>
+                <strong>${escapeHtml(item.nombre_servicio || 'Servicio clínico')}</strong>
+                ${item.descripcion
+              ? `<div class="muted">${escapeHtml(item.descripcion)}</div>`
+              : ''
+            }
+                ${item.nombre_producto
+              ? `<div class="muted"><strong>Producto/insumo:</strong> ${escapeHtml(item.nombre_producto)}</div>`
+              : ''
+            }
+              </td>
+              <td class="center">${escapeHtml(item.cantidad || 1)}</td>
+              <td class="right">${escapeHtml(formatoMoneda(item.precio_unitario))}</td>
+              <td class="right strong">${escapeHtml(formatoMoneda(item.subtotal))}</td>
+            </tr>
+            ${item.indicaciones || item.observaciones
+              ? `
+                  <tr>
+                    <td></td>
+                    <td colspan="4" class="nota">
+                      ${item.indicaciones
+                ? `<strong>Indicaciones:</strong> ${escapeHtml(item.indicaciones)}<br />`
+                : ''
+              }
+                      ${item.observaciones
+                ? `<strong>Observaciones:</strong> ${escapeHtml(item.observaciones)}`
+                : ''
+              }
+                    </td>
+                  </tr>
+                `
+              : ''
+            }
+          `
+        )
+        .join('')
+      : `
+      <tr>
+        <td colspan="5" class="empty">No hay servicios registrados.</td>
+      </tr>
+    `;
+
+    return `
+    <!doctype html>
+    <html lang="es">
+      <head>
+        <meta charset="utf-8" />
+        <title>Servicio clínico ${escapeHtml(solicitud.folio_servicio || '')}</title>
+
+        <style>
+          @page {
+            size: letter portrait;
+            margin: 8mm;
+          }
+
+          * {
+            box-sizing: border-box;
+          }
+
+          html,
+          body {
+            margin: 0;
+            padding: 0;
+            background: white;
+            color: #0f172a;
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 11px;
+          }
+
+          body {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+
+          .hoja {
+            min-height: calc(279.4mm - 16mm);
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #dbe3ee;
+            border-radius: 16px;
+            overflow: hidden;
+            background: white;
+          }
+
+          .header {
+            border-bottom: 4px solid #0369a1;
+            padding: 16px 20px 14px;
+            display: grid;
+            grid-template-columns: 82px 1fr 190px;
+            gap: 16px;
+            align-items: center;
+            background: #ffffff;
+          }
+
+          .logo {
+            width: 66px;
+            height: 66px;
+            border: 1px solid #e2e8f0;
+            border-radius: 18px;
+            padding: 7px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+
+          .logo img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+          }
+
+          .marca {
+            text-align: center;
+          }
+
+          .marca h1 {
+            margin: 0;
+            font-size: 24px;
+            letter-spacing: 5px;
+            font-weight: 900;
+            color: #020617;
+          }
+
+          .marca .subtitulo {
+            margin-top: 4px;
+            font-size: 12px;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            font-weight: 900;
+            color: #0369a1;
+          }
+
+          .marca .slogan {
+            margin-top: 5px;
+            font-size: 10px;
+            font-weight: 700;
+            color: #334155;
+          }
+
+          .folio-box {
+            border: 1px solid #dbe3ee;
+            border-radius: 18px;
+            padding: 12px;
+            text-align: center;
+          }
+
+          .folio-box .label {
+            font-size: 9px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: #64748b;
+          }
+
+          .folio-box .folio {
+            margin-top: 5px;
+            font-size: 13px;
+            font-weight: 900;
+            color: #020617;
+          }
+
+          .folio-box .fecha {
+            margin-top: 4px;
+            font-size: 10px;
+            font-weight: 800;
+            color: #475569;
+          }
+
+          .contenido {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding: 14px 20px 12px;
+          }
+
+          .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+          }
+
+          .card {
+            border: 1px solid #dbe3ee;
+            border-radius: 16px;
+            padding: 12px;
+            background: white;
+          }
+
+          .card-title {
+            margin: 0 0 8px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #e2e8f0;
+            color: #075985;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            font-size: 10px;
+            font-weight: 900;
+          }
+
+          .datos {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 5px 12px;
+            line-height: 1.35;
+          }
+
+          .datos .full {
+            grid-column: 1 / -1;
+          }
+
+          .badge {
+            display: inline-block;
+            padding: 4px 9px;
+            border-radius: 999px;
+            background: #e0f2fe;
+            color: #075985;
+            font-weight: 900;
+            font-size: 9px;
+          }
+
+          .texto-box {
+            min-height: 52px;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 10px;
+            line-height: 1.35;
+            background: #f8fafc;
+          }
+
+          table {
+            width: 100%;
+            border-collapse: collapse;
+          }
+
+          th {
+            background: #f0f9ff;
+            color: #075985;
+            border: 1px solid #bae6fd;
+            padding: 7px;
+            text-align: left;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+          }
+
+          td {
+            border: 1px solid #dbe3ee;
+            padding: 7px;
+            vertical-align: top;
+            line-height: 1.35;
+          }
+
+          .center {
+            text-align: center;
+          }
+
+          .right {
+            text-align: right;
+          }
+
+          .strong {
+            font-weight: 900;
+          }
+
+          .muted {
+            margin-top: 3px;
+            color: #64748b;
+            font-size: 9.5px;
+          }
+
+          .nota {
+            background: #f8fafc;
+            color: #334155;
+            font-size: 10px;
+          }
+
+          .empty {
+            text-align: center;
+            color: #64748b;
+            background: #f8fafc;
+          }
+
+          .total-box {
+            margin-left: auto;
+            width: 230px;
+            border: 1px solid #0369a1;
+            border-radius: 14px;
+            overflow: hidden;
+          }
+
+          .total-box div {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 9px 12px;
+          }
+
+          .total-box .final {
+            background: #0369a1;
+            color: white;
+            font-size: 13px;
+            font-weight: 900;
+          }
+
+          .inferior {
+            margin-top: auto;
+            display: grid;
+            grid-template-columns: 1fr 260px;
+            gap: 12px;
+          }
+
+          .firma {
+            text-align: center;
+          }
+
+          .firma-linea {
+            height: 52px;
+            border-bottom: 1px solid #334155;
+            margin-bottom: 8px;
+          }
+
+          .firma .titulo {
+            font-size: 10px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #334155;
+          }
+
+          .firma .doctor {
+            margin-top: 4px;
+            font-size: 11px;
+            font-weight: 900;
+            color: #020617;
+          }
+
+          .firma .cedula {
+            margin-top: 2px;
+            font-size: 9px;
+            color: #64748b;
+          }
+
+          .footer {
+            border-top: 1px solid #e2e8f0;
+            padding-top: 7px;
+            text-align: center;
+            font-size: 8.5px;
+            line-height: 1.3;
+            color: #64748b;
+          }
+        </style>
+      </head>
+
+      <body>
+        <main class="hoja">
+          <header class="header">
+            <div class="logo">
+              <img src="${logoFarmacia}" alt="Farmacias Shaddai" />
+            </div>
+
+            <div class="marca">
+              <h1>FARMACIAS SHADDAI</h1>
+              <div class="subtitulo">Comprobante de servicio clínico</div>
+              <div class="slogan">Doctor Shaddai · Bienestar al alcance de todos</div>
+            </div>
+
+            <div class="folio-box">
+              <div class="label">Folio servicio</div>
+              <div class="folio">${escapeHtml(solicitud.folio_servicio || 'N/A')}</div>
+              <div class="fecha">${escapeHtml(fechaServicio)}</div>
+            </div>
+          </header>
+
+          <section class="contenido">
+            <div class="grid-2">
+              <div class="card">
+                <h2 class="card-title">Paciente</h2>
+
+                <div class="datos">
+                  <div class="full"><strong>Paciente:</strong> ${escapeHtml(solicitud.nombre_paciente || 'N/A')}</div>
+                  <div><strong>Expediente:</strong> ${escapeHtml(expediente.id_expediente || 'N/A')}</div>
+                  <div><strong>Tel:</strong> ${escapeHtml(solicitud.telefono_paciente || 'N/A')}</div>
+                  <div><strong>Edad:</strong> ${escapeHtml(solicitud.edad_paciente || 'N/A')}</div>
+                  <div><strong>Sexo:</strong> ${escapeHtml(solicitud.sexo_paciente || 'N/A')}</div>
+                  <div><strong>Estatus:</strong> <span class="badge">${escapeHtml(solicitud.estatus || 'N/A')}</span></div>
+                </div>
+              </div>
+
+              <div class="card">
+                <h2 class="card-title">Médico responsable</h2>
+
+                <div class="datos">
+                  <div class="full"><strong>Nombre:</strong> ${escapeHtml(doctor.nombre_completo || 'Doctor Shaddai')}</div>
+                  <div><strong>Especialidad:</strong> ${escapeHtml(doctor.especialidad || 'Medicina general')}</div>
+                  <div><strong>Cédula:</strong> ${escapeHtml(doctor.cedula_profesional || 'N/A')}</div>
+                  <div class="full"><strong>Fecha:</strong> ${escapeHtml(fechaServicio)}</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid-2">
+              <div class="card">
+                <h2 class="card-title">Diagnóstico / motivo</h2>
+                <div class="texto-box">${escapeHtml(solicitud.diagnostico || 'Sin diagnóstico registrado')}</div>
+              </div>
+
+              <div class="card">
+                <h2 class="card-title">Observaciones</h2>
+                <div class="texto-box">${escapeHtml(solicitud.observaciones || 'Sin observaciones')}</div>
+              </div>
+            </div>
+
+            <div class="card">
+              <h2 class="card-title">Servicios realizados / cobrados</h2>
+
+              <table>
+                <thead>
+                  <tr>
+                    <th class="center">#</th>
+                    <th>Servicio</th>
+                    <th class="center">Cant.</th>
+                    <th class="right">Precio</th>
+                    <th class="right">Subtotal</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${filasServicios}
+                </tbody>
+              </table>
+
+              <div class="total-box" style="margin-top:12px;">
+                <div class="final">
+                  <span>Total</span>
+                  <span>${escapeHtml(formatoMoneda(solicitud.total))}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="inferior">
+              <div class="card">
+                <h2 class="card-title">Nota</h2>
+                <div class="texto-box">
+                  Este comprobante corresponde al registro clínico del servicio solicitado y enviado a caja para su cobro.
+                </div>
+              </div>
+
+              <div class="card firma">
+                <div class="firma-linea"></div>
+                <div class="titulo">Firma / responsable</div>
+                <div class="doctor">${escapeHtml(doctor.nombre_completo || 'Doctor Shaddai')}</div>
+                <div class="cedula">Cédula: ${escapeHtml(doctor.cedula_profesional || 'N/A')}</div>
+              </div>
+            </div>
+
+            <div class="footer">
+              Documento generado digitalmente por Farmacias Shaddai. Uso interno para seguimiento clínico y administrativo del servicio.
+            </div>
+          </section>
+        </main>
+
+        <script>
+          window.onload = function () {
+            const imagenes = Array.from(document.images || []);
+
+            Promise.all(
+              imagenes.map(function (img) {
+                if (img.complete) return Promise.resolve();
+
+                return new Promise(function (resolve) {
+                  img.onload = resolve;
+                  img.onerror = resolve;
+                });
+              })
+            ).then(function () {
+              setTimeout(function () {
+                window.focus();
+                window.print();
+              }, 350);
+            });
+          };
+        </script>
+      </body>
+    </html>
+  `;
+  };
+
+  const reimprimirServicioClinico = async (doc) => {
+  const idSolicitud = doc?.id_origen || doc?.id;
+
+  if (!idSolicitud) {
+    Swal.fire({
+      icon: 'error',
+      title: 'Sin ID de servicio',
+      text: 'No se encontró el ID de origen para consultar el servicio clínico.',
+    });
+
+    return;
+  }
+
+  try {
+    const { data } = await api.get(`/doctor-shaddai/servicios-clinicos/${idSolicitud}`);
+
+    if (!data.ok) {
+      throw new Error(data.mensaje || 'No se pudo obtener el servicio clínico.');
+    }
+
+    const solicitud = data.solicitud || {};
+    const detalles = data.detalles || [];
+
+    const servicioGenerado = mapearServicioClinicoParaImpresion({
+      doc,
+      solicitud,
+      detalles,
+    });
+
+    const docCompleto = {
+      ...doc,
+      data: {
+        ...(doc.data || {}),
+        ...solicitud,
+      },
+      metadata: {
+        ...normalizarMetadata(doc.metadata),
+        ...solicitud,
+        servicioGenerado,
+      },
+    };
+
+    setDocumentoSeleccionado(docCompleto);
+
+    const html = generarHtmlServicioClinicoShaddai({
+      servicioGenerado,
+    });
+
+    abrirHtmlImpresion(
+      html,
+      `Servicio clínico ${solicitud.folio_servicio || doc.folio || ''}`
+    );
+  } catch (error) {
+    console.error('Error al reimprimir servicio clínico:', error);
+
+    Swal.fire({
+      icon: 'error',
+      title: 'No se pudo reimprimir',
+      text:
+        error.response?.data?.mensaje ||
+        error.message ||
+        'No se pudo consultar el servicio clínico completo.',
+    });
+  }
+};
+
   const reimprimirDocumento = async (doc) => {
     if (!doc) return;
 
@@ -2434,6 +3777,11 @@ const DoctorFilaEspera = () => {
     try {
       if (doc.tipo === 'RECETA') {
         await reimprimirRecetaMedica(doc);
+        return;
+      }
+
+      if (doc.tipo === 'SERVICIO_CLINICO') {
+        await reimprimirServicioClinico(doc);
         return;
       }
 
@@ -2536,6 +3884,163 @@ const DoctorFilaEspera = () => {
         mapearLaboratorioParaImpresion(documentoSeleccionado);
 
       return <LaboratorioImprimible solicitud={solicitudLaboratorio} />;
+    }
+
+    if (documentoSeleccionado.tipo === 'SERVICIO_CLINICO') {
+      const metadata = normalizarMetadata(documentoSeleccionado.metadata);
+
+      const servicioGenerado =
+        metadata?.servicioGenerado ||
+        mapearServicioClinicoParaImpresion({
+          doc: documentoSeleccionado,
+          solicitud: documentoSeleccionado.data || metadata || {},
+          detalles: documentoSeleccionado.data?.detalles || [],
+        });
+
+      const solicitud = servicioGenerado.solicitud || {};
+      const detalles = servicioGenerado.detalles || [];
+
+      const totalServicio = Number(solicitud.total || 0).toLocaleString('es-MX', {
+        style: 'currency',
+        currency: 'MXN',
+      });
+
+      return (
+        <div className="rounded-3xl border border-sky-100 bg-white p-5 shadow-sm">
+          <div className="mb-5 flex flex-wrap items-center gap-2">
+            <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-black text-sky-700">
+              SERVICIO_CLINICO
+            </span>
+
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-black text-slate-700">
+              {solicitud.folio_servicio || documentoSeleccionado.folio || 'Sin folio'}
+            </span>
+
+            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700">
+              {solicitud.estatus || documentoSeleccionado.estatus || 'N/A'}
+            </span>
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-2">
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <p className="text-xs font-black uppercase tracking-wide text-slate-400">
+                Paciente
+              </p>
+
+              <p className="mt-1 text-lg font-black text-slate-900">
+                {solicitud.nombre_paciente || 'N/A'}
+              </p>
+
+              <p className="mt-1 text-sm text-slate-600">
+                Tel: {solicitud.telefono_paciente || 'N/A'} · Edad:{' '}
+                {solicitud.edad_paciente || 'N/A'} · Sexo:{' '}
+                {solicitud.sexo_paciente || 'N/A'}
+              </p>
+            </div>
+
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <p className="text-xs font-black uppercase tracking-wide text-slate-400">
+                Total
+              </p>
+
+              <p className="mt-1 text-2xl font-black text-sky-700">
+                {totalServicio}
+              </p>
+
+              <p className="mt-1 text-sm text-slate-600">
+                Folio: {solicitud.folio_servicio || documentoSeleccionado.folio || 'N/A'}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-4 xl:grid-cols-2">
+            <div className="rounded-2xl border border-slate-100 p-4">
+              <p className="text-sm font-black text-slate-800">
+                Diagnóstico / motivo
+              </p>
+
+              <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">
+                {solicitud.diagnostico || 'Sin diagnóstico registrado'}
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-100 p-4">
+              <p className="text-sm font-black text-slate-800">
+                Observaciones
+              </p>
+
+              <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">
+                {solicitud.observaciones || 'Sin observaciones'}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-5 overflow-hidden rounded-2xl border border-slate-100">
+            <div className="border-b border-slate-100 bg-sky-50 px-4 py-3">
+              <p className="text-sm font-black text-sky-800">
+                Servicios de la solicitud
+              </p>
+            </div>
+
+            {detalles.length === 0 ? (
+              <div className="p-4 text-sm text-slate-500">
+                Para ver el detalle completo, presiona <strong>Reimprimir</strong>.
+                Se consultará la solicitud original.
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {detalles.map((item, index) => (
+                  <div key={item.id_detalle_servicio || index} className="p-4">
+                    <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                      <div>
+                        <p className="font-black text-slate-900">
+                          {index + 1}. {item.nombre_servicio || 'Servicio clínico'}
+                        </p>
+
+                        {item.descripcion && (
+                          <p className="mt-1 text-sm text-slate-500">
+                            {item.descripcion}
+                          </p>
+                        )}
+
+                        {item.indicaciones && (
+                          <p className="mt-1 text-sm text-slate-600">
+                            <strong>Indicaciones:</strong> {item.indicaciones}
+                          </p>
+                        )}
+
+                        {item.observaciones && (
+                          <p className="mt-1 text-sm text-slate-600">
+                            <strong>Observaciones:</strong> {item.observaciones}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="shrink-0 text-right">
+                        <p className="text-sm font-bold text-slate-600">
+                          Cantidad: {item.cantidad || 1}
+                        </p>
+
+                        <p className="text-sm font-black text-sky-700">
+                          {Number(item.subtotal || 0).toLocaleString('es-MX', {
+                            style: 'currency',
+                            currency: 'MXN',
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="mt-5 rounded-2xl border border-dashed border-sky-200 bg-sky-50 p-4 text-sm text-sky-800">
+            Usa <strong>Reimprimir</strong> para generar el comprobante formal del
+            servicio clínico con el diseño nuevo.
+          </div>
+        </div>
+      );
     }
 
     if (
