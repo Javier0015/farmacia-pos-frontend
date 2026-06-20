@@ -49,7 +49,6 @@ const denominacionesCaja = [
   { tipo: 'Billete', valor: 100 },
   { tipo: 'Billete', valor: 50 },
   { tipo: 'Billete', valor: 20 },
-  { tipo: 'Moneda', valor: 20 },
   { tipo: 'Moneda', valor: 10 },
   { tipo: 'Moneda', valor: 5 },
   { tipo: 'Moneda', valor: 2 },
@@ -67,6 +66,13 @@ const normalizarMetodoPago = (metodo) => {
 const numeroSeguro = (valor) => {
   const n = Number(valor);
   return Number.isFinite(n) ? n : 0;
+};
+
+const calcularTotalConteoEfectivo = (conteo = {}) => {
+  return denominacionesCaja.reduce((acc, denominacion) => {
+    const cantidad = Number(conteo[denominacion.valor] || 0);
+    return acc + cantidad * Number(denominacion.valor);
+  }, 0);
 };
 
 const obtenerPrimerValorNumerico = (objeto, campos = []) => {
@@ -680,6 +686,159 @@ function TotalRow({ label, value, strong = false, danger = false }) {
     </div>
   );
 }
+
+function CalculadoraEfectivo({
+  conteoEfectivo,
+  totalConteoEfectivo,
+  formatoMoneda,
+  onChange,
+  onClear,
+  onApply,
+  titulo = 'Calculadora de efectivo',
+  descripcion = 'Captura cuántos billetes y monedas tienes para calcular el monto contado.',
+  labelTotal = 'Total contado',
+  textoBotonAplicar = 'Usar total contado',
+}) {
+  return (
+    <div className="rounded-2xl sm:rounded-3xl border border-slate-100 bg-slate-50 p-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+        <div className="min-w-0">
+          <h3 className="font-bold text-slate-800 flex items-center gap-2">
+            <Calculator size={19} className="shrink-0" />
+            {titulo}
+          </h3>
+          <p className="text-sm text-slate-500 leading-relaxed">
+            {descripcion}
+          </p>
+        </div>
+
+        <div className="sm:text-right rounded-2xl bg-white px-4 py-3 border border-slate-100">
+          <p className="text-xs text-slate-500">{labelTotal}</p>
+          <p className="text-2xl font-bold text-sky-700">
+            {formatoMoneda(totalConteoEfectivo)}
+          </p>
+        </div>
+      </div>
+
+      <div className="md:hidden space-y-2">
+        {denominacionesCaja.map((denominacion) => {
+          const cantidad = Number(conteoEfectivo[denominacion.valor] || 0);
+          const importe = cantidad * Number(denominacion.valor);
+
+          return (
+            <div
+              key={`${denominacion.tipo}-mobile-${denominacion.valor}`}
+              className="rounded-2xl bg-white border border-slate-100 p-3"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs text-slate-500">
+                    {denominacion.tipo}
+                  </p>
+                  <p className="font-bold text-slate-800">
+                    {formatoMoneda(denominacion.valor)}
+                  </p>
+                </div>
+
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={conteoEfectivo[denominacion.valor] || ''}
+                  onChange={(e) => onChange(denominacion.valor, e.target.value)}
+                  className="w-24 px-3 py-2 text-center rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  placeholder="0"
+                />
+              </div>
+
+              <div className="mt-2 flex justify-between gap-3 text-sm">
+                <span className="text-slate-500">Importe</span>
+                <span className="font-bold text-slate-700">
+                  {formatoMoneda(importe)}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="hidden md:block overflow-x-auto">
+        <table className="w-full min-w-[520px]">
+          <thead>
+            <tr className="border-b border-slate-200">
+              <th className="py-2 text-left text-xs font-bold text-slate-500 uppercase">
+                Tipo
+              </th>
+              <th className="py-2 text-right text-xs font-bold text-slate-500 uppercase">
+                Denominación
+              </th>
+              <th className="py-2 text-center text-xs font-bold text-slate-500 uppercase">
+                Cantidad
+              </th>
+              <th className="py-2 text-right text-xs font-bold text-slate-500 uppercase">
+                Importe
+              </th>
+            </tr>
+          </thead>
+
+          <tbody className="divide-y divide-slate-200">
+            {denominacionesCaja.map((denominacion) => {
+              const cantidad = Number(conteoEfectivo[denominacion.valor] || 0);
+              const importe = cantidad * Number(denominacion.valor);
+
+              return (
+                <tr key={`${denominacion.tipo}-${denominacion.valor}`}>
+                  <td className="py-2 text-sm font-semibold text-slate-700">
+                    {denominacion.tipo}
+                  </td>
+
+                  <td className="py-2 text-right text-sm font-bold text-slate-800">
+                    {formatoMoneda(denominacion.valor)}
+                  </td>
+
+                  <td className="py-2 text-center">
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={conteoEfectivo[denominacion.valor] || ''}
+                      onChange={(e) => onChange(denominacion.valor, e.target.value)}
+                      className="w-24 px-3 py-2 text-center rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                      placeholder="0"
+                    />
+                  </td>
+
+                  <td className="py-2 text-right text-sm font-bold text-slate-700">
+                    {formatoMoneda(importe)}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <button
+          type="button"
+          onClick={onClear}
+          className="px-4 py-3 rounded-2xl bg-white hover:bg-slate-100 text-slate-700 font-bold border border-slate-200 transition"
+        >
+          Limpiar conteo
+        </button>
+
+        <button
+          type="button"
+          onClick={onApply}
+          className="px-4 py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold transition"
+        >
+          {textoBotonAplicar}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function Caja() {
   const { usuario } = useAuth();
 
@@ -707,7 +866,8 @@ export default function Caja() {
   const [montoInicial, setMontoInicial] = useState('');
   const [montoFinalReal, setMontoFinalReal] = useState('');
   const [observacionesCierre, setObservacionesCierre] = useState('');
-  const [conteoEfectivo, setConteoEfectivo] = useState({});
+  const [conteoEfectivoApertura, setConteoEfectivoApertura] = useState({});
+  const [conteoEfectivoCierre, setConteoEfectivoCierre] = useState({});
   const [formMovimiento, setFormMovimiento] = useState(movimientoInicial);
 
   const [reporteCierre, setReporteCierre] = useState(null);
@@ -764,12 +924,13 @@ export default function Caja() {
       ? 0
       : Number(montoFinalReal || 0) - Number(resumen?.monto_final_sistema || 0);
 
-  const totalConteoEfectivo = useMemo(() => {
-    return denominacionesCaja.reduce((acc, denominacion) => {
-      const cantidad = Number(conteoEfectivo[denominacion.valor] || 0);
-      return acc + cantidad * Number(denominacion.valor);
-    }, 0);
-  }, [conteoEfectivo]);
+  const totalConteoEfectivoApertura = useMemo(() => {
+    return calcularTotalConteoEfectivo(conteoEfectivoApertura);
+  }, [conteoEfectivoApertura]);
+
+  const totalConteoEfectivoCierre = useMemo(() => {
+    return calcularTotalConteoEfectivo(conteoEfectivoCierre);
+  }, [conteoEfectivoCierre]);
 
   const cargarSucursales = async () => {
     try {
@@ -1025,6 +1186,12 @@ export default function Caja() {
     await cargarSesionAbierta();
   };
 
+  const abrirModalAbrir = () => {
+    setConteoEfectivoApertura({});
+    setMontoInicial('');
+    setModalAbrir(true);
+  };
+
   const abrirCaja = async (e) => {
     e.preventDefault();
 
@@ -1066,6 +1233,7 @@ export default function Caja() {
 
         setModalAbrir(false);
         setMontoInicial('');
+        setConteoEfectivoApertura({});
         await cargarSesionAbierta();
       }
     } catch (error) {
@@ -1237,7 +1405,7 @@ export default function Caja() {
         setModalCerrar(false);
         setMontoFinalReal('');
         setObservacionesCierre('');
-        setConteoEfectivo({});
+        setConteoEfectivoCierre({});
         setSesionAbierta(null);
         setResumenCaja(null);
         setMovimientos([]);
@@ -1303,7 +1471,7 @@ export default function Caja() {
 
     await cargarResumen();
 
-    setConteoEfectivo({});
+    setConteoEfectivoCierre({});
     setMontoFinalReal('');
     setObservacionesCierre('');
     setModalCerrar(true);
@@ -1323,21 +1491,43 @@ export default function Caja() {
     setModalMovimientos(true);
   };
 
-  const cambiarConteoEfectivo = (valor, cantidad) => {
-    const cantidadLimpia = Math.max(Number(cantidad || 0), 0);
+  const normalizarCantidadConteo = (cantidad) => {
+    return Math.max(Number(cantidad || 0), 0);
+  };
 
-    setConteoEfectivo((prev) => ({
+  const cambiarConteoEfectivoApertura = (valor, cantidad) => {
+    const cantidadLimpia = normalizarCantidadConteo(cantidad);
+
+    setConteoEfectivoApertura((prev) => ({
       ...prev,
       [valor]: cantidadLimpia,
     }));
   };
 
-  const aplicarConteoEfectivo = () => {
-    setMontoFinalReal(totalConteoEfectivo.toFixed(2));
+  const cambiarConteoEfectivoCierre = (valor, cantidad) => {
+    const cantidadLimpia = normalizarCantidadConteo(cantidad);
+
+    setConteoEfectivoCierre((prev) => ({
+      ...prev,
+      [valor]: cantidadLimpia,
+    }));
   };
 
-  const limpiarConteoEfectivo = () => {
-    setConteoEfectivo({});
+  const aplicarConteoEfectivoApertura = () => {
+    setMontoInicial(totalConteoEfectivoApertura.toFixed(2));
+  };
+
+  const aplicarConteoEfectivoCierre = () => {
+    setMontoFinalReal(totalConteoEfectivoCierre.toFixed(2));
+  };
+
+  const limpiarConteoEfectivoApertura = () => {
+    setConteoEfectivoApertura({});
+    setMontoInicial('');
+  };
+
+  const limpiarConteoEfectivoCierre = () => {
+    setConteoEfectivoCierre({});
     setMontoFinalReal('');
   };
 
@@ -1391,7 +1581,7 @@ export default function Caja() {
 
             {!estadoAbierta ? (
               <button
-                onClick={() => setModalAbrir(true)}
+                onClick={abrirModalAbrir}
                 disabled={!idCaja}
                 className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold shadow-lg shadow-sky-900/20 transition disabled:opacity-50"
               >
@@ -1833,14 +2023,14 @@ export default function Caja() {
       )}
 
       {modalAbrir && (
-        <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center px-3 sm:px-4 py-4 sm:py-8 overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-start justify-center px-3 sm:px-4 py-4 sm:py-8 overflow-y-auto">
           <div
             className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm"
             onClick={() => setModalAbrir(false)}
           />
 
-          <div className="relative bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden my-auto">
-            <div className="px-4 sm:px-6 py-5 border-b border-slate-100 flex items-start justify-between gap-4">
+          <div className="relative bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-4xl my-auto overflow-hidden max-h-[92vh] flex flex-col">
+            <div className="px-4 sm:px-6 py-5 border-b border-slate-100 flex items-start justify-between gap-4 shrink-0">
               <div className="min-w-0">
                 <h2 className="text-lg sm:text-xl font-bold text-slate-800">
                   Abrir caja
@@ -1858,28 +2048,54 @@ export default function Caja() {
               </button>
             </div>
 
-            <form onSubmit={abrirCaja}>
-              <div className="p-4 sm:p-6 space-y-5">
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-2">
-                    Monto inicial *
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={montoInicial}
-                    onChange={(e) => setMontoInicial(e.target.value)}
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
-                    placeholder="0.00"
-                  />
+            <form onSubmit={abrirCaja} className="flex flex-col flex-1 min-h-0">
+              <div className="p-4 sm:p-6 space-y-5 overflow-y-auto">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 mb-2">
+                      Monto inicial *
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={montoInicial}
+                      onChange={(e) => setMontoInicial(e.target.value)}
+                      className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                      placeholder="Usa la calculadora de efectivo"
+                    />
+                    <p className="text-xs text-slate-500 mt-2">
+                      Puedes capturarlo manualmente o usar el total contado de la calculadora.
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl bg-sky-50 border border-sky-100 p-4">
+                    <p className="text-sm text-slate-500">Total contado inicial</p>
+                    <p className="text-2xl font-bold text-sky-700 mt-1 break-words">
+                      {formatoMoneda(totalConteoEfectivoApertura)}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-2">
+                      Este monto representa el efectivo con el que comienza la caja.
+                    </p>
+                  </div>
                 </div>
 
-                <div className="rounded-2xl bg-sky-50 border border-sky-100 p-4 text-sm text-sky-800">
-                  Este monto representa el efectivo inicial con el que comienza la caja.
-                </div>
+                <CalculadoraEfectivo
+                  conteoEfectivo={conteoEfectivoApertura}
+                  totalConteoEfectivo={totalConteoEfectivoApertura}
+                  formatoMoneda={formatoMoneda}
+                  onChange={cambiarConteoEfectivoApertura}
+                  onClear={limpiarConteoEfectivoApertura}
+                  onApply={aplicarConteoEfectivoApertura}
+                  titulo="Calculadora de efectivo inicial"
+                  descripcion="Captura cuántos billetes y monedas tienes al iniciar la caja."
+                  labelTotal="Total inicial contado"
+                  textoBotonAplicar="Usar como monto inicial"
+                />
+
+             
               </div>
 
-              <div className="px-4 sm:px-6 py-5 flex flex-col sm:flex-row justify-end gap-3 border-t border-slate-100">
+              <div className="px-4 sm:px-6 py-5 flex flex-col sm:flex-row justify-end gap-3 border-t border-slate-100 bg-white shrink-0">
                 <button
                   type="button"
                   onClick={() => setModalAbrir(false)}
@@ -2136,152 +2352,18 @@ export default function Caja() {
                   </div>
                 )}
 
-                <div className="rounded-2xl sm:rounded-3xl border border-slate-100 bg-slate-50 p-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-                    <div className="min-w-0">
-                      <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                        <Calculator size={19} className="shrink-0" />
-                        Calculadora de efectivo
-                      </h3>
-                      <p className="text-sm text-slate-500 leading-relaxed">
-                        Captura cuántos billetes y monedas tienes para calcular el monto contado.
-                      </p>
-                    </div>
-
-                    <div className="sm:text-right rounded-2xl bg-white px-4 py-3 border border-slate-100">
-                      <p className="text-xs text-slate-500">Total contado</p>
-                      <p className="text-2xl font-bold text-sky-700">
-                        {formatoMoneda(totalConteoEfectivo)}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="md:hidden space-y-2">
-                    {denominacionesCaja.map((denominacion) => {
-                      const cantidad = Number(conteoEfectivo[denominacion.valor] || 0);
-                      const importe = cantidad * Number(denominacion.valor);
-
-                      return (
-                        <div
-                          key={`${denominacion.tipo}-mobile-${denominacion.valor}`}
-                          className="rounded-2xl bg-white border border-slate-100 p-3"
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <div>
-                              <p className="text-xs text-slate-500">
-                                {denominacion.tipo}
-                              </p>
-                              <p className="font-bold text-slate-800">
-                                {formatoMoneda(denominacion.valor)}
-                              </p>
-                            </div>
-
-                            <input
-                              type="number"
-                              min="0"
-                              step="1"
-                              value={conteoEfectivo[denominacion.valor] || ''}
-                              onChange={(e) =>
-                                cambiarConteoEfectivo(
-                                  denominacion.valor,
-                                  e.target.value
-                                )
-                              }
-                              className="w-24 px-3 py-2 text-center rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-sky-500"
-                              placeholder="0"
-                            />
-                          </div>
-
-                          <div className="mt-2 flex justify-between gap-3 text-sm">
-                            <span className="text-slate-500">Importe</span>
-                            <span className="font-bold text-slate-700">
-                              {formatoMoneda(importe)}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <div className="hidden md:block overflow-x-auto">
-                    <table className="w-full min-w-[520px]">
-                      <thead>
-                        <tr className="border-b border-slate-200">
-                          <th className="py-2 text-left text-xs font-bold text-slate-500 uppercase">
-                            Tipo
-                          </th>
-                          <th className="py-2 text-right text-xs font-bold text-slate-500 uppercase">
-                            Denominación
-                          </th>
-                          <th className="py-2 text-center text-xs font-bold text-slate-500 uppercase">
-                            Cantidad
-                          </th>
-                          <th className="py-2 text-right text-xs font-bold text-slate-500 uppercase">
-                            Importe
-                          </th>
-                        </tr>
-                      </thead>
-
-                      <tbody className="divide-y divide-slate-200">
-                        {denominacionesCaja.map((denominacion) => {
-                          const cantidad = Number(conteoEfectivo[denominacion.valor] || 0);
-                          const importe = cantidad * Number(denominacion.valor);
-
-                          return (
-                            <tr key={`${denominacion.tipo}-${denominacion.valor}`}>
-                              <td className="py-2 text-sm font-semibold text-slate-700">
-                                {denominacion.tipo}
-                              </td>
-
-                              <td className="py-2 text-right text-sm font-bold text-slate-800">
-                                {formatoMoneda(denominacion.valor)}
-                              </td>
-
-                              <td className="py-2 text-center">
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="1"
-                                  value={conteoEfectivo[denominacion.valor] || ''}
-                                  onChange={(e) =>
-                                    cambiarConteoEfectivo(
-                                      denominacion.valor,
-                                      e.target.value
-                                    )
-                                  }
-                                  className="w-24 px-3 py-2 text-center rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-sky-500"
-                                  placeholder="0"
-                                />
-                              </td>
-
-                              <td className="py-2 text-right text-sm font-bold text-slate-700">
-                                {formatoMoneda(importe)}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      onClick={limpiarConteoEfectivo}
-                      className="px-4 py-3 rounded-2xl bg-white hover:bg-slate-100 text-slate-700 font-bold border border-slate-200 transition"
-                    >
-                      Limpiar conteo
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={aplicarConteoEfectivo}
-                      className="px-4 py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold transition"
-                    >
-                      Usar total contado
-                    </button>
-                  </div>
-                </div>
+                <CalculadoraEfectivo
+                  conteoEfectivo={conteoEfectivoCierre}
+                  totalConteoEfectivo={totalConteoEfectivoCierre}
+                  formatoMoneda={formatoMoneda}
+                  onChange={cambiarConteoEfectivoCierre}
+                  onClear={limpiarConteoEfectivoCierre}
+                  onApply={aplicarConteoEfectivoCierre}
+                  titulo="Calculadora de efectivo final"
+                  descripcion="Captura cuántos billetes y monedas tienes al cerrar la caja."
+                  labelTotal="Total final contado"
+                  textoBotonAplicar="Usar como monto final"
+                />
 
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-2">

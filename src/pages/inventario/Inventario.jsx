@@ -94,6 +94,194 @@ const movimientosPermitenNuevoLote = [
   'AJUSTE_POSITIVO',
 ];
 
+const normalizarTexto = (valor) => {
+  return String(valor || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+};
+
+function ProductoSearchSelect({
+  name,
+  value,
+  opciones = [],
+  placeholder = 'Buscar producto...',
+  emptyText = 'No se encontraron productos.',
+  disabled = false,
+  onChange,
+  getValue,
+  getTitle,
+  getSubtitle,
+  getRightText,
+}) {
+  const [textoBusqueda, setTextoBusqueda] = useState('');
+  const [abierto, setAbierto] = useState(false);
+
+  const productoSeleccionado = useMemo(() => {
+    return opciones.find(
+      (item) => String(getValue(item)) === String(value)
+    );
+  }, [opciones, value, getValue]);
+
+  useEffect(() => {
+    if (productoSeleccionado) {
+      setTextoBusqueda(getTitle(productoSeleccionado));
+    } else if (!value) {
+      setTextoBusqueda('');
+    }
+  }, [productoSeleccionado, value, getTitle]);
+
+  const opcionesFiltradas = useMemo(() => {
+    const texto = normalizarTexto(textoBusqueda);
+
+    if (!texto) {
+      return opciones.slice(0, 25);
+    }
+
+    return opciones
+      .filter((item) => {
+        const busqueda = normalizarTexto([
+          getTitle(item),
+          getSubtitle?.(item),
+          getRightText?.(item),
+          item.codigo_barras,
+          item.codigo,
+          item.laboratorio,
+          item.presentacion,
+          item.categoria,
+        ].filter(Boolean).join(' '));
+
+        return busqueda.includes(texto);
+      })
+      .slice(0, 25);
+  }, [textoBusqueda, opciones, getTitle, getSubtitle, getRightText]);
+
+  const seleccionarProducto = (item) => {
+    const nuevoValor = getValue(item);
+
+    onChange({
+      target: {
+        name,
+        value: nuevoValor,
+      },
+    });
+
+    setTextoBusqueda(getTitle(item));
+    setAbierto(false);
+  };
+
+  const limpiarSeleccion = () => {
+    onChange({
+      target: {
+        name,
+        value: '',
+      },
+    });
+
+    setTextoBusqueda('');
+    setAbierto(false);
+  };
+
+  return (
+    <div className="relative">
+      <div className="relative">
+        <Search
+          className="absolute left-4 top-3.5 text-slate-400"
+          size={20}
+        />
+
+        <input
+          type="text"
+          value={textoBusqueda}
+          disabled={disabled}
+          onChange={(e) => {
+            setTextoBusqueda(e.target.value);
+            setAbierto(true);
+
+            if (value) {
+              onChange({
+                target: {
+                  name,
+                  value: '',
+                },
+              });
+            }
+          }}
+          onFocus={() => setAbierto(true)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              setAbierto(false);
+            }
+          }}
+          className="w-full min-w-0 pl-12 pr-12 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white disabled:bg-slate-100 disabled:cursor-not-allowed"
+          placeholder={placeholder}
+        />
+
+        {(textoBusqueda || value) && !disabled && (
+          <button
+            type="button"
+            onClick={limpiarSeleccion}
+            className="absolute right-3 top-2.5 flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200"
+          >
+            <X size={17} />
+          </button>
+        )}
+      </div>
+
+      {abierto && !disabled && (
+        <div className="absolute left-0 right-0 top-full z-[80] mt-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/15">
+          {opcionesFiltradas.length === 0 ? (
+            <div className="px-4 py-3 text-sm font-semibold text-slate-500">
+              {emptyText}
+            </div>
+          ) : (
+            <div className="max-h-72 overflow-y-auto py-2">
+              {opcionesFiltradas.map((item) => {
+                const itemValue = getValue(item);
+                const seleccionado = String(itemValue) === String(value);
+
+                return (
+                  <button
+                    key={itemValue}
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      seleccionarProducto(item);
+                    }}
+                    className={`flex w-full items-start justify-between gap-4 px-4 py-3 text-left transition ${seleccionado
+                      ? 'bg-sky-50 text-sky-800'
+                      : 'hover:bg-slate-50 text-slate-700'
+                      }`}
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-black">
+                        {getTitle(item)}
+                      </p>
+
+                      {getSubtitle && (
+                        <p className="mt-0.5 text-xs font-semibold text-slate-500">
+                          {getSubtitle(item)}
+                        </p>
+                      )}
+                    </div>
+
+                    {getRightText && (
+                      <span className="shrink-0 rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">
+                        {getRightText(item)}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Inventario() {
   const { usuario } = useAuth();
 
@@ -323,10 +511,10 @@ export default function Inventario() {
   };
 
   useEffect(() => {
-  if (modalMovimientos) {
-    cargarMovimientos();
-  }
-}, [fechaInicio, fechaFin]);
+    if (modalMovimientos) {
+      cargarMovimientos();
+    }
+  }, [fechaInicio, fechaFin]);
 
   const cargarMovimientos = async () => {
     if (!idSucursal) return;
@@ -1159,7 +1347,7 @@ export default function Inventario() {
               </div>
 
               <button
-                 onClick={buscarInventarioYMovimientos}
+                onClick={buscarInventarioYMovimientos}
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition"
               >
                 <RefreshCw size={19} className={cargando ? 'animate-spin' : ''} />
@@ -1208,7 +1396,7 @@ export default function Inventario() {
           </p>
         </div>
 
-       
+
       </section>
 
       <section className="bg-white rounded-2xl sm:rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
@@ -1559,20 +1747,26 @@ export default function Inventario() {
                   <label className="block text-sm font-bold text-slate-700 mb-2">
                     Producto *
                   </label>
-                  <select
+
+                  <ProductoSearchSelect
                     name="id_producto"
                     value={formAsignar.id_producto}
+                    opciones={productosSinInventario}
+                    placeholder="Buscar producto por nombre o código..."
+                    emptyText="No hay productos disponibles para asignar."
                     onChange={handleAsignarChange}
-                    className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
-                  >
-                    <option value="">Selecciona producto</option>
-                    {productosSinInventario.map((producto) => (
-                      <option key={producto.id_producto} value={producto.id_producto}>
-                        {producto.nombre}{' '}
-                        {producto.codigo_barras ? `· ${producto.codigo_barras}` : ''}
-                      </option>
-                    ))}
-                  </select>
+                    getValue={(producto) => producto.id_producto}
+                    getTitle={(producto) => producto.nombre || 'Producto sin nombre'}
+                    getSubtitle={(producto) =>
+                      [
+                        producto.codigo_barras || 'Sin código',
+                        producto.laboratorio,
+                        producto.presentacion,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')
+                    }
+                  />
 
                   {productosSinInventario.length === 0 && (
                     <p className="text-sm text-amber-700 mt-2">
@@ -1758,19 +1952,27 @@ export default function Inventario() {
                   <label className="block text-sm font-bold text-slate-700 mb-2">
                     Producto *
                   </label>
-                  <select
+                  <ProductoSearchSelect
                     name="id_producto"
                     value={formMovimiento.id_producto}
+                    opciones={inventario}
+                    placeholder="Buscar producto en inventario..."
+                    emptyText="No se encontraron productos en inventario."
                     onChange={handleMovimientoChange}
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
-                  >
-                    <option value="">Selecciona producto</option>
-                    {inventario.map((item) => (
-                      <option key={item.id_producto} value={item.id_producto}>
-                        {item.producto} · Stock: {formatoNumero(item.stock_actual)}
-                      </option>
-                    ))}
-                  </select>
+                    getValue={(item) => item.id_producto}
+                    getTitle={(item) => item.producto || item.nombre || 'Producto sin nombre'}
+                    getSubtitle={(item) =>
+                      [
+                        item.codigo_barras || 'Sin código',
+                        item.laboratorio,
+                        item.presentacion,
+                        item.categoria,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')
+                    }
+                    getRightText={(item) => `Stock: ${formatoNumero(item.stock_actual)}`}
+                  />
                 </div>
 
                 <div>

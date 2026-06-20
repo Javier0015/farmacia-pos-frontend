@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import Swal from 'sweetalert2';
 import {
   Bell,
-  Plus,
   Send,
   Trash2,
   AlertTriangle,
@@ -24,7 +23,8 @@ const alertaInicial = {
   titulo: '',
   mensaje: '',
   prioridad: 'NORMAL',
-  destino_tipo: 'TODOS',
+  // Más seguro que enviar una alerta global por omisión.
+  destino_tipo: 'SUCURSAL',
   destino_rol: '',
   id_sucursal: '',
 };
@@ -36,7 +36,20 @@ const rolesDisponibles = [
   { value: 'ALMACEN', label: 'Almacén' },
   { value: 'COMPRAS', label: 'Compras' },
   { value: 'LECTURA', label: 'Lectura' },
+  { value: 'DOCTOR_SHADDAI', label: 'Doctor Shaddai' },
 ];
+
+const esActivo = (valor) => {
+  return valor === true || valor === 'true' || valor === 1 || valor === '1';
+};
+
+const requiereRol = (tipoDestino) => {
+  return ['ROL', 'ROL_SUCURSAL'].includes(tipoDestino);
+};
+
+const requiereSucursal = (tipoDestino) => {
+  return ['SUCURSAL', 'ROL_SUCURSAL'].includes(tipoDestino);
+};
 
 export default function Alertas() {
   const { usuario } = useAuth();
@@ -54,16 +67,21 @@ export default function Alertas() {
     return filtrarSucursalesPorRol(usuario, sucursales);
   }, [usuario, sucursales]);
 
+  const esVistaAdministrativa = puedeVerTodasSucursales;
+
   const cargarSucursales = async () => {
     try {
       const { data } = await api.get('/sucursales');
 
       if (data.ok) {
-        const activas = (data.sucursales || []).filter((s) => s.activo);
+        const activas = (data.sucursales || []).filter((sucursal) =>
+          esActivo(sucursal.activo)
+        );
+
         setSucursales(activas);
       }
     } catch (error) {
-      console.error(error);
+      console.error('Error al cargar sucursales:', error);
 
       Swal.fire({
         icon: 'error',
@@ -77,13 +95,24 @@ export default function Alertas() {
     try {
       setCargando(true);
 
-      const { data } = await api.get('/alertas');
+      /*
+        SUPER_ADMIN conserva la vista administrativa/global para gestionar el
+        historial. Los demás usuarios consultan exclusivamente sus alertas
+        filtradas por rol, sucursal y usuario destino.
+      */
+      const endpoint = esVistaAdministrativa
+        ? '/alertas'
+        : '/alertas/mis-alertas';
+
+      const { data } = await api.get(endpoint);
 
       if (data.ok) {
         setAlertas(data.alertas || []);
+      } else {
+        setAlertas([]);
       }
     } catch (error) {
-      console.error(error);
+      console.error('Error al cargar alertas:', error);
 
       Swal.fire({
         icon: 'error',
@@ -100,10 +129,32 @@ export default function Alertas() {
   useEffect(() => {
     cargarSucursales();
     cargarAlertas();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [esVistaAdministrativa]);
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
+  /*
+    Para un usuario asignado a una sola sucursal, la sucursal se precarga.
+    Así se evita que una alerta operativa termine sin destino de sucursal.
+  */
+  useEffect(() => {
+    if (
+      !puedeVerTodasSucursales &&
+      sucursalesDisponibles.length === 1 &&
+      !formAlerta.id_sucursal
+    ) {
+      setFormAlerta((prev) => ({
+        ...prev,
+        id_sucursal: String(sucursalesDisponibles[0].id_sucursal),
+      }));
+    }
+  }, [
+    puedeVerTodasSucursales,
+    sucursalesDisponibles,
+    formAlerta.id_sucursal,
+  ]);
+
+  const handleChange = (event) => {
+    const { name, value } = event.target;
 
     setFormAlerta((prev) => {
       const nuevo = {
@@ -114,6 +165,14 @@ export default function Alertas() {
       if (name === 'destino_tipo') {
         nuevo.destino_rol = '';
         nuevo.id_sucursal = '';
+
+        if (
+          requiereSucursal(value) &&
+          !puedeVerTodasSucursales &&
+          sucursalesDisponibles.length === 1
+        ) {
+          nuevo.id_sucursal = String(sucursalesDisponibles[0].id_sucursal);
+        }
       }
 
       return nuevo;
@@ -121,6 +180,8 @@ export default function Alertas() {
   };
 
   const validarAlerta = () => {
+    const tipoDestino = formAlerta.destino_tipo;
+
     if (!formAlerta.titulo.trim()) {
       Swal.fire({
         icon: 'warning',
@@ -139,7 +200,16 @@ export default function Alertas() {
       return false;
     }
 
-    if (formAlerta.destino_tipo === 'ROL' && !formAlerta.destino_rol) {
+    if (tipoDestino === 'TODOS' && !puedeVerTodasSucursales) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Destino no permitido',
+        text: 'Solo un superadministrador puede enviar alertas a todos los usuarios.',
+      });
+      return false;
+    }
+
+    if (requiereRol(tipoDestino) && !formAlerta.destino_rol) {
       Swal.fire({
         icon: 'warning',
         title: 'Rol obligatorio',
@@ -148,7 +218,7 @@ export default function Alertas() {
       return false;
     }
 
-    if (formAlerta.destino_tipo === 'SUCURSAL' && !formAlerta.id_sucursal) {
+    if (requiereSucursal(tipoDestino) && !formAlerta.id_sucursal) {
       Swal.fire({
         icon: 'warning',
         title: 'Sucursal obligatoria',
@@ -160,10 +230,12 @@ export default function Alertas() {
     return true;
   };
 
-  const crearAlerta = async (e) => {
-    e.preventDefault();
+  const crearAlerta = async (event) => {
+    event.preventDefault();
 
     if (!validarAlerta()) return;
+
+    const tipoDestino = formAlerta.destino_tipo;
 
     try {
       setGuardando(true);
@@ -172,16 +244,21 @@ export default function Alertas() {
         titulo: formAlerta.titulo.trim(),
         mensaje: formAlerta.mensaje.trim(),
         prioridad: formAlerta.prioridad,
-        destino_rol:
-          formAlerta.destino_tipo === 'TODOS'
-            ? 'TODOS'
-            : formAlerta.destino_tipo === 'ROL'
-              ? formAlerta.destino_rol
-              : null,
-        id_sucursal:
-          formAlerta.destino_tipo === 'SUCURSAL'
-            ? Number(formAlerta.id_sucursal)
-            : null,
+
+        /*
+          IMPORTANTE:
+          El backend espera exactamente "tipo_destino".
+          Si se omite, alertas.controller.js utiliza TODOS por defecto.
+        */
+        tipo_destino: tipoDestino,
+
+        destino_rol: requiereRol(tipoDestino)
+          ? formAlerta.destino_rol
+          : null,
+
+        id_sucursal: requiereSucursal(tipoDestino)
+          ? Number(formAlerta.id_sucursal)
+          : null,
       };
 
       const { data } = await api.post('/alertas', payload);
@@ -195,11 +272,18 @@ export default function Alertas() {
           showConfirmButton: false,
         });
 
-        setFormAlerta(alertaInicial);
+        setFormAlerta({
+          ...alertaInicial,
+          id_sucursal:
+            !puedeVerTodasSucursales && sucursalesDisponibles.length === 1
+              ? String(sucursalesDisponibles[0].id_sucursal)
+              : '',
+        });
+
         await cargarAlertas();
       }
     } catch (error) {
-      console.error(error);
+      console.error('Error al crear alerta:', error);
 
       Swal.fire({
         icon: 'error',
@@ -214,6 +298,15 @@ export default function Alertas() {
   };
 
   const desactivarAlerta = async (idAlerta) => {
+    if (!esVistaAdministrativa) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Acción no permitida',
+        text: 'Solo el superadministrador puede desactivar alertas desde esta pantalla.',
+      });
+      return;
+    }
+
     const confirmacion = await Swal.fire({
       icon: 'warning',
       title: '¿Desactivar alerta?',
@@ -241,7 +334,7 @@ export default function Alertas() {
         await cargarAlertas();
       }
     } catch (error) {
-      console.error(error);
+      console.error('Error al desactivar alerta:', error);
 
       Swal.fire({
         icon: 'error',
@@ -283,32 +376,60 @@ export default function Alertas() {
   };
 
   const obtenerDestino = (alerta) => {
-    if (alerta.id_sucursal) {
-      return alerta.sucursal || `Sucursal #${alerta.id_sucursal}`;
+    const tipoDestino = String(alerta.tipo_destino || '').toUpperCase();
+    const tieneSucursal = Boolean(alerta.id_sucursal);
+    const sucursal = alerta.sucursal || `Sucursal #${alerta.id_sucursal}`;
+
+    if (tipoDestino === 'ROL_SUCURSAL') {
+      return `${alerta.destino_rol || 'Rol'} · ${sucursal}`;
     }
 
-    if (alerta.destino_rol === 'TODOS' || !alerta.destino_rol) {
-      return 'Todos los usuarios';
+    if (tipoDestino === 'SUCURSAL' || tieneSucursal) {
+      return sucursal;
     }
 
-    return alerta.destino_rol;
+    if (tipoDestino === 'ROL' && alerta.destino_rol) {
+      return alerta.destino_rol;
+    }
+
+    if (tipoDestino === 'USUARIO') {
+      return 'Usuario específico';
+    }
+
+    return 'Todos los usuarios';
   };
+
+  const obtenerEstadoAlerta = (alerta) => {
+    if (esVistaAdministrativa) {
+      return esActivo(alerta.activa)
+        ? { texto: 'Activa', clase: 'bg-emerald-100 text-emerald-700' }
+        : { texto: 'Inactiva', clase: 'bg-slate-100 text-slate-500' };
+    }
+
+    return alerta.leida
+      ? { texto: 'Leída', clase: 'bg-slate-100 text-slate-600' }
+      : { texto: 'Sin leer', clase: 'bg-violet-100 text-violet-700' };
+  };
+
+  const totalActivas = alertas.filter((alerta) => {
+    return esVistaAdministrativa ? esActivo(alerta.activa) : !alerta.leida;
+  }).length;
 
   return (
     <div className="space-y-6">
-      <section className="rounded-3xl bg-gradient-to-r from-sky-700 to-sky-500 text-white p-6 shadow-lg shadow-sky-900/20">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+      <section className="rounded-3xl bg-gradient-to-r from-sky-700 to-sky-500 p-6 text-white shadow-lg shadow-sky-900/20">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-white/15 flex items-center justify-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15">
               <Bell size={26} />
             </div>
 
             <div>
-              <h1 className="text-2xl font-bold">
-                Alertas del sistema
-              </h1>
-              <p className="text-sky-100 text-sm">
-                Envía avisos a cajeros, administradores o sucursales específicas.
+              <h1 className="text-2xl font-bold">Alertas del sistema</h1>
+              <p className="text-sm text-sky-100">
+                {esVistaAdministrativa
+                  ? 'Gestiona avisos globales, por rol y por sucursal.'
+                  : 'Consulta las alertas dirigidas a tu rol y sucursal.'}
               </p>
             </div>
           </div>
@@ -316,36 +437,34 @@ export default function Alertas() {
           <button
             type="button"
             onClick={cargarAlertas}
-            className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-white/15 hover:bg-white/20 text-white font-bold transition"
+            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white/15 px-4 py-3 font-bold text-white transition hover:bg-white/20"
           >
-            <RefreshCw size={18} />
+            <RefreshCw size={18} className={cargando ? 'animate-spin' : ''} />
             Actualizar
           </button>
         </div>
       </section>
 
-      <section className="grid xl:grid-cols-[420px_1fr] gap-6">
+      <section className="grid gap-6 xl:grid-cols-[420px_1fr]">
         <form
           onSubmit={crearAlerta}
-          className="bg-white rounded-3xl shadow-sm border border-slate-100 p-6 space-y-5"
+          className="space-y-5 rounded-3xl border border-slate-100 bg-white p-6 shadow-sm"
         >
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-sky-100 text-sky-700">
               <Megaphone size={23} />
             </div>
 
             <div>
-              <h2 className="text-lg font-bold text-slate-800">
-                Nueva alerta
-              </h2>
+              <h2 className="text-lg font-bold text-slate-800">Nueva alerta</h2>
               <p className="text-sm text-slate-500">
-                El mensaje aparecerá en la campana de los usuarios destino.
+                Elige explícitamente quién debe recibir el aviso.
               </p>
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">
+            <label className="mb-2 block text-sm font-bold text-slate-700">
               Título *
             </label>
             <input
@@ -353,13 +472,13 @@ export default function Alertas() {
               value={formAlerta.titulo}
               onChange={handleChange}
               maxLength={150}
-              className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+              className="w-full rounded-2xl border border-slate-200 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-sky-500"
               placeholder="Ej. Promoción del día"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">
+            <label className="mb-2 block text-sm font-bold text-slate-700">
               Mensaje *
             </label>
             <textarea
@@ -367,20 +486,20 @@ export default function Alertas() {
               value={formAlerta.mensaje}
               onChange={handleChange}
               rows="5"
-              className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 resize-none"
+              className="w-full resize-none rounded-2xl border border-slate-200 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-sky-500"
               placeholder="Escribe el mensaje que verán los usuarios..."
             />
           </div>
 
           <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">
+            <label className="mb-2 block text-sm font-bold text-slate-700">
               Prioridad
             </label>
             <select
               name="prioridad"
               value={formAlerta.prioridad}
               onChange={handleChange}
-              className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+              className="w-full rounded-2xl border border-slate-200 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-sky-500"
             >
               <option value="NORMAL">Normal</option>
               <option value="IMPORTANTE">Importante</option>
@@ -389,31 +508,34 @@ export default function Alertas() {
           </div>
 
           <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">
-              Destino
+            <label className="mb-2 block text-sm font-bold text-slate-700">
+              Destino *
             </label>
             <select
               name="destino_tipo"
               value={formAlerta.destino_tipo}
               onChange={handleChange}
-              className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+              className="w-full rounded-2xl border border-slate-200 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-sky-500"
             >
-              <option value="TODOS">Todos los usuarios</option>
+              {puedeVerTodasSucursales && (
+                <option value="TODOS">Todos los usuarios</option>
+              )}
               <option value="ROL">Por rol</option>
               <option value="SUCURSAL">Por sucursal</option>
+              <option value="ROL_SUCURSAL">Por rol y sucursal</option>
             </select>
           </div>
 
-          {formAlerta.destino_tipo === 'ROL' && (
+          {requiereRol(formAlerta.destino_tipo) && (
             <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2">
+              <label className="mb-2 block text-sm font-bold text-slate-700">
                 Rol destino *
               </label>
               <select
                 name="destino_rol"
                 value={formAlerta.destino_rol}
                 onChange={handleChange}
-                className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                className="w-full rounded-2xl border border-slate-200 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-sky-500"
               >
                 <option value="">Selecciona rol</option>
                 {rolesDisponibles.map((rol) => (
@@ -425,24 +547,24 @@ export default function Alertas() {
             </div>
           )}
 
-          {formAlerta.destino_tipo === 'SUCURSAL' && (
+          {requiereSucursal(formAlerta.destino_tipo) && (
             <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2">
+              <label className="mb-2 block text-sm font-bold text-slate-700">
                 Sucursal destino *
               </label>
               <select
                 name="id_sucursal"
                 value={formAlerta.id_sucursal}
                 onChange={handleChange}
-                disabled={!puedeVerTodasSucursales && sucursalesDisponibles.length === 1}
-                className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 disabled:bg-slate-100"
+                disabled={
+                  !puedeVerTodasSucursales &&
+                  sucursalesDisponibles.length === 1
+                }
+                className="w-full rounded-2xl border border-slate-200 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-sky-500 disabled:bg-slate-100"
               >
                 <option value="">Selecciona sucursal</option>
                 {sucursalesDisponibles.map((sucursal) => (
-                  <option
-                    key={sucursal.id_sucursal}
-                    value={sucursal.id_sucursal}
-                  >
+                  <option key={sucursal.id_sucursal} value={sucursal.id_sucursal}>
                     {sucursal.nombre}
                   </option>
                 ))}
@@ -453,44 +575,44 @@ export default function Alertas() {
           <button
             type="submit"
             disabled={guardando}
-            className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold transition disabled:opacity-60 shadow-lg shadow-sky-900/20"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-sky-700 px-5 py-3 font-bold text-white shadow-lg shadow-sky-900/20 transition hover:bg-sky-800 disabled:opacity-60"
           >
             <Send size={19} />
             {guardando ? 'Enviando...' : 'Enviar alerta'}
           </button>
         </form>
 
-        <section className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-          <div className="p-6 border-b border-slate-100 flex items-center justify-between gap-4">
+        <section className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm">
+          <div className="flex items-center justify-between gap-4 border-b border-slate-100 p-6">
             <div>
               <h2 className="text-lg font-bold text-slate-800">
-                Alertas enviadas
+                {esVistaAdministrativa ? 'Alertas enviadas' : 'Mis alertas'}
               </h2>
               <p className="text-sm text-slate-500">
-                Historial de alertas activas e inactivas.
+                {esVistaAdministrativa
+                  ? 'Historial global de alertas activas e inactivas.'
+                  : 'Alertas disponibles para tu rol y sucursal asignada.'}
               </p>
             </div>
 
-            <span className="px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-sm font-bold">
-              {alertas.length} alertas
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-bold text-slate-700">
+              {totalActivas} {esVistaAdministrativa ? 'activas' : 'sin leer'}
             </span>
           </div>
 
           {cargando ? (
-            <div className="p-10 text-center text-slate-500">
-              Cargando alertas...
-            </div>
+            <div className="p-10 text-center text-slate-500">Cargando alertas...</div>
           ) : alertas.length === 0 ? (
             <div className="p-10 text-center">
-              <div className="w-16 h-16 rounded-3xl bg-sky-100 text-sky-700 flex items-center justify-center mx-auto mb-4">
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-sky-100 text-sky-700">
                 <Bell size={30} />
               </div>
 
-              <h3 className="font-bold text-slate-800">
-                No hay alertas registradas
-              </h3>
-              <p className="text-sm text-slate-500 mt-1">
-                Crea una alerta para que aparezca en la campana de los usuarios.
+              <h3 className="font-bold text-slate-800">No hay alertas registradas</h3>
+              <p className="mt-1 text-sm text-slate-500">
+                {esVistaAdministrativa
+                  ? 'Crea una alerta para que aparezca en la campana de los usuarios.'
+                  : 'No tienes alertas pendientes para tu rol o sucursal.'}
               </p>
             </div>
           ) : (
@@ -498,42 +620,36 @@ export default function Alertas() {
               {alertas.map((alerta) => {
                 const prioridad = obtenerClasePrioridad(alerta.prioridad);
                 const IconoPrioridad = prioridad.icono;
+                const estado = obtenerEstadoAlerta(alerta);
 
                 return (
                   <div
                     key={alerta.id_alerta}
-                    className={`p-5 hover:bg-slate-50 transition ${
-                      !alerta.activa ? 'opacity-60' : ''
+                    className={`p-5 transition hover:bg-slate-50 ${
+                      esVistaAdministrativa && !esActivo(alerta.activa)
+                        ? 'opacity-60'
+                        : ''
                     }`}
                   >
-                    <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <span
-                            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-bold ${prioridad.badge}`}
+                            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold ${prioridad.badge}`}
                           >
                             <IconoPrioridad size={14} />
                             {alerta.prioridad}
                           </span>
 
                           <span
-                            className={`px-3 py-1 rounded-full text-xs font-bold ${
-                              alerta.activa
-                                ? 'bg-emerald-100 text-emerald-700'
-                                : 'bg-slate-100 text-slate-500'
-                            }`}
+                            className={`rounded-full px-3 py-1 text-xs font-bold ${estado.clase}`}
                           >
-                            {alerta.activa ? 'Activa' : 'Inactiva'}
+                            {estado.texto}
                           </span>
                         </div>
 
-                        <h3 className="font-bold text-slate-800 mt-3">
-                          {alerta.titulo}
-                        </h3>
-
-                        <p className="text-sm text-slate-600 mt-1">
-                          {alerta.mensaje}
-                        </p>
+                        <h3 className="mt-3 font-bold text-slate-800">{alerta.titulo}</h3>
+                        <p className="mt-1 text-sm text-slate-600">{alerta.mensaje}</p>
 
                         <div className="mt-4 flex flex-wrap gap-3 text-xs text-slate-500">
                           <span className="inline-flex items-center gap-1">
@@ -548,21 +664,19 @@ export default function Alertas() {
                             </span>
                           )}
 
-                          <span>
-                            Creada: {formatoFecha(alerta.fecha_creacion)}
-                          </span>
+                          <span>Creada: {formatoFecha(alerta.fecha_creacion)}</span>
 
-                          <span>
-                            Lecturas: {Number(alerta.total_lecturas || 0)}
-                          </span>
+                          {esVistaAdministrativa && (
+                            <span>Lecturas: {Number(alerta.total_lecturas || 0)}</span>
+                          )}
                         </div>
                       </div>
 
-                      {alerta.activa && (
+                      {esVistaAdministrativa && esActivo(alerta.activa) && (
                         <button
                           type="button"
                           onClick={() => desactivarAlerta(alerta.id_alerta)}
-                          className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-red-50 text-red-700 hover:bg-red-100 font-bold transition"
+                          className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-50 px-4 py-2 font-bold text-red-700 transition hover:bg-red-100"
                         >
                           <Trash2 size={17} />
                           Desactivar

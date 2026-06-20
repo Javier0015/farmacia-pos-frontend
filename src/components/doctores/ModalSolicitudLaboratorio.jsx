@@ -424,7 +424,7 @@ export default function ModalSolicitudLaboratorio({
           <style>
             @page {
               size: letter portrait;
-              margin: 0;
+              margin: 6mm;
             }
 
             * {
@@ -435,28 +435,41 @@ export default function ModalSolicitudLaboratorio({
 
             html,
             body {
-              width: 100%;
               margin: 0;
               padding: 0;
+              width: 100%;
+              min-height: 0;
               background: #ffffff;
               color: #0f172a;
               font-family: Arial, Helvetica, sans-serif;
               font-size: 10px;
+              overflow: visible;
             }
 
             body {
-              padding: 6mm;
+              margin: 0;
+              padding: 0;
             }
 
             .hoja {
               position: relative;
               width: 100%;
-              min-height: calc(11in - 12mm);
+              height: 266mm;
+              max-height: 266mm;
+              min-height: 0;
               overflow: hidden;
               border: 1px solid #cbd5e1;
-              border-radius: 18px;
+              border-radius: 16px;
               background: #ffffff;
               box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+              display: flex;
+              flex-direction: column;
+              page-break-before: auto;
+              page-break-after: auto;
+              page-break-inside: auto;
+              break-before: auto;
+              break-after: auto;
+              break-inside: auto;
             }
 
             .decoracion-uno,
@@ -488,6 +501,10 @@ export default function ModalSolicitudLaboratorio({
             .contenido {
               position: relative;
               z-index: 1;
+              flex: 1;
+              min-height: 0;
+              display: flex;
+              flex-direction: column;
             }
 
             .encabezado {
@@ -495,36 +512,37 @@ export default function ModalSolicitudLaboratorio({
               grid-template-columns: 78px 1fr 175px;
               align-items: center;
               gap: 14px;
-              padding: 14px 18px;
+              padding: 12px 16px;
               border-bottom: 1px solid #e2e8f0;
               background: linear-gradient(90deg, #ecfeff 0%, #ffffff 50%, #f0f9ff 100%);
+              flex: 0 0 auto;
             }
 
             .logo-box {
-              width: 58px;
-              height: 58px;
+              width: 54px;
+              height: 54px;
               display: flex;
               align-items: center;
               justify-content: center;
               border: 1px solid #e2e8f0;
-              border-radius: 16px;
+              border-radius: 15px;
               background: #ffffff;
               box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
             }
 
             .logo {
-              width: 48px;
-              height: 48px;
+              width: 46px;
+              height: 46px;
               object-fit: contain;
             }
 
             .titulo-institucion {
               text-align: center;
-              line-height: 1.2;
+              line-height: 1.12;
             }
 
             .titulo-institucion .nombre {
-              font-size: 20px;
+              font-size: 18px;
               font-weight: 900;
               letter-spacing: 1.2px;
               text-transform: uppercase;
@@ -533,32 +551,32 @@ export default function ModalSolicitudLaboratorio({
 
             .titulo-institucion .documento {
               margin-top: 3px;
-              font-size: 11px;
+              font-size: 10px;
               font-weight: 900;
-              letter-spacing: 2.6px;
+              letter-spacing: 2.4px;
               text-transform: uppercase;
               color: #0e7490;
             }
 
             .titulo-institucion .subtitulo {
               margin-top: 4px;
-              font-size: 9px;
+              font-size: 8px;
               font-weight: 700;
               color: #64748b;
             }
 
             .folio-card {
-              min-height: 58px;
+              min-height: 54px;
               border: 1px solid #e2e8f0;
-              border-radius: 18px;
+              border-radius: 16px;
               background: #ffffff;
-              padding: 9px 12px;
+              padding: 8px 10px;
               text-align: center;
               box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
             }
 
             .folio-card .label {
-              font-size: 8px;
+              font-size: 7px;
               font-weight: 900;
               letter-spacing: 2px;
               text-transform: uppercase;
@@ -567,7 +585,7 @@ export default function ModalSolicitudLaboratorio({
 
             .folio-card .folio {
               margin-top: 4px;
-              font-size: 11px;
+              font-size: 10px;
               font-weight: 900;
               color: #0e7490;
               word-break: break-word;
@@ -575,30 +593,36 @@ export default function ModalSolicitudLaboratorio({
 
             .folio-card .fecha {
               margin-top: 4px;
-              font-size: 9px;
+              font-size: 8px;
               font-weight: 700;
               color: #64748b;
             }
 
             .cuerpo {
+              flex: 1;
+              min-height: 0;
               display: grid;
               grid-template-columns: 0.92fr 1.08fr;
-              gap: 12px;
-              padding: 14px 18px 12px;
+              gap: 10px;
+              padding: 11px 16px 7px;
+              align-items: stretch;
             }
 
             .columna {
               display: flex;
               flex-direction: column;
-              gap: 10px;
+              gap: 9px;
+              min-height: 0;
             }
 
             .card {
               border: 1px solid #e2e8f0;
-              border-radius: 16px;
+              border-radius: 15px;
               background: #ffffff;
-              padding: 11px 12px;
+              padding: 9px 10px;
               box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+              break-inside: auto;
+              page-break-inside: auto;
             }
 
             .card.suave {
@@ -622,7 +646,7 @@ export default function ModalSolicitudLaboratorio({
 
             .card-title {
               margin: 0;
-              font-size: 10px;
+              font-size: 9px;
               font-weight: 900;
               letter-spacing: 1.4px;
               text-transform: uppercase;
@@ -637,7 +661,7 @@ export default function ModalSolicitudLaboratorio({
               padding: 3px 8px;
               background: #cffafe;
               color: #0e7490;
-              font-size: 8px;
+              font-size: 7px;
               font-weight: 900;
               white-space: nowrap;
             }
@@ -649,9 +673,9 @@ export default function ModalSolicitudLaboratorio({
 
             .texto {
               margin: 0;
-              line-height: 1.35;
+              line-height: 1.32;
               color: #1e293b;
-              font-size: 10px;
+              font-size: 9px;
             }
 
             .texto strong {
@@ -680,13 +704,13 @@ export default function ModalSolicitudLaboratorio({
               border-radius: 12px;
               background: #ffffff;
               padding: 8px;
-              min-height: 46px;
+              min-height: 42px;
             }
 
             .muestra-box .label {
               display: block;
               margin-bottom: 4px;
-              font-size: 8px;
+              font-size: 7px;
               font-weight: 900;
               letter-spacing: 0.5px;
               text-transform: uppercase;
@@ -694,27 +718,31 @@ export default function ModalSolicitudLaboratorio({
             }
 
             .muestra-box .valor {
-              font-size: 10px;
+              font-size: 9px;
               font-weight: 800;
               color: #0f172a;
             }
 
             .diagnostico-box {
-              min-height: 82px;
+              flex: 1;
+              min-height: 0;
               border: 1px solid #e2e8f0;
               border-radius: 12px;
               background: #f8fafc;
               padding: 9px 10px;
               white-space: pre-wrap;
               line-height: 1.35;
-              font-size: 10px;
+              font-size: 9px;
               color: #1e293b;
             }
 
             .estudios-lista {
+              flex: 1;
+              min-height: 0;
               display: flex;
               flex-direction: column;
               gap: 7px;
+              overflow: hidden;
             }
 
             .estudio-card {
@@ -727,6 +755,7 @@ export default function ModalSolicitudLaboratorio({
               background: #f8fafc;
               padding: 8px 9px;
               break-inside: avoid;
+              page-break-inside: avoid;
             }
 
             .estudio-numero {
@@ -744,7 +773,7 @@ export default function ModalSolicitudLaboratorio({
 
             .estudio-nombre {
               margin: 0;
-              font-size: 10px;
+              font-size: 9px;
               line-height: 1.25;
               font-weight: 900;
               color: #0f172a;
@@ -752,7 +781,7 @@ export default function ModalSolicitudLaboratorio({
 
             .estudio-observacion {
               margin: 3px 0 0;
-              font-size: 9px;
+              font-size: 8px;
               line-height: 1.25;
               color: #475569;
             }
@@ -763,16 +792,18 @@ export default function ModalSolicitudLaboratorio({
               background: #f8fafc;
               padding: 14px;
               text-align: center;
-              font-size: 10px;
+              font-size: 9px;
               font-weight: 800;
               color: #64748b;
             }
 
             .observaciones-box {
-              min-height: 58px;
+              min-height: 74px;
+              max-height: 92px;
+              overflow: hidden;
               white-space: pre-wrap;
               line-height: 1.35;
-              font-size: 10px;
+              font-size: 9px;
               color: #334155;
             }
 
@@ -780,35 +811,36 @@ export default function ModalSolicitudLaboratorio({
               display: grid;
               grid-template-columns: 1fr 1fr;
               gap: 10px;
+              margin-top: auto;
             }
 
             .firma-card,
             .sello-card {
-              min-height: 86px;
+              min-height: 72px;
               border: 1px solid #e2e8f0;
-              border-radius: 15px;
+              border-radius: 14px;
               background: #ffffff;
-              padding: 10px;
+              padding: 9px;
               text-align: center;
             }
 
             .firma-linea {
               width: 80%;
               height: 1px;
-              margin: 30px auto 7px;
+              margin: 24px auto 6px;
               background: #475569;
             }
 
             .firma-titulo {
               margin: 0;
-              font-size: 9px;
+              font-size: 8px;
               font-weight: 900;
               color: #0f172a;
             }
 
             .firma-sub {
               margin: 2px 0 0;
-              font-size: 8px;
+              font-size: 7px;
               color: #64748b;
             }
 
@@ -819,41 +851,73 @@ export default function ModalSolicitudLaboratorio({
               border-style: dashed;
               background: rgba(236, 254, 255, 0.5);
               color: #0e7490;
-              font-size: 9px;
+              font-size: 8px;
               font-weight: 900;
             }
 
+            .columna:first-child .card:last-child {
+              flex: 1;
+              min-height: 0;
+              display: flex;
+              flex-direction: column;
+            }
+
+            .columna:last-child .card:first-child {
+              flex: 1;
+              min-height: 0;
+              display: flex;
+              flex-direction: column;
+            }
+
             .footer {
-              padding: 0 18px 10px;
+              flex: 0 0 auto;
+              padding: 4px 16px 8px;
               text-align: center;
-              font-size: 8px;
+              font-size: 7px;
               color: #94a3b8;
             }
 
             @media print {
               html,
               body {
-                width: 100%;
-                height: auto;
-                overflow: visible;
-              }
-
-              body {
-                padding: 6mm !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                width: 100% !important;
+                min-height: 0 !important;
+                overflow: visible !important;
               }
 
               .hoja {
-                min-height: calc(11in - 12mm);
-                border-radius: 0;
-                box-shadow: none;
-                page-break-after: avoid;
-                page-break-inside: avoid;
-                break-inside: avoid;
+                height: 266mm !important;
+                max-height: 266mm !important;
+                min-height: 0 !important;
+                overflow: hidden !important;
+                border-radius: 0 !important;
+                box-shadow: none !important;
+                page-break-before: auto !important;
+                page-break-after: auto !important;
+                page-break-inside: auto !important;
+                break-before: auto !important;
+                break-after: auto !important;
+                break-inside: auto !important;
+              }
+
+              .contenido {
+                min-height: 0 !important;
+                height: 100% !important;
+                display: flex !important;
+                flex-direction: column !important;
+              }
+
+              .cuerpo {
+                flex: 1 !important;
+                min-height: 0 !important;
+                align-items: stretch !important;
               }
 
               .decoracion-uno,
               .decoracion-dos {
-                display: none;
+                display: none !important;
               }
             }
           </style>
@@ -954,10 +1018,9 @@ export default function ModalSolicitudLaboratorio({
                     </div>
 
                     <div class="estudios-lista">
-                      ${
-                        estudiosHtml ||
-                        '<div class="sin-registros">Sin estudios registrados.</div>'
-                      }
+                      ${estudiosHtml ||
+      '<div class="sin-registros">Sin estudios registrados.</div>'
+      }
                     </div>
                   </section>
 
@@ -980,7 +1043,7 @@ export default function ModalSolicitudLaboratorio({
                     </div>
 
                     <div class="sello-card">
-                      Sello de la unidad
+                     
                     </div>
                   </section>
                 </div>
@@ -1051,10 +1114,10 @@ export default function ModalSolicitudLaboratorio({
 
   if (!abierto) return null;
 
-return (
-  <>
-    <style>
-      {`
+  return (
+    <>
+      <style>
+        {`
         .swal-laboratorio-container {
           z-index: 30000 !important;
         }
@@ -1063,385 +1126,385 @@ return (
           z-index: 30001 !important;
         }
       `}
-    </style>
+      </style>
 
-    <div className="fixed inset-0 z-[9999] bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-[9999] bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
 
-      <div className="w-full max-w-6xl max-h-[95vh] bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col">
-        <div className="px-6 py-5 border-b border-slate-100 bg-gradient-to-r from-sky-700 to-cyan-500 text-white flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-white/15 flex items-center justify-center">
-              <FlaskConical size={26} />
-            </div>
-
-            <div>
-              <h2 className="text-xl md:text-2xl font-bold">
-                Nueva solicitud de laboratorio
-              </h2>
-              <p className="text-sm text-sky-100">
-                Captura estudios, diagnóstico y datos para impresión.
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={cerrarModal}
-            className="w-10 h-10 rounded-2xl bg-white/15 hover:bg-white/25 flex items-center justify-center transition"
-          >
-            <X size={22} />
-          </button>
-        </div>
-
-        <div className="p-6 overflow-y-auto">
-          <div className="grid xl:grid-cols-[1fr_0.9fr] gap-6">
-            <section className="space-y-5">
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="rounded-3xl border border-slate-100 bg-slate-50 p-5">
-                  <div className="flex items-center gap-2 mb-4">
-                    <User size={20} className="text-sky-700" />
-                    <h3 className="font-bold text-slate-800">
-                      Datos del paciente
-                    </h3>
-                  </div>
-
-                  <div className="space-y-2 text-sm">
-                    <p>
-                      <span className="font-bold text-slate-600">
-                        Nombre:
-                      </span>{' '}
-                      {pacienteFinal.nombre}
-                    </p>
-
-                    <p>
-                      <span className="font-bold text-slate-600">
-                        Edad:
-                      </span>{' '}
-                      {pacienteFinal.edad}
-                    </p>
-
-                    <p>
-                      <span className="font-bold text-slate-600">
-                        Sexo:
-                      </span>{' '}
-                      {pacienteFinal.sexo}
-                    </p>
-
-                    <p>
-                      <span className="font-bold text-slate-600">
-                        Expediente:
-                      </span>{' '}
-                      {pacienteFinal.expediente}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="rounded-3xl border border-slate-100 bg-slate-50 p-5">
-                  <div className="flex items-center gap-2 mb-4">
-                    <Stethoscope size={20} className="text-sky-700" />
-                    <h3 className="font-bold text-slate-800">
-                      Datos del médico
-                    </h3>
-                  </div>
-
-                  <div className="space-y-2 text-sm">
-                    <p>
-                      <span className="font-bold text-slate-600">
-                        Nombre:
-                      </span>{' '}
-                      {medicoFinal.nombre}
-                    </p>
-
-                    <p>
-                      <span className="font-bold text-slate-600">
-                        Cédula:
-                      </span>{' '}
-                      {medicoFinal.cedula}
-                    </p>
-
-                    <p>
-                      <span className="font-bold text-slate-600">
-                        Especialidad:
-                      </span>{' '}
-                      {medicoFinal.especialidad}
-                    </p>
-
-                    <p className="inline-flex items-center gap-2">
-                      <CalendarDays size={16} />
-                      <span>{fechaActual}</span>
-                    </p>
-                  </div>
-                </div>
+        <div className="w-full max-w-6xl max-h-[95vh] bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col">
+          <div className="px-6 py-5 border-b border-slate-100 bg-gradient-to-r from-sky-700 to-cyan-500 text-white flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-white/15 flex items-center justify-center">
+                <FlaskConical size={26} />
               </div>
 
-              <div className="rounded-3xl border border-slate-100 bg-white p-5">
-                <div className="flex items-center gap-2 mb-4">
-                  <Clock size={20} className="text-sky-700" />
-                  <h3 className="font-bold text-slate-800">
-                    Datos de muestra
-                  </h3>
-                </div>
-
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-2">
-                      Hr. obtención de la muestra
-                      <span className="ml-1 text-xs font-normal text-slate-400">
-                        (opcional)
-                      </span>
-                    </label>
-
-                    <input
-                      type="time"
-                      value={horaObtencionMuestra}
-                      onChange={(e) =>
-                        setHoraObtencionMuestra(e.target.value)
-                      }
-                      className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-2">
-                      Hr. recepción de la muestra
-                      <span className="ml-1 text-xs font-normal text-slate-400">
-                        (opcional)
-                      </span>
-                    </label>
-
-                    <input
-                      type="time"
-                      value={horaRecepcionMuestra}
-                      onChange={(e) =>
-                        setHoraRecepcionMuestra(e.target.value)
-                      }
-                      className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
-                    />
-                  </div>
-                </div>
-
-                <p className="mt-3 text-xs text-slate-500">
-                  Si no capturas las horas, el formato se imprimirá con esos campos en blanco.
+              <div>
+                <h2 className="text-xl md:text-2xl font-bold">
+                  Nueva solicitud de laboratorio
+                </h2>
+                <p className="text-sm text-sky-100">
+                  Captura estudios, diagnóstico y datos para impresión.
                 </p>
               </div>
+            </div>
 
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">
-                  Diagnóstico
-                </label>
+            <button
+              type="button"
+              onClick={cerrarModal}
+              className="w-10 h-10 rounded-2xl bg-white/15 hover:bg-white/25 flex items-center justify-center transition"
+            >
+              <X size={22} />
+            </button>
+          </div>
 
-                <textarea
-                  value={diagnostico}
-                  onChange={(e) => setDiagnostico(e.target.value)}
-                  rows="4"
-                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 resize-none"
-                  placeholder="Ej. Dolor abdominal, fiebre, sospecha de infección..."
-                />
-              </div>
+          <div className="p-6 overflow-y-auto">
+            <div className="grid xl:grid-cols-[1fr_0.9fr] gap-6">
+              <section className="space-y-5">
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="rounded-3xl border border-slate-100 bg-slate-50 p-5">
+                    <div className="flex items-center gap-2 mb-4">
+                      <User size={20} className="text-sky-700" />
+                      <h3 className="font-bold text-slate-800">
+                        Datos del paciente
+                      </h3>
+                    </div>
 
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">
-                  Observaciones generales
-                </label>
+                    <div className="space-y-2 text-sm">
+                      <p>
+                        <span className="font-bold text-slate-600">
+                          Nombre:
+                        </span>{' '}
+                        {pacienteFinal.nombre}
+                      </p>
 
-                <textarea
-                  value={observaciones}
-                  onChange={(e) => setObservaciones(e.target.value)}
-                  rows="3"
-                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 resize-none"
-                  placeholder="Notas generales para laboratorio..."
-                />
-              </div>
+                      <p>
+                        <span className="font-bold text-slate-600">
+                          Edad:
+                        </span>{' '}
+                        {pacienteFinal.edad}
+                      </p>
 
-              <div className="rounded-3xl border border-slate-100 p-5">
-                <h3 className="font-bold text-slate-800 mb-4">
-                  Agregar estudio al catálogo
-                </h3>
+                      <p>
+                        <span className="font-bold text-slate-600">
+                          Sexo:
+                        </span>{' '}
+                        {pacienteFinal.sexo}
+                      </p>
 
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <input
-                    type="text"
-                    value={nuevoEstudio}
-                    onChange={(e) => setNuevoEstudio(e.target.value)}
-                    className="flex-1 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
-                    placeholder="Ej. Prueba rápida de influenza"
-                  />
+                      <p>
+                        <span className="font-bold text-slate-600">
+                          Expediente:
+                        </span>{' '}
+                        {pacienteFinal.expediente}
+                      </p>
+                    </div>
+                  </div>
 
-                  <button
-                    type="button"
-                    onClick={agregarEstudioCatalogo}
-                    className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold transition"
-                  >
-                    <Plus size={19} />
-                    Agregar
-                  </button>
-                </div>
-              </div>
-            </section>
+                  <div className="rounded-3xl border border-slate-100 bg-slate-50 p-5">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Stethoscope size={20} className="text-sky-700" />
+                      <h3 className="font-bold text-slate-800">
+                        Datos del médico
+                      </h3>
+                    </div>
 
-            <section className="space-y-5">
-              <div className="rounded-3xl border border-slate-100 overflow-hidden">
-                <div className="px-5 py-4 border-b border-slate-100">
-                  <h3 className="font-bold text-slate-800">
-                    Catálogo de estudios
-                  </h3>
+                    <div className="space-y-2 text-sm">
+                      <p>
+                        <span className="font-bold text-slate-600">
+                          Nombre:
+                        </span>{' '}
+                        {medicoFinal.nombre}
+                      </p>
 
-                  <p className="text-sm text-slate-500">
-                    Selecciona uno o varios estudios.
-                  </p>
+                      <p>
+                        <span className="font-bold text-slate-600">
+                          Cédula:
+                        </span>{' '}
+                        {medicoFinal.cedula}
+                      </p>
 
-                  <div className="relative mt-4">
-                    <Search
-                      size={18}
-                      className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
-                    />
+                      <p>
+                        <span className="font-bold text-slate-600">
+                          Especialidad:
+                        </span>{' '}
+                        {medicoFinal.especialidad}
+                      </p>
 
-                    <input
-                      type="text"
-                      value={busqueda}
-                      onChange={(e) => setBusqueda(e.target.value)}
-                      className="w-full pl-11 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
-                      placeholder="Buscar estudio..."
-                    />
+                      <p className="inline-flex items-center gap-2">
+                        <CalendarDays size={16} />
+                        <span>{fechaActual}</span>
+                      </p>
+                    </div>
                   </div>
                 </div>
 
-                <div className="p-4 max-h-72 overflow-y-auto space-y-2">
-                  {cargandoCatalogo ? (
-                    <p className="text-sm text-slate-500 text-center py-6">
-                      Cargando catálogo...
-                    </p>
-                  ) : catalogoFiltrado.length === 0 ? (
-                    <p className="text-sm text-slate-500 text-center py-6">
-                      No se encontraron estudios.
-                    </p>
-                  ) : (
-                    catalogoFiltrado.map((estudio) => {
-                      const seleccionado = estudiosSeleccionados.some(
-                        (item) => item.id_estudio === estudio.id_estudio
-                      );
+                <div className="rounded-3xl border border-slate-100 bg-white p-5">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Clock size={20} className="text-sky-700" />
+                    <h3 className="font-bold text-slate-800">
+                      Datos de muestra
+                    </h3>
+                  </div>
 
-                      return (
-                        <button
-                          key={estudio.id_estudio}
-                          type="button"
-                          onClick={() => seleccionarEstudio(estudio)}
-                          disabled={seleccionado}
-                          className={`w-full text-left px-4 py-3 rounded-2xl border transition ${seleccionado
-                            ? 'bg-sky-50 border-sky-200 text-sky-700 font-bold'
-                            : 'bg-white border-slate-100 hover:bg-slate-50 text-slate-700'
-                            }`}
-                        >
-                          {estudio.nombre}
-                        </button>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-bold text-slate-700 mb-2">
+                        Hr. obtención de la muestra
+                        <span className="ml-1 text-xs font-normal text-slate-400">
+                          (opcional)
+                        </span>
+                      </label>
 
-              <div className="rounded-3xl border border-slate-100 overflow-hidden">
-                <div className="px-5 py-4 border-b border-slate-100 bg-slate-50">
-                  <h3 className="font-bold text-slate-800">
-                    Estudios seleccionados
-                  </h3>
+                      <input
+                        type="time"
+                        value={horaObtencionMuestra}
+                        onChange={(e) =>
+                          setHoraObtencionMuestra(e.target.value)
+                        }
+                        className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                      />
+                    </div>
 
-                  <p className="text-sm text-slate-500">
-                    {estudiosSeleccionados.length} estudio(s) agregado(s).
+                    <div>
+                      <label className="block text-sm font-bold text-slate-700 mb-2">
+                        Hr. recepción de la muestra
+                        <span className="ml-1 text-xs font-normal text-slate-400">
+                          (opcional)
+                        </span>
+                      </label>
+
+                      <input
+                        type="time"
+                        value={horaRecepcionMuestra}
+                        onChange={(e) =>
+                          setHoraRecepcionMuestra(e.target.value)
+                        }
+                        className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                      />
+                    </div>
+                  </div>
+
+                  <p className="mt-3 text-xs text-slate-500">
+                    Si no capturas las horas, el formato se imprimirá con esos campos en blanco.
                   </p>
                 </div>
 
-                <div className="p-4 space-y-3 min-h-36">
-                  {estudiosSeleccionados.length === 0 ? (
-                    <div className="py-8 text-center text-slate-500">
-                      <FlaskConical
-                        size={36}
-                        className="mx-auto mb-2 text-slate-300"
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Diagnóstico
+                  </label>
+
+                  <textarea
+                    value={diagnostico}
+                    onChange={(e) => setDiagnostico(e.target.value)}
+                    rows="4"
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 resize-none"
+                    placeholder="Ej. Dolor abdominal, fiebre, sospecha de infección..."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Observaciones generales
+                  </label>
+
+                  <textarea
+                    value={observaciones}
+                    onChange={(e) => setObservaciones(e.target.value)}
+                    rows="3"
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 resize-none"
+                    placeholder="Notas generales para laboratorio..."
+                  />
+                </div>
+
+                <div className="rounded-3xl border border-slate-100 p-5">
+                  <h3 className="font-bold text-slate-800 mb-4">
+                    Agregar estudio al catálogo
+                  </h3>
+
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <input
+                      type="text"
+                      value={nuevoEstudio}
+                      onChange={(e) => setNuevoEstudio(e.target.value)}
+                      className="flex-1 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                      placeholder="Ej. Prueba rápida de influenza"
+                    />
+
+                    <button
+                      type="button"
+                      onClick={agregarEstudioCatalogo}
+                      className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold transition"
+                    >
+                      <Plus size={19} />
+                      Agregar
+                    </button>
+                  </div>
+                </div>
+              </section>
+
+              <section className="space-y-5">
+                <div className="rounded-3xl border border-slate-100 overflow-hidden">
+                  <div className="px-5 py-4 border-b border-slate-100">
+                    <h3 className="font-bold text-slate-800">
+                      Catálogo de estudios
+                    </h3>
+
+                    <p className="text-sm text-slate-500">
+                      Selecciona uno o varios estudios.
+                    </p>
+
+                    <div className="relative mt-4">
+                      <Search
+                        size={18}
+                        className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
                       />
 
-                      <p className="text-sm">
-                        Todavía no seleccionas estudios.
-                      </p>
+                      <input
+                        type="text"
+                        value={busqueda}
+                        onChange={(e) => setBusqueda(e.target.value)}
+                        className="w-full pl-11 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                        placeholder="Buscar estudio..."
+                      />
                     </div>
-                  ) : (
-                    estudiosSeleccionados.map((estudio) => (
-                      <div
-                        key={estudio.id_estudio}
-                        className="rounded-2xl bg-sky-50 border border-sky-100 p-4 space-y-3"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="font-bold text-sky-800">
-                              {estudio.nombre}
-                            </p>
+                  </div>
 
-                            <p className="text-xs text-slate-500 mt-1">
-                              Observación específica para este estudio.
-                            </p>
+                  <div className="p-4 max-h-72 overflow-y-auto space-y-2">
+                    {cargandoCatalogo ? (
+                      <p className="text-sm text-slate-500 text-center py-6">
+                        Cargando catálogo...
+                      </p>
+                    ) : catalogoFiltrado.length === 0 ? (
+                      <p className="text-sm text-slate-500 text-center py-6">
+                        No se encontraron estudios.
+                      </p>
+                    ) : (
+                      catalogoFiltrado.map((estudio) => {
+                        const seleccionado = estudiosSeleccionados.some(
+                          (item) => item.id_estudio === estudio.id_estudio
+                        );
+
+                        return (
+                          <button
+                            key={estudio.id_estudio}
+                            type="button"
+                            onClick={() => seleccionarEstudio(estudio)}
+                            disabled={seleccionado}
+                            className={`w-full text-left px-4 py-3 rounded-2xl border transition ${seleccionado
+                              ? 'bg-sky-50 border-sky-200 text-sky-700 font-bold'
+                              : 'bg-white border-slate-100 hover:bg-slate-50 text-slate-700'
+                              }`}
+                          >
+                            {estudio.nombre}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-3xl border border-slate-100 overflow-hidden">
+                  <div className="px-5 py-4 border-b border-slate-100 bg-slate-50">
+                    <h3 className="font-bold text-slate-800">
+                      Estudios seleccionados
+                    </h3>
+
+                    <p className="text-sm text-slate-500">
+                      {estudiosSeleccionados.length} estudio(s) agregado(s).
+                    </p>
+                  </div>
+
+                  <div className="p-4 space-y-3 min-h-36">
+                    {estudiosSeleccionados.length === 0 ? (
+                      <div className="py-8 text-center text-slate-500">
+                        <FlaskConical
+                          size={36}
+                          className="mx-auto mb-2 text-slate-300"
+                        />
+
+                        <p className="text-sm">
+                          Todavía no seleccionas estudios.
+                        </p>
+                      </div>
+                    ) : (
+                      estudiosSeleccionados.map((estudio) => (
+                        <div
+                          key={estudio.id_estudio}
+                          className="rounded-2xl bg-sky-50 border border-sky-100 p-4 space-y-3"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="font-bold text-sky-800">
+                                {estudio.nombre}
+                              </p>
+
+                              <p className="text-xs text-slate-500 mt-1">
+                                Observación específica para este estudio.
+                              </p>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => quitarEstudio(estudio.id_estudio)}
+                              className="w-9 h-9 rounded-xl bg-white text-red-600 hover:bg-red-50 flex items-center justify-center transition shrink-0"
+                            >
+                              <Trash2 size={17} />
+                            </button>
                           </div>
 
-                          <button
-                            type="button"
-                            onClick={() => quitarEstudio(estudio.id_estudio)}
-                            className="w-9 h-9 rounded-xl bg-white text-red-600 hover:bg-red-50 flex items-center justify-center transition shrink-0"
-                          >
-                            <Trash2 size={17} />
-                          </button>
+                          <textarea
+                            value={estudio.observaciones_estudio || ''}
+                            onChange={(e) =>
+                              actualizarObservacionEstudio(
+                                estudio.id_estudio,
+                                e.target.value
+                              )
+                            }
+                            rows="2"
+                            className="w-full resize-none rounded-xl border border-sky-100 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-sky-500"
+                            placeholder="Ej. Ayuno de 8 horas, muestra urgente, tomar antes de medicamento..."
+                          />
                         </div>
-
-                        <textarea
-                          value={estudio.observaciones_estudio || ''}
-                          onChange={(e) =>
-                            actualizarObservacionEstudio(
-                              estudio.id_estudio,
-                              e.target.value
-                            )
-                          }
-                          rows="2"
-                          className="w-full resize-none rounded-xl border border-sky-100 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-sky-500"
-                          placeholder="Ej. Ayuno de 8 horas, muestra urgente, tomar antes de medicamento..."
-                        />
-                      </div>
-                    ))
-                  )}
+                      ))
+                    )}
+                  </div>
                 </div>
-              </div>
-            </section>
+              </section>
+            </div>
+          </div>
+
+          <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex flex-col sm:flex-row justify-end gap-3">
+            <button
+              type="button"
+              onClick={cerrarModal}
+              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-white hover:bg-slate-100 text-slate-700 font-bold border border-slate-200 transition"
+            >
+              <X size={19} />
+              Cancelar
+            </button>
+
+            <button
+              type="button"
+              onClick={guardarSolicitud}
+              disabled={guardandoSolicitud}
+              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-700 hover:bg-slate-800 text-white font-bold transition disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {guardandoSolicitud ? <Loader2 size={19} className="animate-spin" /> : <Save size={19} />}
+              {guardandoSolicitud ? 'Guardando...' : 'Guardar'}
+            </button>
+
+            <button
+              type="button"
+              onClick={imprimirSolicitud}
+              disabled={guardandoSolicitud}
+              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold shadow-lg shadow-sky-900/20 transition disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {guardandoSolicitud ? <Loader2 size={19} className="animate-spin" /> : <Printer size={19} />}
+              {guardandoSolicitud ? 'Guardando...' : 'Guardar e imprimir'}
+            </button>
           </div>
         </div>
-
-        <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex flex-col sm:flex-row justify-end gap-3">
-          <button
-            type="button"
-            onClick={cerrarModal}
-            className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-white hover:bg-slate-100 text-slate-700 font-bold border border-slate-200 transition"
-          >
-            <X size={19} />
-            Cancelar
-          </button>
-
-          <button
-            type="button"
-            onClick={guardarSolicitud}
-            disabled={guardandoSolicitud}
-            className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-700 hover:bg-slate-800 text-white font-bold transition disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {guardandoSolicitud ? <Loader2 size={19} className="animate-spin" /> : <Save size={19} />}
-            {guardandoSolicitud ? 'Guardando...' : 'Guardar'}
-          </button>
-
-          <button
-            type="button"
-            onClick={imprimirSolicitud}
-            disabled={guardandoSolicitud}
-            className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold shadow-lg shadow-sky-900/20 transition disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {guardandoSolicitud ? <Loader2 size={19} className="animate-spin" /> : <Printer size={19} />}
-            {guardandoSolicitud ? 'Guardando...' : 'Guardar e imprimir'}
-          </button>
-        </div>
       </div>
-    </div>
-  </>
-);
+    </>
+  );
 }

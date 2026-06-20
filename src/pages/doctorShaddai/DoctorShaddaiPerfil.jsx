@@ -15,6 +15,8 @@ import {
   HeartPulse,
   FileText,
   Search,
+  UploadCloud,
+  ImagePlus,
 } from 'lucide-react';
 
 import api from '../../api/axios';
@@ -28,6 +30,12 @@ export default function DoctorShaddaiPerfil() {
   const [guardando, setGuardando] = useState(false);
   const [perfilCompleto, setPerfilCompleto] = useState(false);
 
+  const [logoUniversidadUrl, setLogoUniversidadUrl] = useState('');
+  const [logoUniversidadPreview, setLogoUniversidadPreview] = useState('');
+  const [logoUniversidadFile, setLogoUniversidadFile] = useState(null);
+  const [subiendoLogoUniversidad, setSubiendoLogoUniversidad] = useState(false);
+
+
   const [form, setForm] = useState({
     nombre_completo: '',
     cedula_profesional: '',
@@ -37,6 +45,140 @@ export default function DoctorShaddaiPerfil() {
     direccion_consultorio: '',
     observaciones: '',
   });
+
+  const obtenerUrlArchivo = (ruta) => {
+    if (!ruta) return '';
+
+    if (ruta.startsWith('http://') || ruta.startsWith('https://')) {
+      return ruta;
+    }
+
+    const baseURL = api.defaults.baseURL || '';
+
+    if (baseURL.includes('/api')) {
+      return `${baseURL.replace(/\/api\/?$/, '')}${ruta}`;
+    }
+
+    return ruta;
+  };
+
+  const handleLogoUniversidadChange = (e) => {
+    const archivo = e.target.files?.[0];
+
+    if (!archivo) return;
+
+    const tiposPermitidos = ['image/jpeg', 'image/png', 'image/webp'];
+
+    if (!tiposPermitidos.includes(archivo.type)) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Formato no permitido',
+        text: 'Solo se permiten imágenes JPG, PNG o WEBP.',
+      });
+
+      e.target.value = '';
+      return;
+    }
+
+    const limiteMB = 2;
+    const limiteBytes = limiteMB * 1024 * 1024;
+
+    if (archivo.size > limiteBytes) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Imagen demasiado pesada',
+        text: `El logo no debe pesar más de ${limiteMB} MB.`,
+      });
+
+      e.target.value = '';
+      return;
+    }
+
+    const previewTemporal = URL.createObjectURL(archivo);
+
+    if (logoUniversidadPreview?.startsWith('blob:')) {
+      URL.revokeObjectURL(logoUniversidadPreview);
+    }
+
+    setLogoUniversidadFile(archivo);
+    setLogoUniversidadPreview(previewTemporal);
+  };
+
+  const subirLogoUniversidad = async () => {
+    if (!logoUniversidadFile) {
+      Swal.fire({
+        icon: 'info',
+        title: 'Selecciona un logo',
+        text: 'Primero selecciona la imagen del logo de la universidad.',
+      });
+
+      return;
+    }
+
+    try {
+      setSubiendoLogoUniversidad(true);
+
+      const formData = new FormData();
+      formData.append('logo_universidad', logoUniversidadFile);
+
+      const { data } = await api.post(
+        '/doctor-shaddai/mi-perfil/logo-universidad',
+        formData,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        }
+      );
+
+      if (!data.ok) {
+        throw new Error(data.mensaje || 'No se pudo subir el logo.');
+      }
+
+      const nuevaRuta =
+        data.logo_universidad_url ||
+        data.perfil?.logo_universidad_url ||
+        '';
+
+      setLogoUniversidadUrl(nuevaRuta);
+      setLogoUniversidadPreview(obtenerUrlArchivo(nuevaRuta));
+      setLogoUniversidadFile(null);
+
+      const usuarioActual = JSON.parse(localStorage.getItem('usuario') || '{}');
+
+      const usuarioActualizado = {
+        ...usuarioActual,
+        doctor_shaddai: {
+          ...(usuarioActual.doctor_shaddai || {}),
+          ...(data.perfil || {}),
+          logo_universidad_url: nuevaRuta,
+        },
+      };
+
+      localStorage.setItem('usuario', JSON.stringify(usuarioActualizado));
+
+      Swal.fire({
+        icon: 'success',
+        title: 'Logo actualizado',
+        text: 'El logo de la universidad fue guardado correctamente.',
+        timer: 1600,
+        showConfirmButton: false,
+      });
+    } catch (error) {
+      console.error('Error al subir logo de universidad:', error);
+
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text:
+          error.response?.data?.mensaje ||
+          error.message ||
+          'No se pudo subir el logo de la universidad.',
+      });
+    } finally {
+      setSubiendoLogoUniversidad(false);
+    }
+  };
 
   const cargarPerfil = async () => {
     try {
@@ -56,6 +198,14 @@ export default function DoctorShaddaiPerfil() {
           direccion_consultorio: perfil.direccion_consultorio || '',
           observaciones: perfil.observaciones || '',
         });
+
+        setLogoUniversidadUrl(perfil.logo_universidad_url || '');
+        setLogoUniversidadPreview(
+          perfil.logo_universidad_url
+            ? obtenerUrlArchivo(perfil.logo_universidad_url)
+            : ''
+        );
+        setLogoUniversidadFile(null);
 
         setPerfilCompleto(perfil.perfil_completo === true);
       }
@@ -77,6 +227,14 @@ export default function DoctorShaddaiPerfil() {
   useEffect(() => {
     cargarPerfil();
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (logoUniversidadPreview?.startsWith('blob:')) {
+        URL.revokeObjectURL(logoUniversidadPreview);
+      }
+    };
+  }, [logoUniversidadPreview]);
 
   const handleChange = (e) => {
     setForm({
@@ -214,11 +372,10 @@ export default function DoctorShaddaiPerfil() {
           </div>
 
           <div
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-2xl font-bold text-sm ${
-              perfilCompleto
-                ? 'bg-emerald-100 text-emerald-700'
-                : 'bg-amber-100 text-amber-700'
-            }`}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-2xl font-bold text-sm ${perfilCompleto
+              ? 'bg-emerald-100 text-emerald-700'
+              : 'bg-amber-100 text-amber-700'
+              }`}
           >
             <ShieldCheck size={18} />
             {perfilCompleto ? 'Perfil completo' : 'Perfil pendiente'}
@@ -386,6 +543,86 @@ export default function DoctorShaddaiPerfil() {
                   className="w-full pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 resize-none"
                   placeholder="Dirección o referencia del consultorio..."
                 />
+              </div>
+            </div>
+
+            <div className="md:col-span-2 rounded-3xl border border-dashed border-sky-200 bg-sky-50/60 p-5">
+              <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex items-start gap-4">
+                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white text-sky-700 shadow-sm ring-1 ring-sky-100">
+                    <ImagePlus size={28} />
+                  </div>
+
+                  <div>
+                    <h3 className="text-base font-black text-slate-800">
+                      Logo de universidad
+                    </h3>
+
+                    <p className="mt-1 text-sm leading-relaxed text-slate-500">
+                      Sube el logo de la universidad asociada al doctor. Posteriormente se
+                      podrá mostrar en recetas, referencias o documentos clínicos.
+                    </p>
+
+                    <p className="mt-2 text-xs font-semibold text-slate-400">
+                      Formatos permitidos: JPG, PNG o WEBP. Tamaño máximo: 2 MB.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col items-center gap-3">
+                  <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                    {logoUniversidadPreview ? (
+                      <img
+                        src={logoUniversidadPreview}
+                        alt="Logo de universidad"
+                        className="h-full w-full object-contain p-2"
+                      />
+                    ) : (
+                      <ImagePlus className="text-slate-300" size={34} />
+                    )}
+                  </div>
+
+                  {logoUniversidadUrl && !logoUniversidadFile && (
+                    <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-700">
+                      Logo guardado
+                    </span>
+                  )}
+
+                  {logoUniversidadFile && (
+                    <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-black text-amber-700">
+                      Pendiente de subir
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+                <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-bold text-slate-700 shadow-sm ring-1 ring-slate-200 transition hover:bg-slate-50">
+                  <ImagePlus size={18} />
+                  Seleccionar imagen
+
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    onChange={handleLogoUniversidadChange}
+                    className="hidden"
+                  />
+                </label>
+
+                <button
+                  type="button"
+                  onClick={subirLogoUniversidad}
+                  disabled={!logoUniversidadFile || subiendoLogoUniversidad}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-sky-700 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-sky-900/20 transition hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {subiendoLogoUniversidad ? (
+                    <Loader2 size={18} className="animate-spin" />
+                  ) : (
+                    <UploadCloud size={18} />
+                  )}
+
+                  {subiendoLogoUniversidad ? 'Subiendo...' : 'Subir logo'}
+                </button>
               </div>
             </div>
 

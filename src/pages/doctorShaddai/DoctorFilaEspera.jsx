@@ -36,6 +36,8 @@ import HojaViolenciaLesionImprimible from '../../components/doctores/HojaViolenc
 import NotaMedicaImprimible from '../../components/doctores/NotaMedicaImprimible';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import CertificadoMedicoImprimible from '../../components/doctores/CertificadoMedicoImprimible';
+
 
 const estadoStyles = {
   EN_ESPERA: {
@@ -119,6 +121,10 @@ const tipoDocumentoStyles = {
   VIOLENCIA_LESION: {
     label: 'Violencia / lesión',
     className: 'bg-red-50 text-red-700 border-red-200',
+  },
+  CERTIFICADO_MEDICO: {
+    label: 'Certificado médico',
+    className: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   },
 };
 
@@ -272,6 +278,15 @@ const valorDocumento = (...valores) => {
   });
 
   return encontrado ?? 'N/A';
+};
+
+const primerTexto = (...valores) => {
+  const encontrado = valores.find((valor) => {
+    if (valor === undefined || valor === null) return false;
+    return String(valor).trim() !== '';
+  });
+
+  return encontrado ? String(encontrado).trim() : '';
 };
 
 const formatearFechaCorta = (fecha) => {
@@ -1285,26 +1300,64 @@ const DoctorFilaEspera = () => {
       ),
     };
 
-    const productos = (detalles || []).map((item) => ({
-      id_detalle: item.id_detalle,
-      id_producto: item.id_producto,
-      nombre:
-        item.nombre ||
-        item.producto ||
-        item.nombre_producto ||
-        item.descripcion_producto ||
-        'Medicamento',
-      presentacion: item.presentacion || item.forma_farmaceutica || '',
-      cantidad:
-        item.cantidad ||
-        item.cantidad_recetada ||
-        item.cantidad_receta ||
-        1,
-      dosis: item.dosis || '',
-      frecuencia: item.frecuencia || '',
-      duracion: item.duracion || '',
-      indicaciones: item.indicaciones || '',
-    }));
+    const productos = (detalles || []).map((item) => {
+      console.log('Detalle receta reimpresión:', item);
+
+      const nombre = primerTexto(
+        item.nombre,
+        item.producto,
+        item.nombre_producto,
+        item.descripcion_producto,
+        item.nombre_comercial,
+        item.medicamento,
+        'Medicamento'
+      );
+
+      const presentacion = primerTexto(
+        item.presentacion,
+        item.presentacion_producto,
+        item.presentacion_medicamento,
+        item.descripcion_presentacion,
+        item.descripcion,
+        item.concentracion,
+        item.contenido,
+        item.unidad_medida,
+        item.raw?.presentacion,
+        item.raw?.descripcion
+      );
+
+      const formaFarmaceutica = primerTexto(
+        item.forma_farmaceutica,
+        item.forma,
+        item.tipo_forma,
+        item.forma_producto,
+        item.raw?.forma_farmaceutica,
+        item.raw?.forma
+      );
+
+      return {
+        id_detalle: item.id_detalle,
+        id_producto: item.id_producto,
+        nombre,
+        nombre_generico: primerTexto(
+          item.nombre_generico,
+          item.generico,
+          item.denominacion_generica,
+          item.raw?.nombre_generico
+        ),
+        presentacion,
+        forma_farmaceutica: formaFarmaceutica,
+        cantidad:
+          item.cantidad ||
+          item.cantidad_recetada ||
+          item.cantidad_receta ||
+          1,
+        dosis: item.dosis || '',
+        frecuencia: item.frecuencia || '',
+        duracion: item.duracion || '',
+        indicaciones: item.indicaciones || '',
+      };
+    });
 
     return {
       receta: {
@@ -1335,6 +1388,20 @@ const DoctorFilaEspera = () => {
           metadata.especialidad ||
           pacienteDocumentos?.doctor_especialidad ||
           'Medicina general',
+        direccion_consultorio:
+          receta.direccion_consultorio ||
+          metadata.direccion_consultorio ||
+          pacienteDocumentos?.direccion_consultorio ||
+          '',
+        logo_universidad_url:
+          receta.logo_universidad_url ||
+          receta.logo_universidad ||
+          receta.doctor_logo_universidad_url ||
+          metadata.logo_universidad_url ||
+          metadata.logo_universidad ||
+          metadata.doctor_logo_universidad_url ||
+          pacienteDocumentos?.logo_universidad_url ||
+          null,
       },
       paciente,
       productos,
@@ -1430,6 +1497,16 @@ const DoctorFilaEspera = () => {
           data.especialidad ||
           pacienteDocumentos?.doctor_especialidad ||
           'Medicina general',
+
+        logo_universidad_url:
+          metadata.logo_universidad_url ||
+          metadata.logo_universidad ||
+          metadata.doctor_logo_universidad_url ||
+          data.logo_universidad_url ||
+          data.logo_universidad ||
+          data.doctor_logo_universidad_url ||
+          pacienteDocumentos?.logo_universidad_url ||
+          '',
       },
 
       diagnostico:
@@ -1625,6 +1702,184 @@ const DoctorFilaEspera = () => {
     };
   };
 
+  const mapearCertificadoParaImpresion = (doc = {}) => {
+    const metadata = normalizarMetadata(doc.metadata);
+    const data = doc.data || {};
+
+    const fuente = {
+      ...metadata,
+      ...data,
+    };
+
+    const datosPaciente = fuente.datos_paciente || metadata.datos_paciente || {};
+    const datosDoctor = fuente.datos_doctor || metadata.datos_doctor || {};
+
+    return {
+      id_certificado:
+        fuente.id_certificado ||
+        doc.id_origen ||
+        doc.id ||
+        doc.id_documento,
+
+      folio_certificado:
+        fuente.folio_certificado ||
+        fuente.folio ||
+        doc.folio ||
+        `CERT-${doc.id_origen || doc.id || 'S/F'}`,
+
+      tipo_certificado:
+        fuente.tipo_certificado ||
+        metadata.tipo_certificado ||
+        'PERSONALIZADO',
+
+      lugar_expedicion:
+        fuente.lugar_expedicion ||
+        metadata.lugar_expedicion ||
+        'Pachuca Hidalgo',
+
+      fecha_expedicion:
+        fuente.fecha_expedicion ||
+        fuente.fecha_creacion ||
+        doc.fecha ||
+        metadata.fecha_expedicion ||
+        metadata.fecha_creacion,
+
+      destinatario:
+        fuente.destinatario ||
+        metadata.destinatario ||
+        'A quien corresponda',
+
+      finalidad:
+        fuente.finalidad ||
+        metadata.finalidad ||
+        '',
+
+      estado_salud:
+        fuente.estado_salud ||
+        metadata.estado_salud ||
+        'BUEN ESTADO DE SALUD ACTUAL',
+
+      antecedentes:
+        fuente.antecedentes ||
+        metadata.antecedentes ||
+        '',
+
+      exploracion_fisica:
+        fuente.exploracion_fisica ||
+        metadata.exploracion_fisica ||
+        '',
+
+      conclusion:
+        fuente.conclusion ||
+        metadata.conclusion ||
+        '',
+
+      observaciones:
+        fuente.observaciones ||
+        metadata.observaciones ||
+        '',
+
+      texto_libre:
+        fuente.texto_libre ||
+        metadata.texto_libre ||
+        '',
+
+      datos_paciente: {
+        nombre_paciente:
+          datosPaciente.nombre_paciente ||
+          fuente.nombre_paciente ||
+          metadata.nombre_paciente ||
+          pacienteDocumentos?.nombre_paciente ||
+          '',
+
+        edad:
+          datosPaciente.edad ||
+          fuente.edad ||
+          metadata.edad ||
+          pacienteDocumentos?.edad ||
+          '',
+
+        sexo:
+          datosPaciente.sexo ||
+          fuente.sexo ||
+          metadata.sexo ||
+          pacienteDocumentos?.sexo ||
+          '',
+
+        fecha_nacimiento:
+          datosPaciente.fecha_nacimiento ||
+          fuente.fecha_nacimiento ||
+          metadata.fecha_nacimiento ||
+          pacienteDocumentos?.fecha_nacimiento ||
+          '',
+
+        telefono:
+          datosPaciente.telefono ||
+          fuente.telefono ||
+          metadata.telefono ||
+          pacienteDocumentos?.telefono ||
+          '',
+
+        id_expediente:
+          datosPaciente.id_expediente ||
+          fuente.id_expediente ||
+          metadata.id_expediente ||
+          pacienteDocumentos?.id_expediente ||
+          '',
+      },
+
+      datos_doctor: {
+        nombre_completo:
+          datosDoctor.nombre_completo ||
+          fuente.nombre_doctor ||
+          fuente.doctor_nombre_completo ||
+          metadata.doctor_nombre_completo ||
+          metadata.medico_responsable ||
+          pacienteDocumentos?.doctor_nombre ||
+          'Doctor Shaddai',
+
+        cedula_profesional:
+          datosDoctor.cedula_profesional ||
+          fuente.cedula_profesional ||
+          metadata.cedula_profesional ||
+          pacienteDocumentos?.cedula_profesional ||
+          'N/A',
+
+        especialidad:
+          datosDoctor.especialidad ||
+          fuente.especialidad ||
+          metadata.especialidad ||
+          pacienteDocumentos?.doctor_especialidad ||
+          pacienteDocumentos?.especialidad ||
+          'Medicina general',
+
+        telefono:
+          datosDoctor.telefono ||
+          fuente.telefono_doctor ||
+          metadata.telefono_doctor ||
+          '',
+
+        correo:
+          datosDoctor.correo ||
+          fuente.correo_doctor ||
+          metadata.correo_doctor ||
+          '',
+
+        direccion_consultorio:
+          datosDoctor.direccion_consultorio ||
+          fuente.direccion_consultorio ||
+          metadata.direccion_consultorio ||
+          '',
+
+        logo_universidad_url:
+          datosDoctor.logo_universidad_url ||
+          fuente.logo_universidad_url ||
+          metadata.logo_universidad_url ||
+          '',
+      },
+    };
+  };
+
   const abrirDocumentosAtencion = async (paciente) => {
     if (!paciente.id_expediente) {
       Swal.fire({
@@ -1686,7 +1941,7 @@ const DoctorFilaEspera = () => {
     }
   };
 
-  const imprimirNodoEnIframe = (elementId, titulo = '') => {
+  const imprimirNodoEnIframe = async (elementId, titulo = 'Documento clínico') => {
     const imprimible = document.getElementById(elementId);
 
     if (!imprimible) {
@@ -1701,18 +1956,27 @@ const DoctorFilaEspera = () => {
 
     const iframe = document.createElement('iframe');
 
+    /*
+      IMPORTANTE:
+      No usar width: 0, height: 0, opacity: 0 ni visibility: hidden.
+      Chrome puede imprimir el iframe en blanco si no tiene área real de render.
+    */
     iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
-    iframe.style.width = '0';
-    iframe.style.height = '0';
+    iframe.style.left = '-10000px';
+    iframe.style.top = '0';
+    iframe.style.width = '216mm';
+    iframe.style.height = '279mm';
     iframe.style.border = '0';
-    iframe.style.opacity = '0';
+    iframe.style.background = '#ffffff';
+    iframe.style.opacity = '1';
+    iframe.style.visibility = 'visible';
+    iframe.style.display = 'block';
+    iframe.style.pointerEvents = 'none';
 
     document.body.appendChild(iframe);
 
     const iframeWindow = iframe.contentWindow;
-    const iframeDoc = iframeWindow.document;
+    const iframeDoc = iframe.contentDocument || iframeWindow.document;
 
     const estilos = Array.from(
       document.querySelectorAll('style, link[rel="stylesheet"]')
@@ -1723,25 +1987,43 @@ const DoctorFilaEspera = () => {
     iframeDoc.open();
     iframeDoc.write(`
     <!doctype html>
-    <html>
+    <html lang="es">
       <head>
         <meta charset="utf-8" />
-        <title></title>
+        <title>${titulo}</title>
+
         ${estilos}
+
         <style>
           @page {
-            margin: 0;
+            size: letter portrait;
+            margin: 6mm;
+          }
+
+          * {
+            box-sizing: border-box !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
 
           html,
           body {
             margin: 0 !important;
             padding: 0 !important;
-            background: white !important;
+            width: 216mm !important;
+            min-height: 279mm !important;
+            background: #ffffff !important;
+            overflow: visible !important;
           }
 
-          body {
-            padding: 6mm !important;
+          /*
+            En el iframe solo existe el documento a imprimir.
+            Por eso anulamos cualquier regla tipo:
+            body * { visibility: hidden }
+          */
+          body,
+          body * {
+            visibility: visible !important;
           }
 
           #receta-imprimible,
@@ -1749,8 +2031,83 @@ const DoctorFilaEspera = () => {
           #nota-medica-imprimible,
           #consentimiento-informado-imprimible,
           #hoja-referencia-contrarreferencia,
+          #certificado-medico-imprimible,
           #hoja-violencia-lesion-imprimible {
-            box-sizing: border-box !important;
+            position: static !important;
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            transform: none !important;
+            zoom: 1 !important;
+            margin: 0 auto !important;
+            padding: 0 !important;
+            overflow: visible !important;
+            background: #ffffff !important;
+          }
+
+          #hoja-referencia-contrarreferencia {
+            width: 204mm !important;
+            max-width: 204mm !important;
+            min-width: 204mm !important;
+          }
+
+          #hoja-referencia-contrarreferencia .rr-sheet {
+            position: relative !important;
+            display: block !important;
+            width: 204mm !important;
+            max-width: 204mm !important;
+            min-width: 204mm !important;
+            min-height: 267mm !important;
+            margin: 0 auto !important;
+            padding: 0 !important;
+            border: 0 !important;
+            box-shadow: none !important;
+            overflow: hidden !important;
+            background: #ffffff !important;
+            page-break-after: always !important;
+            break-after: page !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+
+          #hoja-referencia-contrarreferencia .rr-sheet:last-child {
+            page-break-after: auto !important;
+            break-after: auto !important;
+          }
+
+          #hoja-referencia-contrarreferencia .rr-page-break {
+            page-break-before: always !important;
+            break-before: page !important;
+          }
+
+          #laboratorio-imprimible {
+            width: 204mm !important;
+            max-width: 204mm !important;
+            min-width: 204mm !important;
+            margin: 0 auto !important;
+            padding: 0 !important;
+            overflow: visible !important;
+          }
+
+          #laboratorio-imprimible .lab-sheet {
+            width: 100% !important;
+            min-height: 267mm !important;
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+            page-break-after: auto !important;
+            break-after: auto !important;
+          }
+
+          #laboratorio-imprimible .lab-content {
+            min-height: 267mm !important;
+            height: auto !important;
+          }
+
+          .no-print {
+            display: none !important;
           }
         </style>
       </head>
@@ -1762,34 +2119,66 @@ const DoctorFilaEspera = () => {
   `);
     iframeDoc.close();
 
-    iframe.onload = () => {
-      try {
-        iframeWindow.document.title = '';
-        iframeWindow.focus();
+    const esperarImagenes = () => {
+      const imagenes = Array.from(iframeDoc.images || []);
 
-        setTimeout(() => {
-          iframeWindow.print();
-
-          setTimeout(() => {
-            if (document.body.contains(iframe)) {
-              document.body.removeChild(iframe);
-            }
-          }, 1000);
-        }, 300);
-      } catch (error) {
-        console.error('Error al imprimir documento:', error);
-
-        if (document.body.contains(iframe)) {
-          document.body.removeChild(iframe);
-        }
-
-        Swal.fire({
-          icon: 'error',
-          title: 'Error de impresión',
-          text: 'No se pudo abrir la ventana de impresión.',
-        });
+      if (!imagenes.length) {
+        return Promise.resolve();
       }
+
+      return Promise.all(
+        imagenes.map((img) => {
+          if (img.complete) return Promise.resolve();
+
+          return new Promise((resolve) => {
+            img.onload = resolve;
+            img.onerror = resolve;
+          });
+        })
+      );
     };
+
+    try {
+      await new Promise((resolve) => {
+        iframeWindow.requestAnimationFrame(() => {
+          iframeWindow.requestAnimationFrame(() => {
+            setTimeout(resolve, 400);
+          });
+        });
+      });
+
+      if (iframeDoc.fonts?.ready) {
+        await iframeDoc.fonts.ready;
+      }
+
+      await esperarImagenes();
+
+      iframeWindow.focus();
+      iframeWindow.print();
+
+      const limpiar = () => {
+        setTimeout(() => {
+          if (document.body.contains(iframe)) {
+            document.body.removeChild(iframe);
+          }
+        }, 1000);
+      };
+
+      iframeWindow.onafterprint = limpiar;
+      setTimeout(limpiar, 5000);
+    } catch (error) {
+      console.error('Error al imprimir documento:', error);
+
+      if (document.body.contains(iframe)) {
+        document.body.removeChild(iframe);
+      }
+
+      Swal.fire({
+        icon: 'error',
+        title: 'Error de impresión',
+        text: 'No se pudo abrir la ventana de impresión.',
+      });
+    }
   };
 
   const abrirHtmlImpresion = (html, titulo = 'Documento clínico') => {
@@ -2296,9 +2685,38 @@ const DoctorFilaEspera = () => {
       return limpio || fallback;
     };
 
+    const obtenerUrlLogo = (ruta) => {
+      if (!ruta) return '';
+
+      const valor = String(ruta).trim();
+
+      if (!valor) return '';
+
+      if (valor.startsWith('http://') || valor.startsWith('https://') || valor.startsWith('data:')) {
+        return valor;
+      }
+
+      const baseURL = api.defaults.baseURL || '';
+      const baseSinApi = baseURL.replace(/\/api\/?$/, '');
+
+      if (valor.startsWith('/')) {
+        return `${baseSinApi}${valor}`;
+      }
+
+      return `${baseSinApi}/${valor}`;
+    };
+
+    const logoUniversidadUrl = obtenerUrlLogo(
+      doctor.logo_universidad_url ||
+      receta.logo_universidad_url ||
+      recetaGenerada?.logo_universidad_url ||
+      ''
+    );
+
     const nombrePaciente = texto(
       paciente.nombre_paciente ||
       receta.nombre_paciente ||
+      receta.paciente_nombre ||
       expediente.nombre_paciente,
       'Paciente no especificado'
     );
@@ -2306,18 +2724,21 @@ const DoctorFilaEspera = () => {
     const telefonoPaciente = texto(
       paciente.telefono ||
       receta.telefono_paciente ||
+      receta.telefono ||
       expediente.telefono
     );
 
     const edadPaciente = texto(
       paciente.edad ||
       receta.edad_paciente ||
+      receta.edad ||
       expediente.edad
     );
 
     const sexoPaciente = texto(
       paciente.sexo ||
       receta.sexo_paciente ||
+      receta.sexo ||
       expediente.sexo
     );
 
@@ -2351,14 +2772,27 @@ const DoctorFilaEspera = () => {
             item.generico ||
             item.denominacion_generica ||
             '',
-          presentacion:
-            item.presentacion ||
-            item.descripcion ||
-            '',
-          forma_farmaceutica:
-            item.forma_farmaceutica ||
-            item.forma ||
-            '',
+          presentacion: primerTexto(
+            item.presentacion,
+            item.presentacion_producto,
+            item.presentacion_medicamento,
+            item.descripcion_presentacion,
+            item.descripcion,
+            item.concentracion,
+            item.contenido,
+            item.unidad_medida,
+            item.raw?.presentacion,
+            item.raw?.descripcion
+          ),
+
+          forma_farmaceutica: primerTexto(
+            item.forma_farmaceutica,
+            item.forma,
+            item.tipo_forma,
+            item.forma_producto,
+            item.raw?.forma_farmaceutica,
+            item.raw?.forma
+          ),
           cantidad:
             item.cantidad ||
             item.cantidad_recetada ||
@@ -2375,512 +2809,648 @@ const DoctorFilaEspera = () => {
       0
     );
 
+    const recetaEsLarga =
+      productosReceta.length > 3 ||
+      productosReceta.some((item) => {
+        const textoIndicaciones = [
+          item.nombre,
+          item.nombre_generico,
+          item.presentacion,
+          item.forma_farmaceutica,
+          item.dosis,
+          item.frecuencia,
+          item.duracion,
+          item.indicaciones,
+        ]
+          .filter(Boolean)
+          .join(' ');
+
+        return textoIndicaciones.length > 180;
+      });
+
     const filasProductos = productosReceta.length
       ? productosReceta
         .map(
           (item, index) => `
-            <div class="producto">
-              <div class="producto-top">
+            <div class="rx-producto">
+              <div class="rx-producto-main">
                 <div>
-                  <div class="producto-nombre">
+                  <p class="rx-producto-nombre">
                     ${index + 1}. ${escapeHtml(texto(item.nombre, 'Medicamento'))}
-                  </div>
+                  </p>
 
-                  <div class="producto-meta">
-                    <strong>Genérica:</strong> ${escapeHtml(texto(item.nombre_generico, '-'))}
-                    · <strong>Presentación:</strong> ${escapeHtml(texto(item.presentacion, '-'))}
-                    · <strong>Forma:</strong> ${escapeHtml(texto(item.forma_farmaceutica, '-'))}
-                  </div>
+                
                 </div>
 
-                <div class="cantidad">x${escapeHtml(Number(item.cantidad || 1))}</div>
+                <div class="rx-cantidad">x${escapeHtml(Number(item.cantidad || 1))}</div>
               </div>
 
-              <div class="indicaciones-grid">
-                <div><strong>Dosis:</strong> ${escapeHtml(texto(item.dosis, '-'))}</div>
-                <div><strong>Frecuencia:</strong> ${escapeHtml(texto(item.frecuencia, '-'))}</div>
-                <div><strong>Duración:</strong> ${escapeHtml(texto(item.duracion, '-'))}</div>
+              <div class="rx-indicaciones-grid">
+                <span><strong>Dosis:</strong> ${escapeHtml(texto(item.dosis, '-'))}</span>
+                <span><strong>Frecuencia:</strong> ${escapeHtml(texto(item.frecuencia, '-'))}</span>
+                <span><strong>Duración:</strong> ${escapeHtml(texto(item.duracion, '-'))}</span>
               </div>
 
               ${item.indicaciones
-              ? `<div class="tratamiento"><strong>Tratamiento / indicaciones:</strong> ${escapeHtml(item.indicaciones)}</div>`
+              ? `<p class="rx-tratamiento"><strong>Indicaciones:</strong> ${escapeHtml(item.indicaciones)}</p>`
               : ''
             }
             </div>
           `
         )
         .join('')
-      : `<div class="empty">No hay productos registrados.</div>`;
+      : `<div class="rx-empty">No hay productos registrados.</div>`;
+
+    const copiaRecetaHtml = (tipoCopia) => `
+      <section class="rx-copy">
+        <div class="rx-header">
+          <div class="rx-logos">
+            <div class="rx-logo-box">
+              <img src="${escapeHtml(logoFarmacia)}" alt="Farmacias Shaddai" />
+            </div>
+
+            ${logoUniversidadUrl
+        ? `
+                <div class="rx-logo-box">
+                  <img src="${escapeHtml(logoUniversidadUrl)}" alt="Logo universidad" />
+                </div>
+              `
+        : ''
+      }
+          </div>
+
+          <div class="rx-title">
+            <h1>FARMACIAS SHADDAI</h1>
+            <p>RECETA MÉDICA</p>
+            <span>Bienestar al alcance de todos</span>
+          </div>
+
+          <div class="rx-folio">
+            <span>${escapeHtml(tipoCopia)}</span>
+            <strong>${escapeHtml(folio)}</strong>
+            <small>${escapeHtml(fechaReceta)}</small>
+          </div>
+        </div>
+
+        <div class="rx-info-grid">
+          <div class="rx-card">
+            <div class="rx-card-title">Médico</div>
+
+            <p><strong>Nombre:</strong> ${escapeHtml(texto(doctor.nombre_completo, 'Doctor Shaddai'))}</p>
+            <p><strong>Especialidad:</strong> ${escapeHtml(texto(doctor.especialidad, 'Medicina general'))}</p>
+            <p><strong>Cédula:</strong> ${escapeHtml(texto(doctor.cedula_profesional))}</p>
+            <p><strong>Consultorio:</strong> ${escapeHtml(texto(doctor.direccion_consultorio, 'Farmacias Shaddai'))}</p>
+          </div>
+
+          <div class="rx-card">
+            <div class="rx-card-title">Paciente</div>
+
+            <p><strong>Paciente:</strong> ${escapeHtml(nombrePaciente)}</p>
+            <p><strong>Expediente:</strong> ${escapeHtml(expediente?.id_expediente ? `EXP-${expediente.id_expediente}` : texto(expediente?.expediente, 'N/A'))}</p>
+            <p><strong>Teléfono:</strong> ${escapeHtml(telefonoPaciente)}</p>
+            <p><strong>Edad:</strong> ${escapeHtml(edadPaciente)} &nbsp; <strong>Sexo:</strong> ${escapeHtml(sexoPaciente)}</p>
+          </div>
+        </div>
+
+        <div class="rx-diagnostico">
+          <strong>Diagnóstico:</strong> ${escapeHtml(diagnostico)}
+        </div>
+
+        <div class="rx-prescripcion">
+          <div class="rx-section-title">
+            <span>Prescripción</span>
+            <small>${escapeHtml(productosReceta.length)} producto(s) · ${escapeHtml(totalPiezas)} pieza(s)</small>
+          </div>
+
+          <div class="rx-productos">
+            ${filasProductos}
+          </div>
+        </div>
+
+        <div class="rx-footer">
+          <div class="rx-observaciones">
+            <strong>Observaciones:</strong> ${escapeHtml(observaciones)}
+          </div>
+
+          <div class="rx-firma">
+            <div></div>
+            <p>Firma del médico</p>
+            <strong>${escapeHtml(texto(doctor.nombre_completo, 'Doctor Shaddai'))}</strong>
+            <span>Cédula: ${escapeHtml(texto(doctor.cedula_profesional))}</span>
+          </div>
+        </div>
+      </section>
+    `;
 
     return `
-    <!doctype html>
-    <html lang="es">
-      <head>
-        <meta charset="utf-8" />
-        <title>Receta médica ${escapeHtml(folio)}</title>
+      <!doctype html>
+      <html lang="es">
+        <head>
+          <meta charset="utf-8" />
+          <title>Receta médica ${escapeHtml(folio)}</title>
 
-        <style>
-          @page {
-            size: letter portrait;
-            margin: 8mm;
-          }
+          <style>
+            @page {
+              size: letter portrait;
+              margin: 6mm;
+            }
 
-          * {
-            box-sizing: border-box;
-          }
+            * {
+              box-sizing: border-box;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
 
-          html,
-          body {
-            margin: 0;
-            padding: 0;
-            background: white;
-            color: #0f172a;
-            font-family: Arial, Helvetica, sans-serif;
-            font-size: 11px;
-          }
+            html,
+            body {
+              margin: 0;
+              padding: 0;
+              background: white;
+              color: #0f172a;
+              font-family: Arial, Helvetica, sans-serif;
+              font-size: 11px;
+            }
 
-          body {
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-          }
+            .rx-print-wrapper {
+              width: 100%;
+              max-width: 8.5in;
+              margin: 0 auto;
+              background: white;
+              color: #0f172a;
+            }
 
-          .hoja {
-            min-height: calc(279.4mm - 16mm);
-            width: 100%;
-            display: flex;
-            flex-direction: column;
-            border: 1px solid #dbe3ee;
-            border-radius: 16px;
-            overflow: hidden;
-            background: white;
-          }
+            .rx-page {
+              width: 100%;
+              background: white;
+            }
 
-          .header {
-            border-bottom: 4px solid #0369a1;
-            padding: 16px 20px 14px;
-            display: grid;
-            grid-template-columns: 82px 1fr 190px;
-            gap: 16px;
-            align-items: center;
-            background: #ffffff;
-          }
+            .rx-print-double .rx-page {
+              height: calc(279.4mm - 12mm);
+              max-height: calc(279.4mm - 12mm);
+              display: grid;
+              grid-template-rows: 1fr 5mm 1fr;
+              gap: 0;
+              overflow: hidden;
+            }
 
-          .logo {
-            width: 66px;
-            height: 66px;
-            border: 1px solid #e2e8f0;
-            border-radius: 18px;
-            padding: 7px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-          }
+            .rx-print-large .rx-page {
+              min-height: calc(279.4mm - 12mm);
+              height: auto;
+              display: block;
+              page-break-after: always;
+              break-after: page;
+              overflow: visible;
+            }
 
-          .logo img {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
-          }
+            .rx-print-large .rx-page:last-child {
+              page-break-after: auto;
+              break-after: auto;
+            }
 
-          .marca {
-            text-align: center;
-          }
+            .rx-copy {
+              border: 1px solid #cbd5e1;
+              border-radius: 12px;
+              padding: 7px 9px;
+              background: white;
+              display: flex;
+              flex-direction: column;
+              gap: 5px;
+            }
 
-          .marca h1 {
-            margin: 0;
-            font-size: 24px;
-            letter-spacing: 5px;
-            font-weight: 900;
-            color: #020617;
-          }
+            .rx-print-double .rx-copy {
+              height: 100%;
+              max-height: 100%;
+              overflow: hidden;
+            }
 
-          .marca .subtitulo {
-            margin-top: 4px;
-            font-size: 12px;
-            letter-spacing: 5px;
-            text-transform: uppercase;
-            font-weight: 900;
-            color: #0369a1;
-          }
+            .rx-print-large .rx-copy {
+              min-height: calc(279.4mm - 12mm);
+              height: auto;
+              max-height: none;
+              overflow: visible;
+            }
 
-          .marca .slogan {
-            margin-top: 5px;
-            font-size: 10px;
-            font-weight: 700;
-            color: #334155;
-          }
+            .rx-separator {
+              height: 5mm;
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              color: #94a3b8;
+              font-size: 8px;
+              font-weight: 900;
+              letter-spacing: 0.18em;
+              text-transform: uppercase;
+            }
 
-          .folio-box {
-            border: 1px solid #dbe3ee;
-            border-radius: 18px;
-            padding: 12px;
-            text-align: center;
-          }
+            .rx-separator::before,
+            .rx-separator::after {
+              content: '';
+              flex: 1;
+              border-top: 1px dashed #94a3b8;
+            }
 
-          .folio-box .label {
-            font-size: 9px;
-            font-weight: 900;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            color: #64748b;
-          }
+            .rx-header {
+              display: grid;
+              grid-template-columns: 88px 1fr 132px;
+              align-items: center;
+              gap: 10px;
+              border-bottom: 2px solid #0369a1;
+              padding-bottom: 6px;
+            }
 
-          .folio-box .folio {
-            margin-top: 5px;
-            font-size: 14px;
-            font-weight: 900;
-            color: #020617;
-          }
+            .rx-logos {
+              display: flex;
+              align-items: center;
+              gap: 5px;
+            }
 
-          .folio-box .fecha {
-            margin-top: 4px;
-            font-size: 10px;
-            font-weight: 800;
-            color: #475569;
-          }
+            .rx-logo-box {
+              width: 40px;
+              height: 40px;
+              border: 1px solid #e2e8f0;
+              border-radius: 10px;
+              padding: 3px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              background: white;
+            }
 
-          .contenido {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-            padding: 14px 20px 12px;
-          }
+            .rx-logo-box img {
+              max-width: 100%;
+              max-height: 100%;
+              object-fit: contain;
+            }
 
-          .grid-2 {
-            display: grid;
-            grid-template-columns: 1fr 1.1fr;
-            gap: 12px;
-          }
+            .rx-title {
+              text-align: center;
+              line-height: 1.1;
+            }
 
-          .grid-antecedente {
-            display: grid;
-            grid-template-columns: 0.9fr 1.1fr;
-            gap: 12px;
-          }
+            .rx-title h1 {
+              margin: 0;
+              font-size: 15px;
+              font-weight: 900;
+              letter-spacing: 0.14em;
+              color: #0f172a;
+            }
 
-          .card {
-            border: 1px solid #dbe3ee;
-            border-radius: 16px;
-            padding: 12px;
-            background: white;
-          }
+            .rx-title p {
+              margin: 2px 0 0;
+              font-size: 9px;
+              font-weight: 900;
+              letter-spacing: 0.28em;
+              color: #0369a1;
+            }
 
-          .card-warning {
-            border-color: #fde68a;
-            background: #fffbeb;
-          }
+            .rx-title span {
+              display: block;
+              margin-top: 2px;
+              font-size: 8px;
+              font-weight: 700;
+              color: #64748b;
+            }
 
-          .card-title {
-            margin: 0 0 8px;
-            padding-bottom: 6px;
-            border-bottom: 1px solid #e2e8f0;
-            color: #075985;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            font-size: 10px;
-            font-weight: 900;
-          }
+            .rx-folio {
+              border: 1px solid #cbd5e1;
+              border-radius: 10px;
+              padding: 5px 6px;
+              text-align: center;
+              line-height: 1.15;
+            }
 
-          .card-warning .card-title {
-            color: #92400e;
-            border-bottom-color: #fde68a;
-          }
+            .rx-folio span {
+              display: block;
+              font-size: 8px;
+              font-weight: 900;
+              color: #0369a1;
+              text-transform: uppercase;
+              letter-spacing: 0.08em;
+            }
 
-          .datos {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 5px 12px;
-            line-height: 1.3;
-          }
+            .rx-folio strong {
+              display: block;
+              margin-top: 2px;
+              font-size: 10px;
+              font-weight: 900;
+              color: #0f172a;
+            }
 
-          .datos .full {
-            grid-column: 1 / -1;
-          }
+            .rx-folio small {
+              display: block;
+              margin-top: 1px;
+              font-size: 8px;
+              font-weight: 700;
+              color: #64748b;
+            }
 
-          .texto-box {
-            min-height: 46px;
-            border: 1px solid #e2e8f0;
-            border-radius: 12px;
-            padding: 10px;
-            line-height: 1.35;
-            background: #f8fafc;
-          }
+            .rx-info-grid {
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 7px;
+            }
 
-          .prescripcion {
-            flex: 1;
-            border: 1px solid #dbe3ee;
-            border-radius: 16px;
-            padding: 12px;
-            background: white;
-          }
+            .rx-card {
+              border: 1px solid #cbd5e1;
+              border-radius: 10px;
+              padding: 6px 8px;
+              font-size: 8.5px;
+              line-height: 1.25;
+            }
 
-          .prescripcion-head {
-            display: flex;
-            justify-content: space-between;
-            gap: 12px;
-            padding-bottom: 7px;
-            border-bottom: 1px solid #dbe3ee;
-            margin-bottom: 10px;
-          }
+            .rx-card p {
+              margin: 1px 0;
+            }
 
-          .prescripcion-head h2 {
-            margin: 0;
-            color: #075985;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            font-size: 10px;
-            font-weight: 900;
-          }
+            .rx-card-title {
+              margin-bottom: 3px;
+              border-bottom: 1px solid #e2e8f0;
+              padding-bottom: 2px;
+              font-size: 8px;
+              font-weight: 900;
+              text-transform: uppercase;
+              letter-spacing: 0.12em;
+              color: #0369a1;
+            }
 
-          .prescripcion-head .totales {
-            font-size: 10px;
-            font-weight: 900;
-            color: #334155;
-          }
+            .rx-diagnostico {
+              border: 1px solid #cbd5e1;
+              border-radius: 10px;
+              padding: 6px 8px;
+              min-height: 30px;
+              font-size: 8.8px;
+              line-height: 1.25;
+              background: #f8fafc;
+            }
 
-          .productos {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-          }
+            .rx-prescripcion {
+              border: 1px solid #cbd5e1;
+              border-radius: 10px;
+              padding: 6px 8px;
+              flex: 1;
+              min-height: 0;
+              overflow: hidden;
+            }
 
-          .producto {
-            border: 1px solid #dbe3ee;
-            border-radius: 13px;
-            padding: 9px;
-            background: #f8fafc;
-          }
+            .rx-print-large .rx-prescripcion {
+              overflow: visible;
+            }
 
-          .producto-top {
-            display: grid;
-            grid-template-columns: 1fr 46px;
-            gap: 10px;
-          }
+            .rx-section-title {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              border-bottom: 1px solid #e2e8f0;
+              padding-bottom: 3px;
+              margin-bottom: 5px;
+            }
 
-          .producto-nombre {
-            font-size: 12px;
-            line-height: 1.25;
-            font-weight: 900;
-            color: #020617;
-          }
+            .rx-section-title span {
+              font-size: 8px;
+              font-weight: 900;
+              text-transform: uppercase;
+              letter-spacing: 0.12em;
+              color: #0369a1;
+            }
 
-          .producto-meta {
-            margin-top: 3px;
-            font-size: 9px;
-            line-height: 1.25;
-            color: #475569;
-          }
+            .rx-section-title small {
+              font-size: 7.5px;
+              font-weight: 900;
+              color: #64748b;
+            }
 
-          .cantidad {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border: 1px solid #bae6fd;
-            border-radius: 12px;
-            background: #f0f9ff;
-            color: #075985;
-            font-size: 13px;
-            font-weight: 900;
-          }
+            .rx-productos {
+              display: flex;
+              flex-direction: column;
+              gap: 4px;
+            }
 
-          .indicaciones-grid {
-            margin-top: 7px;
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            gap: 8px;
-            font-size: 10px;
-            color: #334155;
-          }
+            .rx-print-large .rx-productos {
+              overflow: visible;
+            }
 
-          .tratamiento {
-            margin-top: 6px;
-            font-size: 10px;
-            line-height: 1.3;
-            color: #334155;
-          }
+            .rx-producto {
+              border: 1px solid #e2e8f0;
+              border-radius: 8px;
+              padding: 5px 6px;
+              background: white;
+              page-break-inside: avoid;
+              break-inside: avoid;
+            }
 
-          .empty {
-            padding: 18px;
-            text-align: center;
-            color: #64748b;
-            background: #f8fafc;
-            border-radius: 12px;
-          }
+            .rx-producto-main {
+              display: grid;
+              grid-template-columns: 1fr 34px;
+              gap: 6px;
+              align-items: start;
+            }
 
-          .inferior {
-            margin-top: auto;
-            display: grid;
-            grid-template-columns: 1fr 260px;
-            gap: 12px;
-          }
+            .rx-producto-nombre {
+              margin: 0;
+              font-size: 8.8px;
+              font-weight: 900;
+              line-height: 1.15;
+              color: #0f172a;
+            }
 
-          .observaciones {
-            min-height: 70px;
-          }
+            .rx-producto-meta {
+              margin: 2px 0 0;
+              font-size: 7.4px;
+              line-height: 1.15;
+              color: #475569;
+            }
 
-          .firma {
-            text-align: center;
-          }
+            .rx-cantidad {
+              border: 1px solid #bae6fd;
+              border-radius: 8px;
+              padding: 4px 2px;
+              text-align: center;
+              font-size: 10px;
+              font-weight: 900;
+              color: #0369a1;
+              background: #f0f9ff;
+            }
 
-          .firma-linea {
-            height: 52px;
-            border-bottom: 1px solid #334155;
-            margin-bottom: 8px;
-          }
+            .rx-indicaciones-grid {
+              margin-top: 3px;
+              display: grid;
+              grid-template-columns: repeat(3, 1fr);
+              gap: 4px;
+              font-size: 7.8px;
+              line-height: 1.15;
+              color: #334155;
+            }
 
-          .firma .titulo {
-            font-size: 10px;
-            font-weight: 900;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: #334155;
-          }
+            .rx-tratamiento {
+              margin: 3px 0 0;
+              font-size: 7.8px;
+              line-height: 1.15;
+              color: #334155;
+            }
 
-          .firma .doctor {
-            margin-top: 4px;
-            font-size: 11px;
-            font-weight: 900;
-            color: #020617;
-          }
+            .rx-empty {
+              padding: 14px;
+              text-align: center;
+              font-size: 8.5px;
+              color: #64748b;
+            }
 
-          .firma .cedula {
-            margin-top: 2px;
-            font-size: 9px;
-            color: #64748b;
-          }
+            .rx-footer {
+              display: grid;
+              grid-template-columns: 1fr 160px;
+              gap: 7px;
+              align-items: end;
+            }
 
-          .footer {
-            border-top: 1px solid #e2e8f0;
-            padding-top: 7px;
-            text-align: center;
-            font-size: 8.5px;
-            line-height: 1.3;
-            color: #64748b;
-          }
-        </style>
-      </head>
+            .rx-observaciones {
+              border: 1px solid #cbd5e1;
+              border-radius: 10px;
+              padding: 6px 8px;
+              min-height: 37px;
+              font-size: 8px;
+              line-height: 1.2;
+            }
 
-      <body>
-        <main class="hoja">
-          <header class="header">
-            <div class="logo">
-              <img src="${logoFarmacia}" alt="Farmacias Shaddai" />
-            </div>
+            .rx-firma {
+              text-align: center;
+              font-size: 7.5px;
+              color: #475569;
+            }
 
-            <div class="marca">
-              <h1>FARMACIAS SHADDAI</h1>
-              <div class="subtitulo">Receta médica</div>
-              <div class="slogan">Doctor Shaddai · Bienestar al alcance de todos</div>
-            </div>
+            .rx-firma div {
+              height: 24px;
+              border-bottom: 1px solid #0f172a;
+              margin-bottom: 3px;
+            }
 
-            <div class="folio-box">
-              <div class="label">Folio</div>
-              <div class="folio">${escapeHtml(folio)}</div>
-              <div class="fecha">${escapeHtml(fechaReceta)}</div>
-            </div>
-          </header>
+            .rx-firma p {
+              margin: 0;
+              font-weight: 900;
+              text-transform: uppercase;
+              letter-spacing: 0.08em;
+            }
 
-          <section class="contenido">
-            <div class="grid-2">
-              <div class="card">
-                <h2 class="card-title">Médico</h2>
+            .rx-firma strong {
+              display: block;
+              margin-top: 1px;
+              font-size: 8px;
+              color: #0f172a;
+            }
 
-                <div class="datos">
-                  <div class="full"><strong>Nombre:</strong> ${escapeHtml(texto(doctor.nombre_completo, 'Doctor Shaddai'))}</div>
-                  <div><strong>Especialidad:</strong> ${escapeHtml(texto(doctor.especialidad, 'Medicina general'))}</div>
-                  <div><strong>Cédula:</strong> ${escapeHtml(texto(doctor.cedula_profesional))}</div>
-                  <div class="full"><strong>Domicilio:</strong> ${escapeHtml(texto(doctor.direccion_consultorio, 'Farmacias Shaddai'))}</div>
+            .rx-firma span {
+              display: block;
+              font-size: 7px;
+            }
+
+            @media print {
+              .rx-print-wrapper {
+                width: 100% !important;
+                max-width: none !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                overflow: hidden !important;
+              }
+
+              .rx-print-double .rx-page {
+                height: calc(279.4mm - 12mm) !important;
+                max-height: calc(279.4mm - 12mm) !important;
+                display: grid !important;
+                grid-template-rows: 1fr 5mm 1fr !important;
+                overflow: hidden !important;
+                page-break-after: avoid !important;
+                break-after: avoid !important;
+              }
+
+              .rx-print-double .rx-copy {
+                height: 100% !important;
+                max-height: 100% !important;
+                min-height: 0 !important;
+                border-radius: 0 !important;
+                box-shadow: none !important;
+                overflow: hidden !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+              }
+
+              .rx-print-large .rx-page {
+                min-height: calc(279.4mm - 12mm) !important;
+                height: auto !important;
+                max-height: none !important;
+                overflow: visible !important;
+                page-break-after: always !important;
+                break-after: page !important;
+              }
+
+              .rx-print-large .rx-page:last-child {
+                page-break-after: auto !important;
+                break-after: auto !important;
+              }
+
+              .rx-print-large .rx-copy {
+                min-height: calc(279.4mm - 12mm) !important;
+                height: auto !important;
+                max-height: none !important;
+                overflow: visible !important;
+                border-radius: 0 !important;
+              }
+
+              .rx-separator {
+                height: 5mm !important;
+              }
+            }
+          </style>
+        </head>
+
+        <body>
+          <div class="rx-print-wrapper ${recetaEsLarga ? 'rx-print-large' : 'rx-print-double'}">
+            ${recetaEsLarga
+        ? `
+                <div class="rx-page">
+                  ${copiaRecetaHtml('Copia paciente')}
                 </div>
-              </div>
 
-              <div class="card">
-                <h2 class="card-title">Paciente</h2>
-
-                <div class="datos">
-                  <div class="full"><strong>Paciente:</strong> ${escapeHtml(nombrePaciente)}</div>
-                  <div><strong>Tel:</strong> ${escapeHtml(telefonoPaciente)}</div>
-                  <div><strong>Edad:</strong> ${escapeHtml(edadPaciente)}</div>
-                  <div><strong>Sexo:</strong> ${escapeHtml(sexoPaciente)}</div>
-                  <div><strong>Fecha:</strong> ${escapeHtml(fechaReceta)}</div>
+                <div class="rx-page">
+                  ${copiaRecetaHtml('Copia consultorio')}
                 </div>
-              </div>
-            </div>
+              `
+        : `
+                <div class="rx-page">
+                  ${copiaRecetaHtml('Copia paciente')}
 
-            <div class="grid-antecedente">
-              <div class="card card-warning">
-                <h2 class="card-title">Antecedentes relevantes</h2>
+                  <div class="rx-separator">
+                    Corte aquí
+                  </div>
 
-                <div class="datos">
-                  <div class="full"><strong>Condiciones:</strong> ${escapeHtml(texto(expediente.enfermedades_condiciones, 'Sin registro'))}</div>
-                  <div class="full"><strong>Alergias:</strong> ${escapeHtml(texto(expediente.alergias, 'Sin registro'))}</div>
-                  <div class="full"><strong>Medicamentos actuales:</strong> ${escapeHtml(texto(expediente.medicamentos_actuales, 'Sin registro'))}</div>
+                  ${copiaRecetaHtml('Copia consultorio')}
                 </div>
-              </div>
+              `
+      }
+          </div>
 
-              <div class="card">
-                <h2 class="card-title">Diagnóstico</h2>
-                <div class="texto-box">${escapeHtml(diagnostico)}</div>
-              </div>
-            </div>
+          <script>
+            window.onload = function () {
+              const imagenes = Array.from(document.images || []);
 
-            <div class="prescripcion">
-              <div class="prescripcion-head">
-                <h2>Prescripción</h2>
-                <div class="totales">
-                  ${escapeHtml(productosReceta.length)} producto(s) · ${escapeHtml(totalPiezas)} pieza(s)
-                </div>
-              </div>
+              Promise.all(
+                imagenes.map(function (img) {
+                  if (img.complete) return Promise.resolve();
 
-              <div class="productos">
-                ${filasProductos}
-              </div>
-            </div>
-
-            <div class="inferior">
-              <div class="card">
-                <h2 class="card-title">Observaciones</h2>
-                <div class="texto-box observaciones">${escapeHtml(observaciones)}</div>
-              </div>
-
-              <div class="card firma">
-                <div class="firma-linea"></div>
-                <div class="titulo">Firma del médico</div>
-                <div class="doctor">${escapeHtml(texto(doctor.nombre_completo, 'Doctor Shaddai'))}</div>
-                <div class="cedula">Cédula: ${escapeHtml(texto(doctor.cedula_profesional))}</div>
-              </div>
-            </div>
-
-            <div class="footer">
-              Documento generado digitalmente por Farmacias Shaddai. Esta receta debe validarse conforme a las políticas internas de farmacia y normativa aplicable.
-            </div>
-          </section>
-        </main>
-
-        <script>
-          window.onload = function () {
-            const imagenes = Array.from(document.images || []);
-
-            Promise.all(
-              imagenes.map(function (img) {
-                if (img.complete) return Promise.resolve();
-
-                return new Promise(function (resolve) {
-                  img.onload = resolve;
-                  img.onerror = resolve;
-                });
-              })
-            ).then(function () {
-              setTimeout(function () {
-                window.focus();
-                window.print();
-              }, 350);
-            });
-          };
-        </script>
-      </body>
-    </html>
-  `;
+                  return new Promise(function (resolve) {
+                    img.onload = resolve;
+                    img.onerror = resolve;
+                  });
+                })
+              ).then(function () {
+                setTimeout(function () {
+                  window.focus();
+                  window.print();
+                }, 350);
+              });
+            };
+          </script>
+        </body>
+      </html>
+    `;
   };
 
   const reimprimirRecetaMedica = async (doc) => {
@@ -2906,11 +3476,27 @@ const DoctorFilaEspera = () => {
       const receta = data.receta || {};
       const detalles = data.detalles || [];
 
-      const recetaGenerada = mapearRecetaParaImpresion({
+      const recetaGeneradaBase = mapearRecetaParaImpresion({
         doc,
         receta,
         detalles,
       });
+
+      const doctorCompleto = {
+        ...(recetaGeneradaBase.doctor || {}),
+        ...(data.doctor || {}),
+        logo_universidad_url:
+          data.doctor?.logo_universidad_url ||
+          receta.logo_universidad_url ||
+          receta.doctor_logo_universidad_url ||
+          recetaGeneradaBase.doctor?.logo_universidad_url ||
+          null,
+      };
+
+      const recetaGenerada = {
+        ...recetaGeneradaBase,
+        doctor: doctorCompleto,
+      };
 
       const docCompleto = {
         ...doc,
@@ -2971,7 +3557,7 @@ const DoctorFilaEspera = () => {
         });
       });
 
-      imprimirNodoEnIframe('laboratorio-imprimible');
+      await imprimirNodoEnIframe('laboratorio-imprimible', 'Solicitud de laboratorio');
     } catch (error) {
       console.error('Error al reimprimir laboratorio:', error);
 
@@ -3698,70 +4284,147 @@ const DoctorFilaEspera = () => {
   };
 
   const reimprimirServicioClinico = async (doc) => {
-  const idSolicitud = doc?.id_origen || doc?.id;
+    const idSolicitud = doc?.id_origen || doc?.id;
 
-  if (!idSolicitud) {
-    Swal.fire({
-      icon: 'error',
-      title: 'Sin ID de servicio',
-      text: 'No se encontró el ID de origen para consultar el servicio clínico.',
-    });
+    if (!idSolicitud) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Sin ID de servicio',
+        text: 'No se encontró el ID de origen para consultar el servicio clínico.',
+      });
 
-    return;
-  }
-
-  try {
-    const { data } = await api.get(`/doctor-shaddai/servicios-clinicos/${idSolicitud}`);
-
-    if (!data.ok) {
-      throw new Error(data.mensaje || 'No se pudo obtener el servicio clínico.');
+      return;
     }
 
-    const solicitud = data.solicitud || {};
-    const detalles = data.detalles || [];
+    try {
+      const { data } = await api.get(`/doctor-shaddai/servicios-clinicos/${idSolicitud}`);
 
-    const servicioGenerado = mapearServicioClinicoParaImpresion({
-      doc,
-      solicitud,
-      detalles,
-    });
+      if (!data.ok) {
+        throw new Error(data.mensaje || 'No se pudo obtener el servicio clínico.');
+      }
 
-    const docCompleto = {
-      ...doc,
-      data: {
-        ...(doc.data || {}),
-        ...solicitud,
-      },
-      metadata: {
-        ...normalizarMetadata(doc.metadata),
-        ...solicitud,
+      const solicitud = data.solicitud || {};
+      const detalles = data.detalles || [];
+
+      const servicioGenerado = mapearServicioClinicoParaImpresion({
+        doc,
+        solicitud,
+        detalles,
+      });
+
+      const docCompleto = {
+        ...doc,
+        data: {
+          ...(doc.data || {}),
+          ...solicitud,
+        },
+        metadata: {
+          ...normalizarMetadata(doc.metadata),
+          ...solicitud,
+          servicioGenerado,
+        },
+      };
+
+      setDocumentoSeleccionado(docCompleto);
+
+      const html = generarHtmlServicioClinicoShaddai({
         servicioGenerado,
-      },
-    };
+      });
 
-    setDocumentoSeleccionado(docCompleto);
+      abrirHtmlImpresion(
+        html,
+        `Servicio clínico ${solicitud.folio_servicio || doc.folio || ''}`
+      );
+    } catch (error) {
+      console.error('Error al reimprimir servicio clínico:', error);
 
-    const html = generarHtmlServicioClinicoShaddai({
-      servicioGenerado,
-    });
+      Swal.fire({
+        icon: 'error',
+        title: 'No se pudo reimprimir',
+        text:
+          error.response?.data?.mensaje ||
+          error.message ||
+          'No se pudo consultar el servicio clínico completo.',
+      });
+    }
+  };
 
-    abrirHtmlImpresion(
-      html,
-      `Servicio clínico ${solicitud.folio_servicio || doc.folio || ''}`
-    );
-  } catch (error) {
-    console.error('Error al reimprimir servicio clínico:', error);
+  const reimprimirCertificadoMedico = async (doc) => {
+    const idCertificado = doc?.id_origen || doc?.id;
 
-    Swal.fire({
-      icon: 'error',
-      title: 'No se pudo reimprimir',
-      text:
-        error.response?.data?.mensaje ||
-        error.message ||
-        'No se pudo consultar el servicio clínico completo.',
-    });
-  }
-};
+    if (!idCertificado) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Sin ID de certificado',
+        text: 'No se encontró el ID de origen para consultar el certificado médico.',
+      });
+
+      return;
+    }
+
+    try {
+      let certificado = null;
+
+      try {
+        const { data } = await api.get(`/doctor-shaddai/certificados/${idCertificado}`);
+
+        if (data.ok) {
+          certificado = data.certificado || data.data || null;
+        }
+      } catch (errorConsulta) {
+        console.warn('No se pudo consultar certificado completo, se usará metadata:', errorConsulta);
+      }
+
+      const certificadoParaImprimir = mapearCertificadoParaImpresion({
+        ...doc,
+        data: {
+          ...(doc.data || {}),
+          ...(certificado || {}),
+        },
+        metadata: {
+          ...normalizarMetadata(doc.metadata),
+          ...(certificado || {}),
+        },
+      });
+
+      const docCompleto = {
+        ...doc,
+        data: {
+          ...(doc.data || {}),
+          ...(certificado || {}),
+        },
+        metadata: {
+          ...normalizarMetadata(doc.metadata),
+          certificadoParaImprimir,
+          ...(certificado || {}),
+        },
+      };
+
+      setDocumentoSeleccionado(docCompleto);
+
+      await new Promise((resolve) => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => setTimeout(resolve, 350));
+        });
+      });
+
+      await imprimirNodoEnIframe(
+        'certificado-medico-imprimible',
+        `Certificado médico ${certificadoParaImprimir.folio_certificado || doc.folio || ''}`
+      );
+    } catch (error) {
+      console.error('Error al reimprimir certificado médico:', error);
+
+      Swal.fire({
+        icon: 'error',
+        title: 'No se pudo reimprimir',
+        text:
+          error.response?.data?.mensaje ||
+          error.message ||
+          'No se pudo preparar el certificado médico.',
+      });
+    }
+  };
 
   const reimprimirDocumento = async (doc) => {
     if (!doc) return;
@@ -3790,6 +4453,11 @@ const DoctorFilaEspera = () => {
         return;
       }
 
+      if (doc.tipo === 'CERTIFICADO_MEDICO') {
+        await reimprimirCertificadoMedico(doc);
+        return;
+      }
+
       if (
         ['NOTA_MEDICA', 'NOTA_EVOLUCION', 'SERVICIO_RAPIDO'].includes(doc.tipo)
       ) {
@@ -3804,7 +4472,10 @@ const DoctorFilaEspera = () => {
       };
 
       if (idsPorTipo[doc.tipo]) {
-        imprimirNodoEnIframe(idsPorTipo[doc.tipo]);
+        await imprimirNodoEnIframe(
+          idsPorTipo[doc.tipo],
+          obtenerEtiquetaDocumento(doc.tipo)
+        );
         return;
       }
 
@@ -3884,6 +4555,30 @@ const DoctorFilaEspera = () => {
         mapearLaboratorioParaImpresion(documentoSeleccionado);
 
       return <LaboratorioImprimible solicitud={solicitudLaboratorio} />;
+    }
+
+    if (documentoSeleccionado.tipo === 'CERTIFICADO_MEDICO') {
+      const metadata = normalizarMetadata(documentoSeleccionado.metadata);
+
+      const certificado =
+        metadata?.certificadoParaImprimir ||
+        mapearCertificadoParaImpresion(documentoSeleccionado);
+
+      return (
+        <CertificadoMedicoImprimible
+          certificado={certificado}
+          expediente={{
+            ...pacienteDocumentos,
+            id_expediente:
+              pacienteDocumentos?.id_expediente ||
+              certificado?.datos_paciente?.id_expediente ||
+              documentoSeleccionado.data?.id_expediente ||
+              metadata.id_expediente,
+          }}
+          paciente={pacienteDocumentos}
+          perfilDoctor={certificado.datos_doctor}
+        />
+      );
     }
 
     if (documentoSeleccionado.tipo === 'SERVICIO_CLINICO') {
@@ -4321,6 +5016,7 @@ const DoctorFilaEspera = () => {
 
   const datosFiltrados = datosActuales.filter((item) => {
     const tipoAtencion = obtenerTipoAtencion(item);
+    console.log("Presentación:", item.presentacion);
 
     const texto = `${item.nombre_paciente || ''} ${item.telefono || ''} ${item.motivo || ''
       } ${item.estatus || ''} ${item.doctor_nombre || ''} ${item.sucursal_nombre || ''
@@ -5062,44 +5758,96 @@ function LaboratorioImprimible({ solicitud }) {
   const horaRecepcionImpresa =
     solicitud?.hora_recepcion_muestra || '____________';
 
+  const textoSeguro = (valor, fallback = 'N/A') => {
+    const texto = String(valor ?? '').trim();
+    return texto || fallback;
+  };
+
+  const obtenerUrlLogo = (ruta) => {
+    if (!ruta) return '';
+
+    const valor = String(ruta).trim();
+
+    if (!valor) return '';
+
+    if (
+      valor.startsWith('http://') ||
+      valor.startsWith('https://') ||
+      valor.startsWith('data:') ||
+      valor.startsWith('blob:')
+    ) {
+      return valor;
+    }
+
+    const baseURL = api.defaults.baseURL || '';
+    const baseSinApi = baseURL.replace(/\/api\/?$/, '');
+
+    if (valor.startsWith('/')) {
+      return `${baseSinApi}${valor}`;
+    }
+
+    return `${baseSinApi}/${valor}`;
+  };
+
+  const logoUniversidadUrl = obtenerUrlLogo(
+    solicitud?.medico?.logo_universidad_url ||
+    solicitud?.logo_universidad_url ||
+    solicitud?.doctor_logo_universidad_url ||
+    ''
+  );
+
   return (
-    <div id="laboratorio-imprimible">
+    <div id="laboratorio-imprimible" className="lab-print-wrapper">
       <style>
         {`
           #laboratorio-imprimible {
             width: 100%;
+            max-width: 204mm;
+            margin: 0 auto;
             background: #ffffff;
             color: #0f172a;
             font-family: Arial, Helvetica, sans-serif;
             font-size: 10px;
           }
 
+          #laboratorio-imprimible,
           #laboratorio-imprimible * {
             box-sizing: border-box;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
           }
 
-          #laboratorio-imprimible .hoja {
+          #laboratorio-imprimible .lab-sheet {
             position: relative;
             width: 100%;
-            min-height: calc(11in - 12mm);
-            overflow: hidden;
-            border: 1px solid #dbeafe;
+            min-height: 267mm;
+            overflow: visible;
+            border: 1px solid #cbd5e1;
             border-radius: 18px;
             background: #ffffff;
             box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+            display: flex;
+            flex-direction: column;
           }
 
-          #laboratorio-imprimible .decoracion-uno,
-          #laboratorio-imprimible .decoracion-dos {
+          #laboratorio-imprimible .lab-content {
+            position: relative;
+            z-index: 1;
+            flex: 1;
+            min-height: 267mm;
+            display: flex;
+            flex-direction: column;
+          }
+
+          #laboratorio-imprimible .lab-decor-one,
+          #laboratorio-imprimible .lab-decor-two {
             position: absolute;
             border-radius: 999px;
             pointer-events: none;
             z-index: 0;
           }
 
-          #laboratorio-imprimible .decoracion-uno {
+          #laboratorio-imprimible .lab-decor-one {
             top: -70px;
             right: -70px;
             width: 190px;
@@ -5108,7 +5856,7 @@ function LaboratorioImprimible({ solicitud }) {
             filter: blur(16px);
           }
 
-          #laboratorio-imprimible .decoracion-dos {
+          #laboratorio-imprimible .lab-decor-two {
             bottom: -90px;
             left: -90px;
             width: 230px;
@@ -5117,132 +5865,138 @@ function LaboratorioImprimible({ solicitud }) {
             filter: blur(18px);
           }
 
-          #laboratorio-imprimible .contenido {
-            position: relative;
-            z-index: 1;
-          }
-
-          #laboratorio-imprimible .encabezado {
+          #laboratorio-imprimible .lab-header {
             display: grid;
-            grid-template-columns: 78px 1fr 175px;
+            grid-template-columns: 116px 1fr 142px;
             align-items: center;
-            gap: 14px;
-            padding: 14px 18px;
+            gap: 12px;
+            padding: 12px 15px;
             border-bottom: 1px solid #dbeafe;
             background: linear-gradient(90deg, #ecfeff 0%, #ffffff 50%, #f0f9ff 100%);
           }
 
-          #laboratorio-imprimible .logo-box {
-            width: 58px;
-            height: 58px;
+          #laboratorio-imprimible .lab-logos {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+          }
+
+          #laboratorio-imprimible .lab-logo-box {
+            width: 46px;
+            height: 46px;
             display: flex;
             align-items: center;
             justify-content: center;
             border: 1px solid #dbeafe;
-            border-radius: 16px;
+            border-radius: 14px;
             background: #ffffff;
             box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
           }
 
-          #laboratorio-imprimible .logo {
-            width: 48px;
-            height: 48px;
+          #laboratorio-imprimible .lab-logo-box img {
+            width: 38px;
+            height: 38px;
             object-fit: contain;
           }
 
-          #laboratorio-imprimible .titulo-institucion {
+          #laboratorio-imprimible .lab-title {
             text-align: center;
-            line-height: 1.2;
+            line-height: 1.12;
           }
 
-          #laboratorio-imprimible .titulo-institucion .nombre {
-            font-size: 20px;
+          #laboratorio-imprimible .lab-title .name {
+            font-size: 17px;
             font-weight: 900;
-            letter-spacing: 1.2px;
+            letter-spacing: 1.3px;
             text-transform: uppercase;
             color: #020617;
           }
 
-          #laboratorio-imprimible .titulo-institucion .documento {
+          #laboratorio-imprimible .lab-title .doc {
             margin-top: 3px;
-            font-size: 11px;
+            font-size: 10px;
             font-weight: 900;
-            letter-spacing: 2.6px;
+            letter-spacing: 2.4px;
             text-transform: uppercase;
             color: #0e7490;
           }
 
-          #laboratorio-imprimible .titulo-institucion .subtitulo {
+          #laboratorio-imprimible .lab-title .sub {
             margin-top: 4px;
-            font-size: 9px;
+            font-size: 8px;
             font-weight: 700;
             color: #64748b;
           }
 
-          #laboratorio-imprimible .folio-card {
-            min-height: 58px;
+          #laboratorio-imprimible .lab-folio {
+            min-height: 50px;
             border: 1px solid #dbeafe;
-            border-radius: 18px;
+            border-radius: 14px;
             background: #ffffff;
-            padding: 9px 12px;
+            padding: 7px 9px;
             text-align: center;
             box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
           }
 
-          #laboratorio-imprimible .folio-card .label {
-            font-size: 8px;
+          #laboratorio-imprimible .lab-folio .label {
+            font-size: 7px;
             font-weight: 900;
-            letter-spacing: 2px;
+            letter-spacing: 1.8px;
             text-transform: uppercase;
             color: #64748b;
           }
 
-          #laboratorio-imprimible .folio-card .folio {
+          #laboratorio-imprimible .lab-folio .folio {
             margin-top: 4px;
-            font-size: 11px;
+            font-size: 10px;
             font-weight: 900;
             color: #0e7490;
             word-break: break-word;
           }
 
-          #laboratorio-imprimible .folio-card .fecha {
-            margin-top: 4px;
-            font-size: 9px;
+          #laboratorio-imprimible .lab-folio .date {
+            margin-top: 3px;
+            font-size: 8px;
             font-weight: 700;
             color: #64748b;
           }
 
-          #laboratorio-imprimible .cuerpo {
+          #laboratorio-imprimible .lab-body {
+            flex: 1;
             display: grid;
             grid-template-columns: 0.92fr 1.08fr;
-            gap: 12px;
-            padding: 14px 18px 12px;
+            gap: 11px;
+            padding: 12px 15px 8px;
+            align-items: stretch;
+            min-height: 0;
           }
 
-          #laboratorio-imprimible .columna {
+          #laboratorio-imprimible .lab-column {
             display: flex;
             flex-direction: column;
             gap: 10px;
+            min-height: 0;
           }
 
-          #laboratorio-imprimible .card {
+          #laboratorio-imprimible .lab-card {
             border: 1px solid #e2e8f0;
             border-radius: 16px;
             background: #ffffff;
-            padding: 11px 12px;
+            padding: 10px 11px;
             box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+            break-inside: avoid;
           }
 
-          #laboratorio-imprimible .card.suave {
+          #laboratorio-imprimible .lab-card.soft {
             background: rgba(248, 250, 252, 0.82);
           }
 
-          #laboratorio-imprimible .card.cyan {
+          #laboratorio-imprimible .lab-card.cyan {
             border-color: #bae6fd;
             background: rgba(236, 254, 255, 0.72);
           }
 
-          #laboratorio-imprimible .card-header {
+          #laboratorio-imprimible .lab-card-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -5252,16 +6006,16 @@ function LaboratorioImprimible({ solicitud }) {
             border-bottom: 1px solid #e2e8f0;
           }
 
-          #laboratorio-imprimible .card-title {
+          #laboratorio-imprimible .lab-card-title {
             margin: 0;
-            font-size: 10px;
+            font-size: 9.5px;
             font-weight: 900;
-            letter-spacing: 1.4px;
+            letter-spacing: 1.3px;
             text-transform: uppercase;
             color: #1e293b;
           }
 
-          #laboratorio-imprimible .pill {
+          #laboratorio-imprimible .lab-pill {
             display: inline-flex;
             align-items: center;
             justify-content: center;
@@ -5269,29 +6023,29 @@ function LaboratorioImprimible({ solicitud }) {
             padding: 3px 8px;
             background: #cffafe;
             color: #0e7490;
-            font-size: 8px;
+            font-size: 7.5px;
             font-weight: 900;
             white-space: nowrap;
           }
 
-          #laboratorio-imprimible .pill.green {
+          #laboratorio-imprimible .lab-pill.green {
             background: #d1fae5;
             color: #047857;
           }
 
-          #laboratorio-imprimible .texto {
+          #laboratorio-imprimible .lab-text {
             margin: 0;
             line-height: 1.35;
             color: #1e293b;
-            font-size: 10px;
+            font-size: 9.5px;
           }
 
-          #laboratorio-imprimible .texto strong {
+          #laboratorio-imprimible .lab-text strong {
             font-weight: 900;
             color: #0f172a;
           }
 
-          #laboratorio-imprimible .grid-datos {
+          #laboratorio-imprimible .lab-grid-data {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 3px 10px;
@@ -5301,13 +6055,13 @@ function LaboratorioImprimible({ solicitud }) {
             grid-column: span 2;
           }
 
-          #laboratorio-imprimible .muestra-grid {
+          #laboratorio-imprimible .lab-sample-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 9px;
           }
 
-          #laboratorio-imprimible .muestra-box {
+          #laboratorio-imprimible .lab-sample-box {
             border: 1px solid #bae6fd;
             border-radius: 12px;
             background: #ffffff;
@@ -5315,41 +6069,57 @@ function LaboratorioImprimible({ solicitud }) {
             min-height: 46px;
           }
 
-          #laboratorio-imprimible .muestra-box .label {
+          #laboratorio-imprimible .lab-sample-box .label {
             display: block;
             margin-bottom: 4px;
-            font-size: 8px;
+            font-size: 7.5px;
             font-weight: 900;
             letter-spacing: 0.5px;
             text-transform: uppercase;
             color: #0e7490;
           }
 
-          #laboratorio-imprimible .muestra-box .valor {
+          #laboratorio-imprimible .lab-sample-box .value {
             font-size: 10px;
             font-weight: 800;
             color: #0f172a;
           }
 
-          #laboratorio-imprimible .diagnostico-box {
-            min-height: 82px;
+          #laboratorio-imprimible .lab-diagnosis-card {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+          }
+
+          #laboratorio-imprimible .lab-diagnosis-box {
+            flex: 1;
+            min-height: 185px;
             border: 1px solid #e2e8f0;
             border-radius: 12px;
             background: #f8fafc;
             padding: 9px 10px;
             white-space: pre-wrap;
             line-height: 1.35;
-            font-size: 10px;
+            font-size: 9.5px;
             color: #1e293b;
           }
 
-          #laboratorio-imprimible .estudios-lista {
+          #laboratorio-imprimible .lab-studies-card {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+          }
+
+          #laboratorio-imprimible .lab-studies-list {
+            flex: 1;
             display: flex;
             flex-direction: column;
             gap: 7px;
           }
 
-          #laboratorio-imprimible .estudio-card {
+          #laboratorio-imprimible .lab-study-card {
             display: grid;
             grid-template-columns: 22px 1fr;
             gap: 8px;
@@ -5361,7 +6131,7 @@ function LaboratorioImprimible({ solicitud }) {
             break-inside: avoid;
           }
 
-          #laboratorio-imprimible .estudio-numero {
+          #laboratorio-imprimible .lab-study-number {
             width: 20px;
             height: 20px;
             display: flex;
@@ -5374,48 +6144,49 @@ function LaboratorioImprimible({ solicitud }) {
             font-weight: 900;
           }
 
-          #laboratorio-imprimible .estudio-nombre {
+          #laboratorio-imprimible .lab-study-name {
             margin: 0;
-            font-size: 10px;
+            font-size: 9.5px;
             line-height: 1.25;
             font-weight: 900;
             color: #0f172a;
           }
 
-          #laboratorio-imprimible .estudio-observacion {
+          #laboratorio-imprimible .lab-study-observation {
             margin: 3px 0 0;
-            font-size: 9px;
+            font-size: 8.5px;
             line-height: 1.25;
             color: #475569;
           }
 
-          #laboratorio-imprimible .sin-registros {
+          #laboratorio-imprimible .lab-empty {
             border: 1px dashed #cbd5e1;
             border-radius: 13px;
             background: #f8fafc;
             padding: 14px;
             text-align: center;
-            font-size: 10px;
+            font-size: 9.5px;
             font-weight: 800;
             color: #64748b;
           }
 
-          #laboratorio-imprimible .observaciones-box {
-            min-height: 58px;
+          #laboratorio-imprimible .lab-observations-box {
+            min-height: 118px;
             white-space: pre-wrap;
             line-height: 1.35;
-            font-size: 10px;
+            font-size: 9.5px;
             color: #334155;
           }
 
-          #laboratorio-imprimible .firma-grid {
+          #laboratorio-imprimible .lab-signature-grid {
+            margin-top: auto;
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 10px;
           }
 
-          #laboratorio-imprimible .firma-card,
-          #laboratorio-imprimible .sello-card {
+          #laboratorio-imprimible .lab-signature-card,
+          #laboratorio-imprimible .lab-seal-card {
             min-height: 86px;
             border: 1px solid #e2e8f0;
             border-radius: 15px;
@@ -5424,217 +6195,216 @@ function LaboratorioImprimible({ solicitud }) {
             text-align: center;
           }
 
-          #laboratorio-imprimible .firma-linea {
+          #laboratorio-imprimible .lab-signature-line {
             width: 80%;
             height: 1px;
             margin: 30px auto 7px;
             background: #475569;
           }
 
-          #laboratorio-imprimible .firma-titulo {
+          #laboratorio-imprimible .lab-signature-title {
             margin: 0;
-            font-size: 9px;
+            font-size: 8.5px;
             font-weight: 900;
             color: #0f172a;
           }
 
-          #laboratorio-imprimible .firma-sub {
+          #laboratorio-imprimible .lab-signature-sub {
             margin: 2px 0 0;
-            font-size: 8px;
+            font-size: 7.5px;
             color: #64748b;
           }
 
-          #laboratorio-imprimible .sello-card {
+          #laboratorio-imprimible .lab-seal-card {
             display: flex;
             align-items: center;
             justify-content: center;
             border-style: dashed;
-            border-color: #bae6fd;
             background: rgba(236, 254, 255, 0.5);
             color: #0e7490;
-            font-size: 9px;
+            font-size: 8.5px;
             font-weight: 900;
           }
 
-          #laboratorio-imprimible .footer {
-            padding: 0 18px 10px;
+          #laboratorio-imprimible .lab-footer {
+            margin-top: auto;
+            padding: 6px 15px 10px;
             text-align: center;
-            font-size: 8px;
+            font-size: 7.5px;
             color: #94a3b8;
           }
 
           @media print {
             #laboratorio-imprimible {
-              width: 100%;
+              width: 204mm !important;
+              max-width: 204mm !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              overflow: visible !important;
             }
 
-            #laboratorio-imprimible .hoja {
-              min-height: calc(11in - 12mm);
-              border-radius: 0;
-              box-shadow: none;
-              page-break-after: avoid;
-              page-break-inside: avoid;
-              break-inside: avoid;
+            #laboratorio-imprimible .lab-sheet {
+              min-height: 267mm !important;
+              height: auto !important;
+              max-height: none !important;
+              overflow: visible !important;
+              border-radius: 0 !important;
+              box-shadow: none !important;
+              page-break-after: auto !important;
+              break-after: auto !important;
             }
 
-            #laboratorio-imprimible .decoracion-uno,
-            #laboratorio-imprimible .decoracion-dos {
-              display: none;
+            #laboratorio-imprimible .lab-content {
+              min-height: 267mm !important;
+              height: auto !important;
+            }
+
+            #laboratorio-imprimible .lab-body {
+              flex: 1 !important;
+              align-items: stretch !important;
+            }
+
+            #laboratorio-imprimible .lab-decor-one,
+            #laboratorio-imprimible .lab-decor-two {
+              display: none !important;
             }
           }
         `}
       </style>
 
-      <div className="hoja">
-        <div className="decoracion-uno"></div>
-        <div className="decoracion-dos"></div>
+      <div className="lab-sheet">
+        <div className="lab-decor-one" />
+        <div className="lab-decor-two" />
 
-        <div className="contenido">
-          <div className="encabezado">
-            <div className="logo-box">
-              <img
-                className="logo"
-                src={logoFarmacia}
-                alt="Farmacias Shaddai"
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none';
-                }}
-              />
-            </div>
-
-            <div className="titulo-institucion">
-              <div className="nombre">Farmacias Shaddai</div>
-              <div className="documento">Solicitud de laboratorio</div>
-              <div className="subtitulo">
-                Doctor Shaddai · Bienestar al alcance de todos
+        <div className="lab-content">
+          <header className="lab-header">
+            <div className="lab-logos">
+              <div className="lab-logo-box">
+                <img src={logoFarmacia} alt="Farmacias Shaddai" />
               </div>
+
+              {logoUniversidadUrl && (
+                <div className="lab-logo-box">
+                  <img src={logoUniversidadUrl} alt="Logo universidad" />
+                </div>
+              )}
             </div>
 
-            <div className="folio-card">
+            <div className="lab-title">
+              <div className="name">Farmacias Shaddai</div>
+              <div className="doc">Solicitud de laboratorio</div>
+              <div className="sub">Doctor Shaddai · Bienestar al alcance de todos</div>
+            </div>
+
+            <div className="lab-folio">
               <div className="label">Folio</div>
-              <div className="folio">
-                {solicitud?.folio || 'LAB-SIN-FOLIO'}
-              </div>
-              <div className="fecha">{fechaTexto}</div>
+              <div className="folio">{textoSeguro(solicitud?.folio, 'LAB-SIN-FOLIO')}</div>
+              <div className="date">{fechaTexto}</div>
             </div>
-          </div>
+          </header>
 
-          <div className="cuerpo">
-            <div className="columna">
-              <section className="card suave">
-                <div className="card-header">
-                  <h2 className="card-title">Médico solicitante</h2>
-                  <span className="pill">Área médica</span>
+          <main className="lab-body">
+            <div className="lab-column">
+              <section className="lab-card soft">
+                <div className="lab-card-header">
+                  <h2 className="lab-card-title">Médico solicitante</h2>
+                  <span className="lab-pill">Área médica</span>
                 </div>
 
-                <p className="texto">
-                  <strong>Nombre:</strong>{' '}
-                  {solicitud?.medico?.nombre || 'Doctor Shaddai'}
+                <p className="lab-text">
+                  <strong>Nombre:</strong> {textoSeguro(solicitud?.medico?.nombre, 'Doctor Shaddai')}
                 </p>
-                <p className="texto">
+                <p className="lab-text">
                   <strong>Institución:</strong> Farmacias Shaddai
                 </p>
-                <p className="texto">
-                  <strong>Especialidad:</strong>{' '}
-                  {solicitud?.medico?.especialidad || 'N/A'}
+                <p className="lab-text">
+                  <strong>Especialidad:</strong> {textoSeguro(solicitud?.medico?.especialidad)}
                 </p>
-                <p className="texto">
-                  <strong>Cédula:</strong>{' '}
-                  {solicitud?.medico?.cedula || 'N/A'}
+                <p className="lab-text">
+                  <strong>Cédula:</strong> {textoSeguro(solicitud?.medico?.cedula)}
                 </p>
               </section>
 
-              <section className="card">
-                <div className="card-header">
-                  <h2 className="card-title">Paciente</h2>
-                  <span className="pill green">
-                    Exp. #{solicitud?.paciente?.expediente || 'N/A'}
+              <section className="lab-card">
+                <div className="lab-card-header">
+                  <h2 className="lab-card-title">Paciente</h2>
+                  <span className="lab-pill green">
+                    Exp. #{textoSeguro(solicitud?.paciente?.expediente, 'N/A')}
                   </span>
                 </div>
 
-                <div className="grid-datos">
-                  <p className="texto span-2">
-                    <strong>Paciente:</strong>{' '}
-                    {solicitud?.paciente?.nombre || 'N/A'}
+                <div className="lab-grid-data">
+                  <p className="lab-text span-2">
+                    <strong>Paciente:</strong> {textoSeguro(solicitud?.paciente?.nombre)}
                   </p>
-                  <p className="texto">
-                    <strong>Edad:</strong>{' '}
-                    {solicitud?.paciente?.edad || 'N/A'}
+                  <p className="lab-text">
+                    <strong>Edad:</strong> {textoSeguro(solicitud?.paciente?.edad)}
                   </p>
-                  <p className="texto">
-                    <strong>Sexo:</strong>{' '}
-                    {solicitud?.paciente?.sexo || 'N/A'}
+                  <p className="lab-text">
+                    <strong>Sexo:</strong> {textoSeguro(solicitud?.paciente?.sexo)}
                   </p>
-                  <p className="texto">
+                  <p className="lab-text">
                     <strong>Fecha:</strong> {fechaTexto}
                   </p>
-                  <p className="texto">
-                    <strong>Expediente:</strong>{' '}
-                    {solicitud?.paciente?.expediente || 'N/A'}
+                  <p className="lab-text">
+                    <strong>Expediente:</strong> {textoSeguro(solicitud?.paciente?.expediente)}
                   </p>
                 </div>
               </section>
 
-              <section className="card cyan">
-                <div className="card-header">
-                  <h2 className="card-title">Datos de muestra</h2>
+              <section className="lab-card cyan">
+                <div className="lab-card-header">
+                  <h2 className="lab-card-title">Datos de muestra</h2>
                 </div>
 
-                <div className="muestra-grid">
-                  <div className="muestra-box">
+                <div className="lab-sample-grid">
+                  <div className="lab-sample-box">
                     <span className="label">Hr. obtención</span>
-                    <span className="valor">{horaObtencionImpresa}</span>
+                    <span className="value">{horaObtencionImpresa}</span>
                   </div>
 
-                  <div className="muestra-box">
+                  <div className="lab-sample-box">
                     <span className="label">Hr. recepción</span>
-                    <span className="valor">{horaRecepcionImpresa}</span>
+                    <span className="value">{horaRecepcionImpresa}</span>
                   </div>
                 </div>
               </section>
 
-              <section className="card">
-                <div className="card-header">
-                  <h2 className="card-title">
-                    Diagnóstico / impresión diagnóstica
-                  </h2>
+              <section className="lab-card lab-diagnosis-card">
+                <div className="lab-card-header">
+                  <h2 className="lab-card-title">Diagnóstico / impresión diagnóstica</h2>
                 </div>
 
-                <div className="diagnostico-box">
-                  {solicitud?.diagnostico || 'N/A'}
+                <div className="lab-diagnosis-box">
+                  {textoSeguro(solicitud?.diagnostico)}
                 </div>
               </section>
             </div>
 
-            <div className="columna">
-              <section className="card">
-                <div className="card-header">
-                  <h2 className="card-title">Estudios solicitados</h2>
-                  <span className="pill">{estudios.length} estudio(s)</span>
+            <div className="lab-column">
+              <section className="lab-card lab-studies-card">
+                <div className="lab-card-header">
+                  <h2 className="lab-card-title">Estudios solicitados</h2>
+                  <span className="lab-pill">{estudios.length} estudio(s)</span>
                 </div>
 
-                <div className="estudios-lista">
+                <div className="lab-studies-list">
                   {estudios.length === 0 ? (
-                    <div className="sin-registros">
-                      Sin estudios registrados.
-                    </div>
+                    <div className="lab-empty">Sin estudios registrados.</div>
                   ) : (
                     estudios.map((item, index) => (
-                      <div
-                        key={`${item.id_estudio || index}`}
-                        className="estudio-card"
-                      >
-                        <div className="estudio-numero">{index + 1}</div>
+                      <div key={item.id_estudio || index} className="lab-study-card">
+                        <div className="lab-study-number">{index + 1}</div>
 
-                        <div className="estudio-contenido">
-                          <p className="estudio-nombre">
-                            {item.nombre || 'Estudio'}
+                        <div>
+                          <p className="lab-study-name">
+                            {textoSeguro(item.nombre || item.nombre_estudio || item.estudio, 'Estudio')}
                           </p>
 
-                          {item.observaciones_estudio && (
-                            <p className="estudio-observacion">
+                          {(item.observaciones_estudio || item.observaciones) && (
+                            <p className="lab-study-observation">
                               <strong>Observaciones:</strong>{' '}
-                              {item.observaciones_estudio}
+                              {item.observaciones_estudio || item.observaciones}
                             </p>
                           )}
                         </div>
@@ -5644,34 +6414,34 @@ function LaboratorioImprimible({ solicitud }) {
                 </div>
               </section>
 
-              <section className="card">
-                <div className="card-header">
-                  <h2 className="card-title">Observaciones generales</h2>
+              <section className="lab-card">
+                <div className="lab-card-header">
+                  <h2 className="lab-card-title">Observaciones generales</h2>
                 </div>
 
-                <div className="observaciones-box">
-                  {solicitud?.observaciones || 'Sin observaciones'}
+                <div className="lab-observations-box">
+                  {textoSeguro(solicitud?.observaciones, 'Sin observaciones')}
                 </div>
               </section>
 
-              <section className="firma-grid">
-                <div className="firma-card">
-                  <div className="firma-linea"></div>
-                  <p className="firma-titulo">Firma del médico</p>
-                  <p className="firma-sub">
-                    {solicitud?.medico?.nombre || ''}
+              <section className="lab-signature-grid">
+                <div className="lab-signature-card">
+                  <div className="lab-signature-line" />
+                  <p className="lab-signature-title">Firma del médico</p>
+                  <p className="lab-signature-sub">
+                    {textoSeguro(solicitud?.medico?.nombre, '')}
                   </p>
-                  <p className="firma-sub">
-                    Cédula: {solicitud?.medico?.cedula || 'N/A'}
+                  <p className="lab-signature-sub">
+                    Cédula: {textoSeguro(solicitud?.medico?.cedula)}
                   </p>
                 </div>
 
-                <div className="sello-card">Sello de la unidad</div>
+                <div className="lab-seal-card">Sello de la unidad</div>
               </section>
             </div>
-          </div>
+          </main>
 
-          <div className="footer">
+          <div className="lab-footer">
             Documento clínico interno · FSL-LAB-001-26
           </div>
         </div>
@@ -5679,6 +6449,7 @@ function LaboratorioImprimible({ solicitud }) {
     </div>
   );
 }
+
 
 function RecetaImprimible({ recetaGenerada, fechaActual, perfilDoctor }) {
   const paciente = recetaGenerada?.paciente || {};
@@ -5880,14 +6651,7 @@ function RecetaImprimible({ recetaGenerada, fechaActual, perfilDoctor }) {
                               'Medicamento'}
                           </p>
 
-                          <p className="mt-0.5 text-[9px] leading-tight text-slate-500">
-                            <strong>Genérica:</strong>{' '}
-                            {item.nombre_generico || item.generico || '-'} ·{' '}
-                            <strong>Presentación:</strong>{' '}
-                            {item.presentacion || '-'} ·{' '}
-                            <strong>Forma:</strong>{' '}
-                            {item.forma_farmaceutica || item.forma || '-'}
-                          </p>
+
                         </div>
 
                         <div className="rounded-lg bg-sky-100 px-2 py-1 text-center text-[10px] font-black text-sky-800 print:border print:border-slate-200 print:bg-white print:text-slate-900">

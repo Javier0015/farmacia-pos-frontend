@@ -37,7 +37,7 @@ import ModalConsentimientoInformado from '../../components/doctores/ModalConsent
 import ModalHojaViolenciaLesion from '../../components/doctores/ModalHojaViolenciaLesion';
 import ModalReferenciaContrarreferencia from '../../components/doctores/ModalReferenciaContrarreferencia';
 import ModalServicioClinico from '../../components/doctores/ModalServicioClinico';
-
+import ModalCertificadoMedico from '../../components/doctores/ModalCertificadoMedico';
 
 const pacienteInicial = {
   nombre_paciente: '',
@@ -46,6 +46,18 @@ const pacienteInicial = {
   sexo: '',
   diagnostico: '',
   observaciones: '',
+};
+
+const medicamentoLibreInicial = {
+  nombre: '',
+  nombre_generico: '',
+  presentacion: '',
+  forma_farmaceutica: '',
+  cantidad: 1,
+  dosis: '',
+  frecuencia: '',
+  duracion: '',
+  indicaciones: '',
 };
 
 const ESTATUS_TEXTO = {
@@ -143,6 +155,23 @@ const obtenerInfoTipoNota = (tipoNota) => {
   return TIPOS_NOTA_INFO[normalizarTipoNota(tipoNota)];
 };
 
+const obtenerUrlArchivo = (ruta) => {
+  if (!ruta) return '';
+
+  if (ruta.startsWith('http://') || ruta.startsWith('https://')) {
+    return ruta;
+  }
+
+  const baseURL = api.defaults.baseURL || '';
+  const baseSinApi = baseURL.replace(/\/api\/?$/, '');
+
+  if (ruta.startsWith('/')) {
+    return `${baseSinApi}${ruta}`;
+  }
+
+  return `${baseSinApi}/${ruta}`;
+};
+
 export default function DoctorShaddaiRecetas() {
   const navigate = useNavigate();
 
@@ -169,6 +198,9 @@ export default function DoctorShaddaiRecetas() {
 
   const [receta, setReceta] = useState([]);
   const [enviando, setEnviando] = useState(false);
+
+  const [mostrarFormularioMedicamentoLibre, setMostrarFormularioMedicamentoLibre] = useState(false);
+  const [medicamentoLibre, setMedicamentoLibre] = useState(medicamentoLibreInicial);
 
   const [modalRecetaAbierto, setModalRecetaAbierto] = useState(false);
   const [recetaGenerada, setRecetaGenerada] = useState(null);
@@ -240,6 +272,8 @@ export default function DoctorShaddaiRecetas() {
   const [notaParaImprimir, setNotaParaImprimir] = useState(null);
 
   const [modalReferenciaAbierto, setModalReferenciaAbierto] = useState(false);
+
+  const [modalCertificadoAbierto, setModalCertificadoAbierto] = useState(false);
 
 
   const formatearFecha = (fecha) => {
@@ -371,29 +405,42 @@ export default function DoctorShaddaiRecetas() {
       return;
     }
 
-    if (mostrarFlujoAtencion && !laboratorioHabilitadoPorTipo) {
-      Swal.fire({
-        icon: 'info',
-        title: 'Laboratorio no es el flujo principal',
-        text: `Esta atención está marcada como ${tipoAtencionActual.label}. Si necesitas laboratorio, cambia el tipo de atención o registra la atención correspondiente primero.`,
-      });
 
-      return;
-    }
-
-    if (requiereNotaMedica && !notaMedicaGuardada) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Nota médica requerida',
-        text:
-          'Esta atención está marcada como consulta médica. Primero debes guardar la nota médica antes de generar solicitud de laboratorio.',
-        confirmButtonColor: '#0284c7',
-      });
-
-      return;
-    }
 
     setModalLaboratorioAbierto(true);
+  };
+
+
+  const abrirCertificadoMedico = () => {
+    if (!perfilDoctorCompleto) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Perfil médico incompleto',
+        text: 'Debes completar tu perfil de Doctor Shaddai antes de generar certificados médicos.',
+        showCancelButton: true,
+        confirmButtonText: 'Ir a mi perfil',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#0284c7',
+      }).then((result) => {
+        if (result.isConfirmed) {
+          navigate('/app/doctor-shaddai/perfil');
+        }
+      });
+
+      return;
+    }
+
+    if (!expedienteSeleccionado?.id_expediente) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Expediente requerido',
+        text: 'Selecciona un expediente clínico antes de generar el certificado.',
+      });
+
+      return;
+    }
+
+    setModalCertificadoAbierto(true);
   };
 
   const guardarSolicitudLaboratorio = async (solicitud) => {
@@ -812,8 +859,16 @@ export default function DoctorShaddaiRecetas() {
     }));
   };
 
+  const generarIdItemReceta = (prefijo = 'ITEM') => {
+    return `${prefijo}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  };
+
   const productoYaAgregado = (producto) => {
-    return receta.some((item) => item.id_producto === producto.id_producto);
+    return receta.some(
+      (item) =>
+        item.tipo_producto_receta === 'INVENTARIO' &&
+        Number(item.id_producto) === Number(producto.id_producto)
+    );
   };
 
   const agregarProducto = (producto) => {
@@ -829,16 +884,6 @@ export default function DoctorShaddaiRecetas() {
 
     const stockTotal = Number(producto.stock_total || producto.stock || 0);
 
-    if (stockTotal <= 0) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Sin disponibilidad',
-        text: 'Este producto no tiene stock disponible.',
-      });
-
-      return;
-    }
-
     if (productoYaAgregado(producto)) {
       Swal.fire({
         icon: 'info',
@@ -852,16 +897,23 @@ export default function DoctorShaddaiRecetas() {
     }
 
     const nuevoItem = {
+      id_item: `INV-${producto.id_producto}`,
+
+      // La receta representa la prescripción médica; el stock se valida al surtir en caja.
+      tipo_producto_receta: 'INVENTARIO',
+      producto_libre: false,
+      disponible_inventario: stockTotal > 0,
+
       id_producto: producto.id_producto,
       id_sucursal: null,
       nombre: producto.nombre,
-      nombre_generico: producto.nombre_generico,
-      forma_farmaceutica: producto.forma_farmaceutica,
-      presentacion: producto.presentacion,
-      codigo_barras: producto.codigo_barras,
+      nombre_generico: producto.nombre_generico || '',
+      forma_farmaceutica: producto.forma_farmaceutica || '',
+      presentacion: producto.presentacion || '',
+      codigo_barras: producto.codigo_barras || null,
       sucursal: null,
       stock: stockTotal,
-      precio: producto.precio,
+      precio: Number(producto.precio || 0),
       lote: null,
       fecha_caducidad: null,
       cantidad: 1,
@@ -875,41 +927,106 @@ export default function DoctorShaddaiRecetas() {
     setReceta((prev) => [...prev, nuevoItem]);
   };
 
-  const actualizarItemReceta = (idProducto, campo, valor) => {
+  const manejarCambioMedicamentoLibre = (event) => {
+    const { name, value } = event.target;
+
+    setMedicamentoLibre((prev) => ({
+      ...prev,
+      [name]: name === 'cantidad' ? value.replace(/[^\d]/g, '') : value,
+    }));
+  };
+
+  const cancelarMedicamentoLibre = () => {
+    setMedicamentoLibre(medicamentoLibreInicial);
+    setMostrarFormularioMedicamentoLibre(false);
+  };
+
+  const agregarMedicamentoLibre = () => {
+    if (!expedienteSeleccionado?.id_expediente) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Expediente requerido',
+        text: 'Selecciona un expediente clínico antes de agregar un medicamento libre.',
+      });
+
+      return;
+    }
+
+    const nombre = medicamentoLibre.nombre.trim();
+    const cantidad = Number(medicamentoLibre.cantidad || 0);
+
+    if (!nombre) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Medicamento requerido',
+        text: 'Captura el nombre del medicamento.',
+      });
+
+      return;
+    }
+
+    if (!cantidad || cantidad < 1) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Cantidad inválida',
+        text: 'Indica una cantidad mayor o igual a 1.',
+      });
+
+      return;
+    }
+
+    const nuevoMedicamentoLibre = {
+      id_item: generarIdItemReceta('LIBRE'),
+
+      tipo_producto_receta: 'LIBRE',
+      producto_libre: true,
+      disponible_inventario: false,
+
+      id_producto: null,
+      id_sucursal: null,
+      nombre,
+      nombre_generico: medicamentoLibre.nombre_generico.trim(),
+      forma_farmaceutica: medicamentoLibre.forma_farmaceutica.trim(),
+      presentacion: medicamentoLibre.presentacion.trim(),
+      codigo_barras: null,
+      sucursal: null,
+      stock: 0,
+      precio: 0,
+      lote: null,
+      fecha_caducidad: null,
+      cantidad,
+      dosis: medicamentoLibre.dosis.trim(),
+      frecuencia: medicamentoLibre.frecuencia.trim(),
+      duracion: medicamentoLibre.duracion.trim(),
+      indicaciones: medicamentoLibre.indicaciones.trim(),
+      disponibilidad_sucursales: [],
+    };
+
+    setReceta((prev) => [...prev, nuevoMedicamentoLibre]);
+    cancelarMedicamentoLibre();
+
+    Swal.fire({
+      icon: 'success',
+      title: 'Medicamento libre agregado',
+      text: 'Se agregará a la receta, pero no podrá cobrarse ni surtirse automáticamente desde inventario.',
+      timer: 1700,
+      showConfirmButton: false,
+    });
+  };
+
+  const actualizarItemReceta = (idItem, campo, valor) => {
     setReceta((prev) =>
       prev.map((item) => {
-        if (item.id_producto !== idProducto) {
+        if (item.id_item !== idItem) {
           return item;
         }
 
         if (campo === 'cantidad') {
           const cantidad = Number(valor);
 
-          if (!cantidad || cantidad < 1) {
-            return {
-              ...item,
-              cantidad: 1,
-            };
-          }
-
-          if (cantidad > item.stock) {
-            Swal.fire({
-              icon: 'warning',
-              title: 'Stock insuficiente',
-              text: `Solo hay ${item.stock} pieza(s) disponibles en total.`,
-              timer: 1600,
-              showConfirmButton: false,
-            });
-
-            return {
-              ...item,
-              cantidad: item.stock,
-            };
-          }
-
           return {
             ...item,
-            cantidad,
+            cantidad: !cantidad || cantidad < 1 ? 1 : cantidad,
           };
         }
 
@@ -922,15 +1039,17 @@ export default function DoctorShaddaiRecetas() {
   };
 
   const aumentarCantidad = (item) => {
-    actualizarItemReceta(item.id_producto, 'cantidad', Number(item.cantidad) + 1);
+    actualizarItemReceta(item.id_item, 'cantidad', Number(item.cantidad) + 1);
   };
 
   const disminuirCantidad = (item) => {
-    actualizarItemReceta(item.id_producto, 'cantidad', Number(item.cantidad) - 1);
+    actualizarItemReceta(item.id_item, 'cantidad', Number(item.cantidad) - 1);
   };
 
   const eliminarProductoReceta = (itemEliminar) => {
-    setReceta((prev) => prev.filter((item) => item.id_producto !== itemEliminar.id_producto));
+    setReceta((prev) =>
+      prev.filter((item) => item.id_item !== itemEliminar.id_item)
+    );
   };
 
   const limpiarReceta = async () => {
@@ -955,6 +1074,8 @@ export default function DoctorShaddaiRecetas() {
     setBusqueda('');
     setProductos([]);
     setRecetaGenerada(null);
+    setMedicamentoLibre(medicamentoLibreInicial);
+    setMostrarFormularioMedicamentoLibre(false);
   };
 
   const validarPerfilDoctor = () => {
@@ -1038,10 +1159,10 @@ export default function DoctorShaddaiRecetas() {
 
     const productoSinIndicaciones = receta.find(
       (item) =>
-        !item.dosis.trim() &&
-        !item.frecuencia.trim() &&
-        !item.duracion.trim() &&
-        !item.indicaciones.trim()
+        !String(item.dosis || '').trim() &&
+        !String(item.frecuencia || '').trim() &&
+        !String(item.duracion || '').trim() &&
+        !String(item.indicaciones || '').trim()
     );
 
     if (productoSinIndicaciones) {
@@ -1102,23 +1223,29 @@ export default function DoctorShaddaiRecetas() {
       observaciones: observacionesFinal,
 
       productos: receta.map((item) => ({
-        id_producto: item.id_producto,
+        id_item: item.id_item,
+        tipo_producto_receta: item.tipo_producto_receta || 'INVENTARIO',
+        producto_libre: Boolean(item.producto_libre),
+        disponible_inventario: Boolean(item.disponible_inventario),
+
+        // Los medicamentos libres no se relacionan con el catálogo ni inventario.
+        id_producto: item.producto_libre ? null : item.id_producto,
         id_sucursal: null,
-        nombre: item.nombre,
-        nombre_generico: item.nombre_generico || null,
-        forma_farmaceutica: item.forma_farmaceutica || null,
-        presentacion: item.presentacion || null,
-        codigo_barras: item.codigo_barras || null,
+        nombre: String(item.nombre || '').trim(),
+        nombre_generico: String(item.nombre_generico || '').trim() || null,
+        forma_farmaceutica: String(item.forma_farmaceutica || '').trim() || null,
+        presentacion: String(item.presentacion || '').trim() || null,
+        codigo_barras: item.producto_libre ? null : item.codigo_barras || null,
         sucursal: null,
         stock: Number(item.stock || 0),
-        precio: Number(item.precio || 0),
+        precio: item.producto_libre ? 0 : Number(item.precio || 0),
         lote: null,
         fecha_caducidad: null,
         cantidad: Number(item.cantidad || 1),
-        dosis: item.dosis.trim() || null,
-        frecuencia: item.frecuencia.trim() || null,
-        duracion: item.duracion.trim() || null,
-        indicaciones: item.indicaciones.trim() || null,
+        dosis: String(item.dosis || '').trim() || null,
+        frecuencia: String(item.frecuencia || '').trim() || null,
+        duracion: String(item.duracion || '').trim() || null,
+        indicaciones: String(item.indicaciones || '').trim() || null,
       })),
     };
   };
@@ -1159,7 +1286,14 @@ export default function DoctorShaddaiRecetas() {
         const recetaCompleta = {
           receta: data.receta,
           detalles: data.detalles || [],
-          doctor: data.doctor || perfilDoctor,
+          doctor: {
+            ...(perfilDoctor || {}),
+            ...(data.doctor || {}),
+            logo_universidad_url:
+              data.doctor?.logo_universidad_url ||
+              perfilDoctor?.logo_universidad_url ||
+              null,
+          },
           paciente: {
             ...paciente,
           },
@@ -1407,8 +1541,8 @@ export default function DoctorShaddaiRecetas() {
 
   return (
     <>
-<style>
-  {`
+      <style>
+        {`
     @media print {
       body * {
         visibility: hidden !important;
@@ -1421,7 +1555,27 @@ export default function DoctorShaddaiRecetas() {
         visibility: visible !important;
       }
 
-      #receta-imprimible,
+      #receta-imprimible {
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100% !important;
+        height: auto !important;
+        min-height: auto !important;
+        max-height: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        background: white !important;
+        overflow: hidden !important;
+      }
+
+      #receta-imprimible > div {
+        min-height: auto !important;
+        height: auto !important;
+        max-height: none !important;
+        overflow: hidden !important;
+      }
+
       #nota-medica-imprimible {
         position: absolute !important;
         left: 0 !important;
@@ -1436,24 +1590,17 @@ export default function DoctorShaddaiRecetas() {
         overflow: visible !important;
       }
 
-      #receta-imprimible > div {
-        min-height: calc(100vh - 16mm) !important;
-        height: auto !important;
-        max-height: none !important;
-        overflow: visible !important;
-      }
-
       .no-print {
         display: none !important;
       }
 
       @page {
         size: letter portrait;
-        margin: 8mm;
+        margin: 6mm;
       }
     }
   `}
-</style>
+      </style>
 
       <div className="space-y-6">
         <section className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-sky-700 via-cyan-600 to-teal-500 p-7 text-white shadow-lg shadow-sky-900/20">
@@ -1481,10 +1628,15 @@ export default function DoctorShaddaiRecetas() {
             </div>
 
             <div className="flex flex-col gap-3 sm:flex-row">
+
               <button
                 type="button"
                 onClick={abrirSolicitudLaboratorio}
-                disabled={cargandoPerfil || !perfilDoctorCompleto || !laboratorioHabilitadoPorTipo || !expedienteSeleccionado?.id_expediente}
+                disabled={
+                  cargandoPerfil ||
+                  !perfilDoctorCompleto ||
+                  !expedienteSeleccionado?.id_expediente
+                }
                 className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white/15 px-5 py-3 text-sm font-bold text-white ring-1 ring-white/25 transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <FlaskConical size={19} />
@@ -1521,9 +1673,25 @@ export default function DoctorShaddaiRecetas() {
                 Referencia / contrarreferencia
               </button>
 
+              <button
+                type="button"
+                onClick={abrirCertificadoMedico}
+                disabled={
+                  cargandoPerfil ||
+                  !perfilDoctorCompleto ||
+                  !expedienteSeleccionado?.id_expediente
+                }
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-black text-emerald-700 shadow-sm transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <BadgeCheck size={18} />
+                Certificado médico
+              </button>
+
             </div>
           </div>
         </section>
+
+
 
         {!cargandoPerfil && !perfilDoctorCompleto && (
           <section className="rounded-3xl border border-amber-200 bg-amber-50 p-5 text-amber-800">
@@ -1870,9 +2038,13 @@ export default function DoctorShaddaiRecetas() {
               </div>
             </div>
 
+
+          </div>
+
+          <div className="space-y-6">
             <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm">
               <div className="mb-5">
-                <h2 className="text-xl font-bold text-slate-800">Buscar producto / Servicio</h2>
+                <h2 className="text-xl font-bold text-slate-800">Buscar producto de la farmacia.</h2>
                 <p className="mt-1 text-sm text-slate-500">
                   Busca medicamentos o productos disponibles en inventario.
                 </p>
@@ -1894,6 +2066,183 @@ export default function DoctorShaddaiRecetas() {
                   }
                 />
               </div>
+
+
+
+
+            <div className="mt-5 rounded-2xl border border-dashed border-violet-300 bg-violet-50 p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-black text-violet-900">
+                    Medicamento libre
+                  </p>
+                  <p className="mt-1 text-xs leading-relaxed text-violet-700">
+                    Úsalo cuando el medicamento no existe en el inventario de la farmacia. Se imprimirá en la receta, pero caja no podrá cobrarlo ni surtirlo automáticamente.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setMostrarFormularioMedicamentoLibre((prev) => !prev)}
+                  disabled={!expedienteSeleccionado?.id_expediente}
+                  className="inline-flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-violet-700 px-4 py-2.5 text-sm font-black text-white transition hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <PlusCircle size={18} />
+                  {mostrarFormularioMedicamentoLibre ? 'Cerrar' : 'Agregar medicamento libre'}
+                </button>
+              </div>
+
+              {mostrarFormularioMedicamentoLibre && (
+                <div className="mt-4 border-t border-violet-200 pt-4">
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="md:col-span-2">
+                      <label className="mb-1.5 block text-xs font-black uppercase tracking-wide text-violet-800">
+                        Nombre del medicamento *
+                      </label>
+                      <input
+                        type="text"
+                        name="nombre"
+                        value={medicamentoLibre.nombre}
+                        onChange={manejarCambioMedicamentoLibre}
+                        className="w-full rounded-xl border border-violet-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-500"
+                        placeholder="Ej. Amoxicilina con ácido clavulánico 875 mg / 125 mg"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1.5 block text-xs font-black uppercase tracking-wide text-violet-800">
+                        Nombre genérico
+                      </label>
+                      <input
+                        type="text"
+                        name="nombre_generico"
+                        value={medicamentoLibre.nombre_generico}
+                        onChange={manejarCambioMedicamentoLibre}
+                        className="w-full rounded-xl border border-violet-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-500"
+                        placeholder="Opcional"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1.5 block text-xs font-black uppercase tracking-wide text-violet-800">
+                        Presentación / concentración
+                      </label>
+                      <input
+                        type="text"
+                        name="presentacion"
+                        value={medicamentoLibre.presentacion}
+                        onChange={manejarCambioMedicamentoLibre}
+                        className="w-full rounded-xl border border-violet-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-500"
+                        placeholder="Ej. 500 mg, caja con 20 tabletas"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1.5 block text-xs font-black uppercase tracking-wide text-violet-800">
+                        Forma farmacéutica
+                      </label>
+                      <input
+                        type="text"
+                        name="forma_farmaceutica"
+                        value={medicamentoLibre.forma_farmaceutica}
+                        onChange={manejarCambioMedicamentoLibre}
+                        className="w-full rounded-xl border border-violet-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-500"
+                        placeholder="Ej. Tabletas, suspensión, crema"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1.5 block text-xs font-black uppercase tracking-wide text-violet-800">
+                        Cantidad *
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        name="cantidad"
+                        value={medicamentoLibre.cantidad}
+                        onChange={manejarCambioMedicamentoLibre}
+                        className="w-full rounded-xl border border-violet-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1.5 block text-xs font-black uppercase tracking-wide text-violet-800">
+                        Dosis
+                      </label>
+                      <input
+                        type="text"
+                        name="dosis"
+                        value={medicamentoLibre.dosis}
+                        onChange={manejarCambioMedicamentoLibre}
+                        className="w-full rounded-xl border border-violet-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-500"
+                        placeholder="Ej. 1 tableta"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1.5 block text-xs font-black uppercase tracking-wide text-violet-800">
+                        Frecuencia
+                      </label>
+                      <input
+                        type="text"
+                        name="frecuencia"
+                        value={medicamentoLibre.frecuencia}
+                        onChange={manejarCambioMedicamentoLibre}
+                        className="w-full rounded-xl border border-violet-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-500"
+                        placeholder="Ej. cada 8 horas"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1.5 block text-xs font-black uppercase tracking-wide text-violet-800">
+                        Duración
+                      </label>
+                      <input
+                        type="text"
+                        name="duracion"
+                        value={medicamentoLibre.duracion}
+                        onChange={manejarCambioMedicamentoLibre}
+                        className="w-full rounded-xl border border-violet-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-500"
+                        placeholder="Ej. por 7 días"
+                      />
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className="mb-1.5 block text-xs font-black uppercase tracking-wide text-violet-800">
+                        Indicaciones
+                      </label>
+                      <textarea
+                        name="indicaciones"
+                        value={medicamentoLibre.indicaciones}
+                        onChange={manejarCambioMedicamentoLibre}
+                        rows="3"
+                        className="w-full resize-none rounded-xl border border-violet-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-500"
+                        placeholder="Ej. Tomar después de alimentos. No suspender tratamiento."
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                    <button
+                      type="button"
+                      onClick={cancelarMedicamentoLibre}
+                      className="rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-slate-700 ring-1 ring-violet-200 transition hover:bg-violet-100"
+                    >
+                      Cancelar
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={agregarMedicamentoLibre}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 py-2.5 text-sm font-black text-white transition hover:bg-violet-800"
+                    >
+                      <Plus size={17} />
+                      Agregar a la receta
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
 
               <div className="mt-4 max-h-[420px] space-y-3 overflow-y-auto pr-1">
                 {!expedienteSeleccionado?.id_expediente ? (
@@ -1963,16 +2312,20 @@ export default function DoctorShaddaiRecetas() {
                             <button
                               type="button"
                               onClick={() => agregarProducto(producto)}
-                              disabled={agregado || sinStock}
+                              disabled={agregado}
                               className={`inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2 text-sm font-bold transition ${agregado
                                 ? 'bg-slate-200 text-slate-500'
                                 : sinStock
-                                  ? 'bg-red-100 text-red-500'
+                                  ? 'bg-amber-500 text-white hover:bg-amber-600'
                                   : 'bg-sky-700 text-white hover:bg-sky-800'
                                 }`}
                             >
                               <Plus size={17} />
-                              {agregado ? 'Agregado' : 'Agregar'}
+                              {agregado
+                                ? 'Agregado'
+                                : sinStock
+                                  ? 'Recetar sin stock'
+                                  : 'Agregar'}
                             </button>
                           </div>
 
@@ -2010,9 +2363,8 @@ export default function DoctorShaddaiRecetas() {
                 )}
               </div>
             </div>
-          </div>
 
-          <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm">
+            <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm">
             <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
                 <h2 className="text-xl font-bold text-slate-800">Tabla de receta</h2>
@@ -2045,32 +2397,72 @@ export default function DoctorShaddaiRecetas() {
                 <h3 className="text-lg font-bold text-slate-800">Receta vacía</h3>
 
                 <p className="mt-2 max-w-sm text-sm text-slate-500">
-                  Busca productos del inventario y agrégalos a la receta para comenzar.
+                  Busca productos de la farmacia y agrégalos a la receta. También pueden incluirse aunque no haya existencias actuales.
                 </p>
               </div>
             ) : (
               <div className="space-y-4">
                 {receta.map((item) => (
-                  <div key={item.id_producto} className="rounded-3xl border border-slate-100 bg-slate-50 p-4">
+                  <div key={item.id_item || item.id_producto || item.nombre} className="rounded-3xl border border-slate-100 bg-slate-50 p-4">
                     <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                       <div>
-                        <h3 className="font-bold text-slate-900">{item.nombre}</h3>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="font-bold text-slate-900">{item.nombre}</h3>
 
-                        <p className="mt-1 text-xs text-slate-500">
-                          Stock total disponible: {item.stock}
-                        </p>
+                          {item.producto_libre ? (
+                            <>
+                              <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-black text-violet-800">
+                                MEDICAMENTO LIBRE
+                              </span>
+                              <span className="rounded-full bg-slate-200 px-3 py-1 text-xs font-black text-slate-700">
+                                NO REGISTRADO EN INVENTARIO
+                              </span>
+                            </>
+                          ) : (
+                            <span className="rounded-full bg-sky-100 px-3 py-1 text-xs font-black text-sky-800">
+                              PRODUCTO DE FARMACIA
+                            </span>
+                          )}
+                        </div>
 
-                        {item.presentacion && (
+                        {(item.nombre_generico || item.presentacion || item.forma_farmaceutica) && (
                           <p className="mt-1 text-xs text-slate-500">
-                            Presentación: {item.presentacion}
+                            {[item.nombre_generico, item.presentacion, item.forma_farmaceutica]
+                              .filter(Boolean)
+                              .join(' · ')}
                           </p>
                         )}
 
-                        {item.disponibilidad_sucursales?.length > 0 && (
+                        {item.producto_libre ? (
+                          <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-violet-100 px-3 py-1 text-xs font-bold text-violet-800">
+                            <AlertTriangle size={14} />
+                            Se imprimirá en la receta; caja no podrá cobrarlo ni surtirlo automáticamente.
+                          </div>
+                        ) : (
+                          <p className="mt-1 text-xs text-slate-500">
+                            Stock total actual en farmacia: {item.stock}
+                          </p>
+                        )}
+
+                        {!item.producto_libre && !item.disponible_inventario && (
+                          <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">
+                            <AlertTriangle size={14} />
+                            Sin existencia actual: se conserva en la receta y caja decidirá el surtido.
+                          </div>
+                        )}
+
+                        {!item.producto_libre && item.disponible_inventario && Number(item.cantidad || 0) > Number(item.stock || 0) && (
+                          <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">
+                            <AlertTriangle size={14} />
+                            Cantidad recetada mayor al stock actual: caja podrá surtirla parcialmente.
+                          </div>
+                        )}
+
+                        {!item.producto_libre && item.disponibilidad_sucursales?.length > 0 && (
                           <div className="mt-2 flex flex-wrap gap-2">
                             {item.disponibilidad_sucursales.map((sucursal) => (
                               <span
-                                key={`${item.id_producto}-${sucursal.id_sucursal}`}
+                                key={`${item.id_item || item.id_producto || item.nombre}-${sucursal.id_sucursal}`}
                                 className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600"
                               >
                                 {sucursal.sucursal}: {sucursal.stock}
@@ -2107,10 +2499,9 @@ export default function DoctorShaddaiRecetas() {
                           <input
                             type="number"
                             min="1"
-                            max={item.stock}
                             value={item.cantidad}
                             onChange={(e) =>
-                              actualizarItemReceta(item.id_producto, 'cantidad', e.target.value)
+                              actualizarItemReceta(item.id_item, 'cantidad', e.target.value)
                             }
                             className="h-10 w-20 rounded-xl border border-slate-200 text-center text-sm font-bold outline-none focus:ring-2 focus:ring-sky-500"
                           />
@@ -2129,21 +2520,21 @@ export default function DoctorShaddaiRecetas() {
                         label="Dosis"
                         value={item.dosis}
                         placeholder="Ej. 1 tableta"
-                        onChange={(value) => actualizarItemReceta(item.id_producto, 'dosis', value)}
+                        onChange={(value) => actualizarItemReceta(item.id_item, 'dosis', value)}
                       />
 
                       <CampoTextoReceta
                         label="Frecuencia"
                         value={item.frecuencia}
                         placeholder="Ej. cada 8 horas"
-                        onChange={(value) => actualizarItemReceta(item.id_producto, 'frecuencia', value)}
+                        onChange={(value) => actualizarItemReceta(item.id_item, 'frecuencia', value)}
                       />
 
                       <CampoTextoReceta
                         label="Duración"
                         value={item.duracion}
                         placeholder="Ej. por 5 días"
-                        onChange={(value) => actualizarItemReceta(item.id_producto, 'duracion', value)}
+                        onChange={(value) => actualizarItemReceta(item.id_item, 'duracion', value)}
                       />
 
                       <div className="md:col-span-2">
@@ -2154,7 +2545,7 @@ export default function DoctorShaddaiRecetas() {
                         <textarea
                           value={item.indicaciones}
                           onChange={(e) =>
-                            actualizarItemReceta(item.id_producto, 'indicaciones', e.target.value)
+                            actualizarItemReceta(item.id_item, 'indicaciones', e.target.value)
                           }
                           rows="3"
                           className="w-full resize-none rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-sky-500"
@@ -2208,6 +2599,7 @@ export default function DoctorShaddaiRecetas() {
                 </div>
               </div>
             )}
+            </div>
           </div>
         </section>
       </div>
@@ -2589,6 +2981,18 @@ export default function DoctorShaddaiRecetas() {
         idSucursal={expedienteSeleccionado?.id_sucursal || null}
       />
 
+      {modalCertificadoAbierto && (
+        <ModalCertificadoMedico
+          abierto={modalCertificadoAbierto}
+          onClose={() => setModalCertificadoAbierto(false)}
+          expediente={expedienteSeleccionado}
+          paciente={paciente}
+          perfilDoctor={perfilDoctor}
+          idFila={idFilaUrl ? Number(idFilaUrl) : null}
+          tipoAtencion={tipoAtencionActual.value}
+        />
+      )}
+
       {modalRecetaAbierto && recetaGenerada && (
         <div className="hidden print:block">
           <RecetaImprimible
@@ -2837,16 +3241,22 @@ function RecetaImprimible({ recetaGenerada, fechaActual, perfilDoctor }) {
   const expediente = recetaGenerada?.expediente || null;
   const doctor = perfilDoctor || recetaGenerada?.doctor || {};
 
+  const logoUniversidadUrl = obtenerUrlArchivo(
+    doctor.logo_universidad_url ||
+    recetaGenerada?.doctor?.logo_universidad_url ||
+    ''
+  );
+
   const folio =
     receta.folio_receta ||
     (receta.id_receta ? `RX-${receta.id_receta}` : 'Vista previa');
 
   const fechaReceta = receta.fecha_creacion
     ? new Date(receta.fecha_creacion).toLocaleDateString('es-MX', {
-        year: 'numeric',
-        month: 'long',
-        day: '2-digit',
-      })
+      year: 'numeric',
+      month: 'long',
+      day: '2-digit',
+    })
     : fechaActual;
 
   const textoSeguro = (valor, fallback = 'N/A') => {
@@ -2893,274 +3303,881 @@ function RecetaImprimible({ recetaGenerada, fechaActual, perfilDoctor }) {
   const productosReceta =
     productos.length > 0
       ? productos
-      : detalles.map((item) => ({
-          id_producto: item.id_producto,
-          nombre:
-            item.nombre ||
-            item.nombre_producto ||
-            item.producto ||
-            'Producto',
-          nombre_generico: item.nombre_generico || item.generico || '',
-          presentacion: item.presentacion || '',
-          forma_farmaceutica: item.forma_farmaceutica || '',
-          cantidad: item.cantidad || item.cantidad_recetada || 1,
-          dosis: item.dosis || '',
-          frecuencia: item.frecuencia || '',
-          duracion: item.duracion || '',
-          indicaciones: item.indicaciones || '',
-        }));
+      : detalles.map((item, index) => ({
+        id_item: item.id_item || `DET-${item.id_detalle || item.id_producto || index}`,
+        id_producto: item.id_producto || null,
+        tipo_producto_receta:
+          item.tipo_producto_receta || (item.id_producto ? 'INVENTARIO' : 'LIBRE'),
+        producto_libre:
+          item.producto_libre === true ||
+          item.producto_libre === 'true' ||
+          !item.id_producto,
+        nombre:
+          item.nombre ||
+          item.nombre_producto ||
+          item.producto ||
+          'Producto',
+        nombre_generico: item.nombre_generico || item.generico || '',
+        presentacion: item.presentacion || '',
+        forma_farmaceutica: item.forma_farmaceutica || '',
+        cantidad: item.cantidad || item.cantidad_recetada || 1,
+        dosis: item.dosis || '',
+        frecuencia: item.frecuencia || '',
+        duracion: item.duracion || '',
+        indicaciones: item.indicaciones || '',
+      }));
 
   const totalPiezas = productosReceta.reduce(
     (acc, item) => acc + Number(item.cantidad || 0),
     0
   );
 
-  return (
-    <div
-      id="receta-imprimible"
-      className="mx-auto w-full max-w-5xl bg-white text-slate-900 print:max-w-none"
-    >
-      <div className="mx-auto flex min-h-[10.35in] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-slate-300 bg-white shadow-sm print:min-h-[10.35in] print:rounded-none print:border-0 print:shadow-none">
-        {/* Encabezado */}
-        <header className="border-b-4 border-sky-700 bg-gradient-to-r from-sky-50 via-white to-cyan-50 px-7 py-5 print:px-6 print:py-4">
-          <div className="grid grid-cols-[82px_1fr_210px] items-center gap-5">
-            <div className="flex h-20 w-20 items-center justify-center rounded-3xl border border-slate-200 bg-white p-2 shadow-sm print:h-16 print:w-16">
-              <img
-                src={logoFarmacia}
-                alt="Farmacias Shaddai"
-                className="h-full w-full object-contain"
-              />
-            </div>
+  /*
+    Modo automático:
+    - Receta corta: 2 copias en la misma hoja carta.
+    - Receta larga: 1 copia por hoja para evitar que medicamentos o indicaciones se corten.
+  */
+  const totalCaracteresReceta = [
+    diagnostico,
+    observaciones,
+    ...productosReceta.flatMap((item) => [
+      item.nombre,
+      item.nombre_generico,
+      item.presentacion,
+      item.forma_farmaceutica,
+      item.dosis,
+      item.frecuencia,
+      item.duracion,
+      item.indicaciones,
+    ]),
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .length;
 
-            <div className="text-center">
-              <h1 className="text-3xl font-black tracking-[0.18em] text-slate-950 print:text-2xl">
-                FARMACIAS SHADDAI
-              </h1>
-              <p className="mt-1 text-sm font-black uppercase tracking-[0.36em] text-sky-700">
-                Receta médica
-              </p>
-              <p className="mt-2 text-xs font-semibold text-slate-500">
-                Bienestar al alcance de todos
-              </p>
-            </div>
+  const recetaEsLarga =
+    productosReceta.length > 3 ||
+    totalCaracteresReceta > 850 ||
+    productosReceta.some((item) => {
+      const textoIndicaciones = [
+        item.nombre,
+        item.nombre_generico,
+        item.presentacion,
+        item.forma_farmaceutica,
+        item.dosis,
+        item.frecuencia,
+        item.duracion,
+        item.indicaciones,
+      ]
+        .filter(Boolean)
+        .join(' ');
 
-            <div className="rounded-3xl border border-slate-200 bg-white px-4 py-4 text-center shadow-sm">
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">
-                Folio
-              </p>
-              <p className="mt-1 text-base font-black tracking-wide text-slate-950">
-                {folio}
-              </p>
-              <p className="mt-1 text-[11px] font-bold text-slate-500">
-                {fechaReceta}
-              </p>
-            </div>
+      return textoIndicaciones.length > 210;
+    });
+
+  const RecetaCopia = ({ tipoCopia }) => (
+    <section className="rx-copy">
+      <div className="rx-header">
+        <div className="rx-logos">
+          <div className="rx-logo-box">
+            <img src={logoFarmacia} alt="Farmacias Shaddai" />
           </div>
-        </header>
 
-        {/* Cuerpo */}
-        <main className="flex flex-1 flex-col gap-4 px-7 py-5 print:px-6 print:py-4">
-          {/* Datos generales */}
-          <section className="grid grid-cols-[1fr_1.1fr] gap-4">
-            <div className="rounded-3xl border border-slate-200 bg-white p-4">
-              <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-2">
-                <h2 className="text-xs font-black uppercase tracking-widest text-sky-800">
-                  Médico
-                </h2>
-                <span className="rounded-full bg-sky-50 px-3 py-1 text-[10px] font-black text-sky-700">
-                  Doctor Shaddai
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px] leading-tight text-slate-700">
-                <p className="col-span-2">
-                  <strong>Nombre:</strong>{' '}
-                  {textoSeguro(doctor.nombre_completo, 'Doctor Shaddai')}
-                </p>
-                <p>
-                  <strong>Especialidad:</strong>{' '}
-                  {textoSeguro(doctor.especialidad, 'Medicina general')}
-                </p>
-                <p>
-                  <strong>Cédula:</strong>{' '}
-                  {textoSeguro(doctor.cedula_profesional)}
-                </p>
-                <p className="col-span-2">
-                  <strong>Domicilio:</strong>{' '}
-                  {textoSeguro(doctor.direccion_consultorio, 'Farmacias Shaddai')}
-                </p>
-              </div>
+          {logoUniversidadUrl && (
+            <div className="rx-logo-box">
+              <img src={logoUniversidadUrl} alt="Logo universidad" />
             </div>
+          )}
+        </div>
 
-            <div className="rounded-3xl border border-slate-200 bg-white p-4">
-              <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-2">
-                <h2 className="text-xs font-black uppercase tracking-widest text-sky-800">
-                  Paciente
-                </h2>
+        <div className="rx-title">
+          <h1>FARMACIAS SHADDAI</h1>
+          <p>RECETA MÉDICA</p>
+          <span>Bienestar al alcance de todos</span>
+        </div>
 
-                <span className="rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">
-                  {expediente?.id_expediente
-                    ? `Exp. #${expediente.id_expediente}`
-                    : 'Sin expediente'}
-                </span>
-              </div>
+        <div className="rx-folio">
+          <span>{tipoCopia}</span>
+          <strong>{folio}</strong>
+          <small>{fechaReceta}</small>
+        </div>
+      </div>
 
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px] leading-tight text-slate-700">
-                <p className="col-span-2">
-                  <strong>Paciente:</strong> {textoSeguro(nombrePaciente)}
-                </p>
-                <p>
-                  <strong>Tel:</strong> {textoSeguro(telefonoPaciente)}
-                </p>
-                <p>
-                  <strong>Edad:</strong> {textoSeguro(edadPaciente)}
-                </p>
-                <p>
-                  <strong>Sexo:</strong> {textoSeguro(sexoPaciente)}
-                </p>
-                <p>
-                  <strong>Fecha:</strong> {fechaReceta}
-                </p>
-              </div>
-            </div>
-          </section>
+      <div className="rx-info-grid">
+        <div className="rx-card">
+          <div className="rx-card-title">Médico</div>
 
-          {/* Antecedentes y diagnóstico */}
-          <section className="grid grid-cols-[0.9fr_1.1fr] gap-4">
-            <div className="rounded-3xl border border-amber-200 bg-amber-50/70 p-4 print:bg-white">
-              <h2 className="mb-2 border-b border-amber-100 pb-2 text-xs font-black uppercase tracking-widest text-amber-800 print:text-slate-800">
-                Antecedentes relevantes
-              </h2>
+          <p>
+            <b>Nombre:</b> {textoSeguro(doctor.nombre_completo, 'Doctor Shaddai')}
+          </p>
+          <p>
+            <b>Especialidad:</b>{' '}
+            {textoSeguro(doctor.especialidad, 'Medicina general')}
+          </p>
+          <p>
+            <b>Cédula:</b> {textoSeguro(doctor.cedula_profesional)}
+          </p>
+          <p>
+            <b>Consultorio:</b>{' '}
+            {textoSeguro(doctor.direccion_consultorio, 'Farmacias Shaddai')}
+          </p>
+        </div>
 
-              <div className="space-y-1.5 text-[10.5px] leading-tight text-slate-700">
-                <p>
-                  <strong>Condiciones:</strong>{' '}
-                  {textoSeguro(expediente?.enfermedades_condiciones, 'Sin registro')}
-                </p>
-                <p>
-                  <strong>Alergias:</strong>{' '}
-                  {textoSeguro(expediente?.alergias, 'Sin registro')}
-                </p>
-                <p>
-                  <strong>Medicamentos actuales:</strong>{' '}
-                  {textoSeguro(expediente?.medicamentos_actuales, 'Sin registro')}
-                </p>
-              </div>
-            </div>
+        <div className="rx-card">
+          <div className="rx-card-title">Paciente</div>
 
-            <div className="rounded-3xl border border-slate-200 bg-white p-4">
-              <h2 className="mb-2 text-xs font-black uppercase tracking-widest text-sky-800">
-                Diagnóstico
-              </h2>
+          <p>
+            <b>Paciente:</b> {textoSeguro(nombrePaciente)}
+          </p>
+          <p>
+            <b>Expediente:</b>{' '}
+            {expediente?.id_expediente ? `EXP-${expediente.id_expediente}` : 'N/A'}
+          </p>
+          <p>
+            <b>Teléfono:</b> {textoSeguro(telefonoPaciente)}
+          </p>
+          <p>
+            <b>Edad:</b> {textoSeguro(edadPaciente)} &nbsp; <b>Sexo:</b>{' '}
+            {textoSeguro(sexoPaciente)}
+          </p>
+        </div>
+      </div>
 
-              <div className="min-h-[58px] rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-[11px] leading-snug text-slate-700 print:bg-white">
-                {diagnostico}
-              </div>
-            </div>
-          </section>
+      <div className="rx-diagnostico">
+        <b>Diagnóstico:</b> {textoSeguro(diagnostico, 'Sin diagnóstico registrado')}
+      </div>
 
-          {/* Prescripción */}
-          <section className="rounded-3xl border border-slate-200 bg-white p-4">
-            <div className="mb-3 flex items-center justify-between border-b border-slate-200 pb-2">
-              <h2 className="text-xs font-black uppercase tracking-widest text-sky-800">
-                Prescripción
-              </h2>
+      <div className="rx-prescripcion">
+        <div className="rx-section-title">
+          <span>Prescripción</span>
+          <small>
+            {productosReceta.length} producto(s) · {totalPiezas} pieza(s)
+          </small>
+        </div>
 
-              <div className="text-[10px] font-black text-slate-500">
-                {productosReceta.length} producto(s) · {totalPiezas} pieza(s)
-              </div>
-            </div>
+        {productosReceta.length === 0 ? (
+          <div className="rx-empty">No hay productos registrados.</div>
+        ) : (
+          <div className="rx-productos">
+            {productosReceta.map((item, index) => (
+              <div
+                key={`${item.id_item || item.id_producto || index}-${item.nombre}`}
+                className="rx-producto"
+              >
+                <div className="rx-producto-main">
+                  <div>
+                    <p className="rx-producto-nombre">
+                      {index + 1}. {textoSeguro(item.nombre, 'Producto')}
+                    </p>
 
-            {productosReceta.length === 0 ? (
-              <div className="rounded-2xl bg-slate-50 px-4 py-6 text-center text-xs text-slate-500">
-                No hay productos registrados.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {productosReceta.map((item, index) => (
-                  <div
-                    key={`${item.id_producto || index}-${item.nombre}`}
-                    className="rounded-2xl border border-slate-200 bg-slate-50 p-3 print:bg-white"
-                  >
-                    <div className="grid grid-cols-[1fr_52px] gap-3">
-                      <div className="min-w-0">
-                        <p className="text-[12px] font-black leading-tight text-slate-950">
-                          {index + 1}. {textoSeguro(item.nombre, 'Producto')}
-                        </p>
-
-                        <p className="mt-1 text-[9.5px] leading-tight text-slate-500">
-                          <strong>Genérica:</strong>{' '}
-                          {textoSeguro(item.nombre_generico, '-')} ·{' '}
-                          <strong>Presentación:</strong>{' '}
-                          {textoSeguro(item.presentacion, '-')} ·{' '}
-                          <strong>Forma:</strong>{' '}
-                          {textoSeguro(item.forma_farmaceutica, '-')}
-                        </p>
-                      </div>
-
-                      <div className="flex items-center justify-center rounded-xl border border-sky-100 bg-sky-50 text-sm font-black text-sky-800 print:bg-white">
-                        x{Number(item.cantidad || 1)}
-                      </div>
-                    </div>
-
-                    <div className="mt-2 grid grid-cols-3 gap-3 text-[10.5px] leading-tight text-slate-700">
-                      <p>
-                        <strong>Dosis:</strong> {textoSeguro(item.dosis, '-')}
-                      </p>
-                      <p>
-                        <strong>Frecuencia:</strong>{' '}
-                        {textoSeguro(item.frecuencia, '-')}
-                      </p>
-                      <p>
-                        <strong>Duración:</strong>{' '}
-                        {textoSeguro(item.duracion, '-')}
-                      </p>
-                    </div>
-
-                    {item.indicaciones && (
-                      <p className="mt-2 text-[10.5px] leading-tight text-slate-700">
-                        <strong>Tratamiento / indicaciones:</strong>{' '}
-                        {item.indicaciones}
+                    {(item.nombre_generico || item.presentacion || item.forma_farmaceutica) && (
+                      <p className="rx-producto-meta">
+                        {[item.nombre_generico, item.presentacion, item.forma_farmaceutica]
+                          .filter(Boolean)
+                          .join(' · ')}
                       </p>
                     )}
                   </div>
-                ))}
+
+                  <div className="rx-cantidad">x{Number(item.cantidad || 1)}</div>
+                </div>
+
+                <div className="rx-indicaciones-grid">
+                  <span>
+                    <b>Dosis:</b> {textoSeguro(item.dosis, '-')}
+                  </span>
+                  <span>
+                    <b>Frecuencia:</b> {textoSeguro(item.frecuencia, '-')}
+                  </span>
+                  <span>
+                    <b>Duración:</b> {textoSeguro(item.duracion, '-')}
+                  </span>
+                </div>
+
+                {item.indicaciones && (
+                  <p className="rx-tratamiento">
+                    <b>Indicaciones:</b> {item.indicaciones}
+                  </p>
+                )}
               </div>
-            )}
-          </section>
-
-          {/* Bloque inferior para ocupar bien la hoja */}
-          <section className="mt-auto grid grid-cols-[1fr_280px] gap-4">
-            <div className="rounded-3xl border border-slate-200 bg-white p-4">
-              <h2 className="mb-2 text-xs font-black uppercase tracking-widest text-sky-800">
-                Observaciones
-              </h2>
-
-              <div className="min-h-[76px] rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-[11px] leading-snug text-slate-700 print:bg-white">
-                {observaciones || 'Sin observaciones.'}
-              </div>
-            </div>
-
-            <div className="rounded-3xl border border-slate-200 bg-white p-4 text-center">
-              <div className="mb-3 h-16 border-b border-slate-400" />
-
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-600">
-                Firma del médico
-              </p>
-              <p className="mt-1 text-xs font-black text-slate-900">
-                {textoSeguro(doctor.nombre_completo, 'Doctor Shaddai')}
-              </p>
-              <p className="text-[10px] text-slate-500">
-                Cédula: {textoSeguro(doctor.cedula_profesional)}
-              </p>
-            </div>
-          </section>
-
-          <footer className="border-t border-slate-200 pt-2 text-center text-[9px] leading-tight text-slate-400">
-           
-          </footer>
-        </main>
+            ))}
+          </div>
+        )}
       </div>
+
+      <div className="rx-footer">
+        <div className="rx-observaciones">
+          <b>Observaciones:</b> {observaciones || 'Sin observaciones.'}
+        </div>
+
+        <div className="rx-firma">
+          <div />
+          <p>Firma del médico</p>
+          <strong>{textoSeguro(doctor.nombre_completo, 'Doctor Shaddai')}</strong>
+          <span>Cédula: {textoSeguro(doctor.cedula_profesional)}</span>
+        </div>
+      </div>
+    </section>
+  );
+
+  return (
+    <div
+      id="receta-imprimible"
+      className={`rx-print-wrapper ${recetaEsLarga ? 'rx-print-large' : 'rx-print-double'}`}
+    >
+      <style>
+        {`
+          #receta-imprimible,
+          #receta-imprimible * {
+            box-sizing: border-box;
+          }
+
+          .rx-print-wrapper {
+            width: 100%;
+            max-width: 8.5in;
+            margin: 0 auto;
+            background: white;
+            color: #0f172a;
+            font-family: Arial, Helvetica, sans-serif;
+          }
+
+          .rx-long-alert {
+            margin: 0 0 10px;
+            border: 1px solid #fde68a;
+            border-radius: 16px;
+            background: #fffbeb;
+            padding: 10px 12px;
+            color: #92400e;
+            font-size: 12px;
+            font-weight: 800;
+            line-height: 1.35;
+          }
+
+          .rx-page {
+            width: 100%;
+            background: white;
+          }
+
+          .rx-print-double .rx-page {
+            height: calc(279.4mm - 12mm);
+            max-height: calc(279.4mm - 12mm);
+            display: grid;
+            grid-template-rows: 1fr 5mm 1fr;
+            gap: 0;
+            overflow: hidden;
+          }
+
+          .rx-print-large .rx-page {
+            min-height: calc(279.4mm - 12mm);
+            height: auto;
+            max-height: none;
+            display: block;
+            overflow: visible;
+            page-break-after: always;
+            break-after: page;
+          }
+
+          .rx-print-large .rx-page:last-child {
+            page-break-after: auto;
+            break-after: auto;
+          }
+
+          .rx-copy {
+            border: 1px solid #cbd5e1;
+            border-radius: 12px;
+            padding: 7px 9px;
+            background: white;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+          }
+
+          .rx-print-double .rx-copy {
+            height: 100%;
+            max-height: 100%;
+            overflow: hidden;
+          }
+
+          .rx-print-large .rx-copy {
+            min-height: calc(279.4mm - 12mm);
+            height: auto;
+            max-height: none;
+            overflow: visible;
+            padding: 12px 14px;
+            gap: 9px;
+          }
+
+          .rx-separator {
+            height: 5mm;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #94a3b8;
+            font-size: 8px;
+            font-weight: 900;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+          }
+
+          .rx-separator::before,
+          .rx-separator::after {
+            content: '';
+            flex: 1;
+            border-top: 1px dashed #94a3b8;
+          }
+
+          .rx-header {
+            display: grid;
+            grid-template-columns: 88px 1fr 132px;
+            align-items: center;
+            gap: 10px;
+            border-bottom: 2px solid #0369a1;
+            padding-bottom: 6px;
+          }
+
+          .rx-print-large .rx-header {
+            grid-template-columns: 120px 1fr 160px;
+            padding-bottom: 9px;
+          }
+
+          .rx-logos {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+          }
+
+          .rx-logo-box {
+            width: 40px;
+            height: 40px;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: white;
+          }
+
+          .rx-print-large .rx-logo-box {
+            width: 52px;
+            height: 52px;
+            border-radius: 12px;
+            padding: 4px;
+          }
+
+          .rx-logo-box img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+          }
+
+          .rx-title {
+            text-align: center;
+            line-height: 1.1;
+          }
+
+          .rx-title h1 {
+            margin: 0;
+            font-size: 15px;
+            font-weight: 900;
+            letter-spacing: 0.14em;
+            color: #0f172a;
+          }
+
+          .rx-print-large .rx-title h1 {
+            font-size: 19px;
+          }
+
+          .rx-title p {
+            margin: 2px 0 0;
+            font-size: 9px;
+            font-weight: 900;
+            letter-spacing: 0.28em;
+            color: #0369a1;
+          }
+
+          .rx-print-large .rx-title p {
+            font-size: 11px;
+          }
+
+          .rx-title span {
+            display: block;
+            margin-top: 2px;
+            font-size: 8px;
+            font-weight: 700;
+            color: #64748b;
+          }
+
+          .rx-print-large .rx-title span {
+            font-size: 9px;
+          }
+
+          .rx-folio {
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            padding: 5px 6px;
+            text-align: center;
+            line-height: 1.15;
+          }
+
+          .rx-print-large .rx-folio {
+            padding: 8px;
+          }
+
+          .rx-folio span {
+            display: block;
+            font-size: 8px;
+            font-weight: 900;
+            color: #0369a1;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+          }
+
+          .rx-print-large .rx-folio span {
+            font-size: 9px;
+          }
+
+          .rx-folio strong {
+            display: block;
+            margin-top: 2px;
+            font-size: 10px;
+            font-weight: 900;
+            color: #0f172a;
+          }
+
+          .rx-print-large .rx-folio strong {
+            font-size: 12px;
+          }
+
+          .rx-folio small {
+            display: block;
+            margin-top: 1px;
+            font-size: 8px;
+            font-weight: 700;
+            color: #64748b;
+          }
+
+          .rx-info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 7px;
+          }
+
+          .rx-card {
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            padding: 6px 8px;
+            font-size: 8.5px;
+            line-height: 1.25;
+          }
+
+          .rx-print-large .rx-card {
+            padding: 8px 10px;
+            font-size: 10px;
+            line-height: 1.35;
+          }
+
+          .rx-card p {
+            margin: 1px 0;
+          }
+
+          .rx-card-title {
+            margin-bottom: 3px;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 2px;
+            font-size: 8px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: #0369a1;
+          }
+
+          .rx-print-large .rx-card-title {
+            margin-bottom: 5px;
+            font-size: 9px;
+          }
+
+          .rx-diagnostico {
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            padding: 6px 8px;
+            min-height: 30px;
+            font-size: 8.8px;
+            line-height: 1.25;
+            background: #f8fafc;
+          }
+
+          .rx-print-large .rx-diagnostico {
+            min-height: 46px;
+            padding: 9px 10px;
+            font-size: 10px;
+            line-height: 1.35;
+          }
+
+          .rx-prescripcion {
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            padding: 6px 8px;
+            flex: 1;
+            min-height: 0;
+          }
+
+          .rx-print-double .rx-prescripcion {
+            overflow: hidden;
+          }
+
+          .rx-print-large .rx-prescripcion {
+            overflow: visible;
+            flex: initial;
+            min-height: 0;
+            padding: 9px 10px;
+          }
+
+          .rx-section-title {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 3px;
+            margin-bottom: 5px;
+          }
+
+          .rx-section-title span {
+            font-size: 8px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: #0369a1;
+          }
+
+          .rx-print-large .rx-section-title span {
+            font-size: 9px;
+          }
+
+          .rx-section-title small {
+            font-size: 7.5px;
+            font-weight: 900;
+            color: #64748b;
+          }
+
+          .rx-productos {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+          }
+
+          .rx-print-large .rx-productos {
+            gap: 7px;
+            overflow: visible;
+          }
+
+          .rx-producto {
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 5px 6px;
+            background: white;
+          }
+
+          .rx-print-large .rx-producto {
+            padding: 8px 9px;
+            border-radius: 10px;
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
+
+          .rx-producto-main {
+            display: grid;
+            grid-template-columns: 1fr 34px;
+            gap: 6px;
+            align-items: start;
+          }
+
+          .rx-print-large .rx-producto-main {
+            grid-template-columns: 1fr 44px;
+          }
+
+          .rx-producto-nombre {
+            margin: 0;
+            font-size: 8.8px;
+            font-weight: 900;
+            line-height: 1.15;
+            color: #0f172a;
+          }
+
+          .rx-print-large .rx-producto-nombre {
+            font-size: 10px;
+            line-height: 1.25;
+          }
+
+          .rx-producto-meta {
+            margin: 2px 0 0;
+            font-size: 7.4px;
+            line-height: 1.15;
+            color: #475569;
+          }
+
+          .rx-print-large .rx-producto-meta {
+            margin-top: 3px;
+            font-size: 8.5px;
+            line-height: 1.25;
+          }
+
+          .rx-cantidad {
+            border: 1px solid #bae6fd;
+            border-radius: 8px;
+            padding: 4px 2px;
+            text-align: center;
+            font-size: 10px;
+            font-weight: 900;
+            color: #0369a1;
+            background: #f0f9ff;
+          }
+
+          .rx-print-large .rx-cantidad {
+            font-size: 12px;
+            padding: 6px 2px;
+          }
+
+          .rx-indicaciones-grid {
+            margin-top: 3px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 4px;
+            font-size: 7.8px;
+            line-height: 1.15;
+            color: #334155;
+          }
+
+          .rx-print-large .rx-indicaciones-grid {
+            margin-top: 5px;
+            font-size: 8.8px;
+            line-height: 1.25;
+          }
+
+          .rx-tratamiento {
+            margin: 3px 0 0;
+            font-size: 7.8px;
+            line-height: 1.15;
+            color: #334155;
+          }
+
+          .rx-print-large .rx-tratamiento {
+            margin-top: 5px;
+            font-size: 8.8px;
+            line-height: 1.3;
+          }
+
+          .rx-empty {
+            padding: 14px;
+            text-align: center;
+            font-size: 8.5px;
+            color: #64748b;
+          }
+
+          .rx-footer {
+            display: grid;
+            grid-template-columns: 1fr 160px;
+            gap: 7px;
+            align-items: end;
+          }
+
+          .rx-print-large .rx-footer {
+            grid-template-columns: 1fr 210px;
+            gap: 12px;
+            margin-top: auto;
+          }
+
+          .rx-observaciones {
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            padding: 6px 8px;
+            min-height: 37px;
+            font-size: 8px;
+            line-height: 1.2;
+          }
+
+          .rx-print-large .rx-observaciones {
+            min-height: 58px;
+            padding: 9px 10px;
+            font-size: 9.5px;
+            line-height: 1.35;
+          }
+
+          .rx-firma {
+            text-align: center;
+            font-size: 7.5px;
+            color: #475569;
+          }
+
+          .rx-print-large .rx-firma {
+            font-size: 8.5px;
+          }
+
+          .rx-firma div {
+            height: 24px;
+            border-bottom: 1px solid #0f172a;
+            margin-bottom: 3px;
+          }
+
+          .rx-print-large .rx-firma div {
+            height: 44px;
+          }
+
+          .rx-firma p {
+            margin: 0;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+          }
+
+          .rx-firma strong {
+            display: block;
+            margin-top: 1px;
+            font-size: 8px;
+            color: #0f172a;
+          }
+
+          .rx-print-large .rx-firma strong {
+            font-size: 9.5px;
+          }
+
+          .rx-firma span {
+            display: block;
+            font-size: 7px;
+          }
+
+          .rx-print-large .rx-firma span {
+            font-size: 8px;
+          }
+
+          @media print {
+            #receta-imprimible.rx-print-double {
+              overflow: hidden !important;
+            }
+
+            #receta-imprimible.rx-print-large {
+              overflow: visible !important;
+            }
+
+            #receta-imprimible.rx-print-large > div {
+              overflow: visible !important;
+            }
+
+            .rx-print-wrapper {
+              width: 100% !important;
+              max-width: none !important;
+              margin: 0 !important;
+              padding: 0 !important;
+            }
+
+            .rx-print-double .rx-page {
+              width: 100% !important;
+              height: calc(279.4mm - 12mm) !important;
+              max-height: calc(279.4mm - 12mm) !important;
+              min-height: 0 !important;
+              display: grid !important;
+              grid-template-rows: 1fr 5mm 1fr !important;
+              overflow: hidden !important;
+              page-break-after: avoid !important;
+              break-after: avoid !important;
+            }
+
+            .rx-print-double .rx-copy {
+              height: 100% !important;
+              max-height: 100% !important;
+              min-height: 0 !important;
+              border-radius: 0 !important;
+              box-shadow: none !important;
+              overflow: hidden !important;
+              page-break-inside: avoid !important;
+              break-inside: avoid !important;
+            }
+
+            .rx-print-large .rx-page {
+              width: 100% !important;
+              min-height: calc(279.4mm - 12mm) !important;
+              height: auto !important;
+              max-height: none !important;
+              overflow: visible !important;
+              page-break-after: always !important;
+              break-after: page !important;
+            }
+
+            .rx-print-large .rx-page:last-child {
+              page-break-after: auto !important;
+              break-after: auto !important;
+            }
+
+            .rx-print-large .rx-copy {
+              min-height: calc(279.4mm - 12mm) !important;
+              height: auto !important;
+              max-height: none !important;
+              border-radius: 0 !important;
+              box-shadow: none !important;
+              overflow: visible !important;
+              page-break-inside: auto !important;
+              break-inside: auto !important;
+            }
+
+            .rx-print-large .rx-prescripcion,
+            .rx-print-large .rx-productos {
+              overflow: visible !important;
+            }
+
+            .rx-print-large .rx-producto {
+              page-break-inside: avoid !important;
+              break-inside: avoid !important;
+            }
+
+            .rx-separator {
+              height: 5mm !important;
+            }
+
+            .no-print {
+              display: none !important;
+            }
+
+            * {
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+          }
+        `}
+      </style>
+
+
+
+      {recetaEsLarga && (
+        <div className="rx-long-alert no-print">
+          Esta receta contiene varios medicamentos o indicaciones largas. Para evitar cortes,
+          se imprimirá en dos hojas: una copia para el paciente y otra para el consultorio.
+        </div>
+      )}
+
+
+      {recetaEsLarga ? (
+        <>
+          <div className="rx-page">
+            <RecetaCopia tipoCopia="Copia paciente" />
+          </div>
+
+          <div className="rx-page">
+            <RecetaCopia tipoCopia="Copia consultorio" />
+          </div>
+        </>
+      ) : (
+        <div className="rx-page">
+          <RecetaCopia tipoCopia="Copia paciente" />
+
+          <div className="rx-separator">
+            Corte aquí
+          </div>
+
+          <RecetaCopia tipoCopia="Copia consultorio" />
+        </div>
+      )}
+
+
     </div>
   );
 }
