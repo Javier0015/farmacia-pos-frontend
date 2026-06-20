@@ -737,11 +737,21 @@ export default function POS() {
   };
 
   const cargarServiciosPendientes = async () => {
+    const idSucursalActiva = Number(idSucursal);
+
+    if (!Number.isInteger(idSucursalActiva) || idSucursalActiva <= 0) {
+      setServiciosPendientes([]);
+      return;
+    }
+
     try {
       setCargandoServicios(true);
 
       const { data } = await api.get('/doctor-shaddai/servicios-clinicos', {
-        params: { estatus: 'PENDIENTE_CAJERO' },
+        params: {
+          estatus: 'PENDIENTE_CAJERO',
+          id_sucursal: idSucursalActiva,
+        },
       });
 
       if (data.ok) {
@@ -749,6 +759,8 @@ export default function POS() {
       }
     } catch (error) {
       console.error('Error al cargar servicios clínicos pendientes:', error);
+      setServiciosPendientes([]);
+
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -775,6 +787,7 @@ export default function POS() {
       setSesionAbierta(null);
       setCarrito([]);
       setDetallesRecetasCache({});
+      setServiciosPendientes([]);
       setServicioSeleccionado(null);
       setDetalleServicio([]);
       setTarjetaPuntos(null);
@@ -1291,6 +1304,8 @@ export default function POS() {
 
   const verDetalleServicioPOS = async (servicio) => {
     const idSolicitud = Number(servicio?.id_solicitud_servicio || 0);
+    const idSucursalActiva = Number(idSucursal);
+    const idSucursalServicio = Number(servicio?.id_sucursal || 0);
 
     if (!idSolicitud) {
       Swal.fire({
@@ -1301,12 +1316,37 @@ export default function POS() {
       return;
     }
 
+    if (!Number.isInteger(idSucursalActiva) || idSucursalActiva <= 0) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Sucursal requerida',
+        text: 'Selecciona una sucursal antes de consultar el servicio clínico.',
+      });
+      return;
+    }
+
+    if (idSucursalServicio > 0 && idSucursalServicio !== idSucursalActiva) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Servicio de otra sucursal',
+        text: 'Este servicio no pertenece a la sucursal actualmente seleccionada.',
+      });
+      return;
+    }
+
     try {
       setCargandoDetalleServicio(true);
       setServicioSeleccionado(servicio);
       setDetalleServicio([]);
 
-      const { data } = await api.get(`/doctor-shaddai/servicios-clinicos/${idSolicitud}`);
+      const { data } = await api.get(
+        `/doctor-shaddai/servicios-clinicos/${idSolicitud}`,
+        {
+          params: {
+            id_sucursal: idSucursalActiva,
+          },
+        }
+      );
 
       if (data.ok) {
         setServicioSeleccionado(data.solicitud || data.servicio || servicio);
@@ -1330,6 +1370,27 @@ export default function POS() {
 
   const agregarDetalleServicioAlCarrito = (detalle) => {
     if (!servicioSeleccionado || !detalle) return;
+
+    const idSucursalActiva = Number(idSucursal);
+    const idSucursalServicio = Number(servicioSeleccionado.id_sucursal || 0);
+
+    if (!Number.isInteger(idSucursalActiva) || idSucursalActiva <= 0) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Sucursal requerida',
+        text: 'Selecciona una sucursal antes de agregar el servicio al carrito.',
+      });
+      return;
+    }
+
+    if (!idSucursalServicio || idSucursalServicio !== idSucursalActiva) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Servicio de otra sucursal',
+        text: 'Solo puedes cobrar servicios clínicos de la sucursal actualmente seleccionada.',
+      });
+      return;
+    }
 
     const idSolicitud = Number(
       servicioSeleccionado.id_solicitud_servicio ||
@@ -1391,6 +1452,7 @@ export default function POS() {
           id_solicitud_servicio: idSolicitud,
           id_detalle_servicio: idDetalleServicio,
           id_servicio: idServicio,
+          id_sucursal_servicio: idSucursalServicio,
           nombre: detalle.nombre_servicio || detalle.nombre || 'Servicio clínico',
           folio_servicio:
             servicioSeleccionado.folio_servicio ||
@@ -2138,6 +2200,7 @@ export default function POS() {
           id_solicitud_servicio: Number(item.id_solicitud_servicio),
           id_detalle_servicio: Number(item.id_detalle_servicio),
           id_servicio: item.id_servicio ? Number(item.id_servicio) : null,
+          id_sucursal: Number(item.id_sucursal_servicio || idSucursal),
           nombre_servicio: item.nombre,
           cantidad: Number(item.cantidad || 1),
           precio_unitario: Number(item.precio_venta || 0),

@@ -157,19 +157,19 @@ export default function ModalServicioClinico({
 
         stock: Number(
           item.stock_disponible ??
-            item.stock ??
-            item.cantidad ??
-            item.existencia ??
-            item.total_stock ??
-            0
+          item.stock ??
+          item.cantidad ??
+          item.existencia ??
+          item.total_stock ??
+          0
         ),
 
         precio: Number(
           item.precio_venta ??
-            item.precio ??
-            item.precio_publico ??
-            item.precio_unitario ??
-            0
+          item.precio ??
+          item.precio_publico ??
+          item.precio_unitario ??
+          0
         ),
       }));
 
@@ -453,17 +453,16 @@ export default function ModalServicioClinico({
     const servicioSinIndicaciones = serviciosSeleccionados.find(
       (item) => !String(item.indicaciones || '').trim()
     );
-
-    if (servicioSinIndicaciones) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Indicaciones requeridas',
-        text: `Agrega indicaciones para ${servicioSinIndicaciones.nombre_servicio}.`,
-        confirmButtonColor: '#0284c7',
-      });
-
-      return false;
-    }
+    /*
+      if (servicioSinIndicaciones) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Indicaciones requeridas',
+          text: `Agrega indicaciones para ${servicioSinIndicaciones.nombre_servicio}.`,
+          confirmButtonColor: '#0284c7',
+        }); 
+              return false;
+      }*/
 
     return true;
   };
@@ -810,7 +809,7 @@ export default function ModalServicioClinico({
               </section> 
               */}
             </div>
-           
+
 
             <div className="space-y-5">
               <section className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
