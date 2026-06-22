@@ -457,10 +457,11 @@ export default function CertificadoMedicoImprimible({
           <span>Cédula profesional: {datosDoctor.cedula_profesional || 'N/A'}</span>
         </div>
 
-        <div className="cert-footer">
+      {/*  <div className="cert-footer">
           Documento clínico interno · Expediente #{expediente?.id_expediente || datosPaciente.id_expediente || 'N/A'}
           {folioCertificado ? ` · ${folioCertificado}` : ''}
         </div>
+        */}
       </article>
     </div>
   );

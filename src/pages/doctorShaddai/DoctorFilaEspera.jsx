@@ -289,6 +289,24 @@ const primerTexto = (...valores) => {
   return encontrado ? String(encontrado).trim() : '';
 };
 
+const normalizarTipoNotaImpresion = (...valores) => {
+  const tipoEncontrado = valores
+    .map((valor) => String(valor || '').trim().toUpperCase())
+    .find(
+      (valor) =>
+        valor === 'NOTA_INICIAL' ||
+        valor === 'NOTA_EVOLUCION'
+    );
+
+  return tipoEncontrado || 'NOTA_INICIAL';
+};
+
+const obtenerEtiquetaNota = (tipoNota) => {
+  return normalizarTipoNotaImpresion(tipoNota) === 'NOTA_EVOLUCION'
+    ? 'Nota de evolución'
+    : 'Nota médica inicial';
+};
+
 const formatearFechaCorta = (fecha) => {
   if (!fecha) return new Date().toLocaleDateString('es-MX');
 
@@ -297,6 +315,49 @@ const formatearFechaCorta = (fecha) => {
     month: '2-digit',
     year: 'numeric',
   });
+};
+
+const construirPacienteCompletoDocumento = (
+  pacienteFila = {},
+  expediente = {}
+) => {
+  return {
+    ...pacienteFila,
+    ...expediente,
+
+    id_fila: pacienteFila.id_fila || expediente.id_fila || null,
+
+    id_expediente:
+      expediente.id_expediente ||
+      pacienteFila.id_expediente ||
+      null,
+
+    nombre_paciente: primerTexto(
+      expediente.nombre_paciente,
+      expediente.nombre,
+      expediente.nombres,
+      pacienteFila.nombre_paciente,
+      pacienteFila.nombre
+    ),
+
+    primer_apellido: primerTexto(
+      expediente.primer_apellido,
+      expediente.apellido_paterno,
+      expediente.ap_paterno,
+      pacienteFila.primer_apellido,
+      pacienteFila.apellido_paterno,
+      pacienteFila.ap_paterno
+    ),
+
+    segundo_apellido: primerTexto(
+      expediente.segundo_apellido,
+      expediente.apellido_materno,
+      expediente.ap_materno,
+      pacienteFila.segundo_apellido,
+      pacienteFila.apellido_materno,
+      pacienteFila.ap_materno
+    ),
+  };
 };
 
 const DoctorFilaEspera = () => {
@@ -841,12 +902,26 @@ const DoctorFilaEspera = () => {
 
   const normalizarDocumentoClinico = (item = {}) => {
     const tipo = item.tipo_documento || item.tipo;
+    const metadata = normalizarMetadata(item.metadata);
+
+    const tipoNota = normalizarTipoNotaImpresion(
+      item.tipo_nota,
+      item.tipoNota,
+      metadata.tipo_nota,
+      metadata.tipoNota,
+      metadata.nota?.tipo_nota,
+      item.nota?.tipo_nota,
+      tipo
+    );
+
+    const esDocumentoNota = ['NOTA_MEDICA', 'NOTA_EVOLUCION'].includes(tipo);
 
     return {
       tipo,
-      titulo:
-        item.titulo ||
-        obtenerEtiquetaDocumento(tipo),
+      tipo_nota: tipoNota,
+      titulo: esDocumentoNota
+        ? obtenerEtiquetaNota(tipoNota)
+        : item.titulo || obtenerEtiquetaDocumento(tipo),
       fecha:
         item.fecha_documento ||
         item.fecha_creacion ||
@@ -860,7 +935,7 @@ const DoctorFilaEspera = () => {
       estatus: item.estatus,
       tabla_origen: item.tabla_origen,
       ruta_frontend: item.ruta_frontend,
-      metadata: normalizarMetadata(item.metadata),
+      metadata,
       data: item,
     };
   };
@@ -875,6 +950,30 @@ const DoctorFilaEspera = () => {
   const mapearConsentimientoParaImpresion = (doc = {}) => {
     const metadata = normalizarMetadata(doc.metadata);
     const data = doc.data || doc || {};
+
+    const nombrePaciente = primerTexto(
+      data.nombre_paciente,
+      metadata.nombre_paciente,
+      pacienteDocumentos?.nombre_paciente
+    );
+
+    const primerApellidoPaciente = primerTexto(
+      data.primer_apellido,
+      data.apellido_paterno,
+      metadata.primer_apellido,
+      metadata.apellido_paterno,
+      pacienteDocumentos?.primer_apellido,
+      pacienteDocumentos?.apellido_paterno
+    );
+
+    const segundoApellidoPaciente = primerTexto(
+      data.segundo_apellido,
+      data.apellido_materno,
+      metadata.segundo_apellido,
+      metadata.apellido_materno,
+      pacienteDocumentos?.segundo_apellido,
+      pacienteDocumentos?.apellido_materno
+    );
 
     return {
       fecha:
@@ -901,10 +1000,14 @@ const DoctorFilaEspera = () => {
         metadata.nombre_responsable ||
         data.responsable_nombre ||
         metadata.responsable_nombre ||
-        data.nombre_paciente ||
-        metadata.nombre_paciente ||
-        pacienteDocumentos?.nombre_paciente ||
+        nombrePaciente ||
         '',
+
+      nombre_paciente: nombrePaciente,
+
+      primer_apellido: primerApellidoPaciente,
+
+      segundo_apellido: segundoApellidoPaciente,
 
       domicilio:
         data.domicilio_responsable ||
@@ -1136,10 +1239,16 @@ const DoctorFilaEspera = () => {
     const metadata = normalizarMetadata(doc.metadata);
     const data = doc.data || {};
 
-    const tipoNota =
-      doc.tipo === 'NOTA_EVOLUCION'
-        ? 'NOTA_EVOLUCION'
-        : 'NOTA_INICIAL';
+    const tipoNota = normalizarTipoNotaImpresion(
+      data.tipo_nota,
+      data.tipoNota,
+      data.nota?.tipo_nota,
+      metadata.tipo_nota,
+      metadata.tipoNota,
+      metadata.nota?.tipo_nota,
+      doc.tipo_nota,
+      doc.tipo
+    );
 
     return {
       id_nota: doc.id_origen || doc.id || doc.id_documento,
@@ -1421,6 +1530,15 @@ const DoctorFilaEspera = () => {
     const metadata = normalizarMetadata(doc.metadata);
     const data = doc.data || {};
 
+    const medicoGuardado =
+      metadata.solicitudLaboratorio?.medico ||
+      data.solicitudLaboratorio?.medico ||
+      metadata.medico ||
+      data.medico ||
+      metadata.doctor ||
+      data.doctor ||
+      {};
+
     const estudios = Array.isArray(metadata.estudios)
       ? metadata.estudios
       : Array.isArray(data.estudios)
@@ -1479,6 +1597,8 @@ const DoctorFilaEspera = () => {
 
       medico: {
         nombre:
+          medicoGuardado.nombre_completo ||
+          medicoGuardado.nombre ||
           metadata.medico_responsable ||
           metadata.doctor_nombre_completo ||
           data.medico_responsable ||
@@ -1487,25 +1607,32 @@ const DoctorFilaEspera = () => {
           'Doctor Shaddai',
 
         cedula:
+          medicoGuardado.cedula_profesional ||
+          medicoGuardado.cedula ||
           metadata.cedula_profesional ||
+          metadata.cedula ||
+          metadata.responsable_cedula ||
           data.cedula_profesional ||
+          data.cedula ||
+          data.responsable_cedula ||
           pacienteDocumentos?.cedula_profesional ||
           'N/A',
 
         especialidad:
+          medicoGuardado.especialidad ||
           metadata.especialidad ||
           data.especialidad ||
           pacienteDocumentos?.doctor_especialidad ||
           'Medicina general',
 
         logo_universidad_url:
+          medicoGuardado.logo_universidad_url ||
           metadata.logo_universidad_url ||
           metadata.logo_universidad ||
           metadata.doctor_logo_universidad_url ||
           data.logo_universidad_url ||
           data.logo_universidad ||
           data.doctor_logo_universidad_url ||
-          pacienteDocumentos?.logo_universidad_url ||
           '',
       },
 
@@ -1537,6 +1664,7 @@ const DoctorFilaEspera = () => {
           item.nombre ||
           item.estudio ||
           'Estudio',
+
         observaciones_estudio:
           item.observaciones_estudio ||
           item.observaciones ||
@@ -1892,26 +2020,38 @@ const DoctorFilaEspera = () => {
     }
 
     try {
-      setPacienteDocumentos(paciente);
+
       setModalDocumentosAbierto(true);
       setCargandoDocumentos(true);
       setDocumentoSeleccionado(null);
       setDocumentosAtencion([]);
 
-      /*
-        Ahora la vista usa la tabla central documentos_clinicos.
-        El endpoint recomendado es:
-        GET /api/documentos-clinicos/atencion/:id_fila
+      const [respuestaDocumentos, respuestaExpediente] = await Promise.all([
+        api.get(`/documentos-clinicos/atencion/${paciente.id_fila}`),
 
-        Debe regresar:
-        {
-          ok: true,
-          documentos: [...]
-        }
-      */
-      const { data } = await api.get(
-        `/documentos-clinicos/atencion/${paciente.id_fila}`
+        api
+          .get(`/doctor-shaddai/expedientes/${paciente.id_expediente}`)
+          .catch((error) => {
+            console.warn(
+              'No se pudo obtener el expediente completo para reimpresión:',
+              error
+            );
+
+            return null;
+          }),
+      ]);
+
+      const expedienteCompleto =
+        respuestaExpediente?.data?.expediente || {};
+
+      setPacienteDocumentos(
+        construirPacienteCompletoDocumento(
+          paciente,
+          expedienteCompleto
+        )
       );
+
+      const { data } = respuestaDocumentos;
 
       if (!data.ok) {
         throw new Error(data.mensaje || 'No se pudieron consultar los documentos.');
@@ -3594,15 +3734,28 @@ const DoctorFilaEspera = () => {
 
       const notaCompleta = data.nota || data.nota_medica || data.registro || {};
 
+      const tipoNota = normalizarTipoNotaImpresion(
+        notaCompleta.tipo_nota,
+        notaCompleta.tipoNota,
+        doc.data?.tipo_nota,
+        normalizarMetadata(doc.metadata).tipo_nota,
+        doc.tipo_nota,
+        doc.tipo
+      );
+
       const docCompleto = {
         ...doc,
+        tipo_nota: tipoNota,
+        titulo: obtenerEtiquetaNota(tipoNota),
         data: {
           ...(doc.data || {}),
           ...notaCompleta,
+          tipo_nota: tipoNota,
         },
         metadata: {
           ...normalizarMetadata(doc.metadata),
           ...notaCompleta,
+          tipo_nota: tipoNota,
         },
       };
 
@@ -4160,7 +4313,7 @@ const DoctorFilaEspera = () => {
             <div class="marca">
               <h1>FARMACIAS SHADDAI</h1>
               <div class="subtitulo">Comprobante de servicio clínico</div>
-              <div class="slogan">Doctor Shaddai · Bienestar al alcance de todos</div>
+              <div class="slogan">Bienestar al alcance de todos</div>
             </div>
 
             <div class="folio-box">
@@ -6293,7 +6446,7 @@ function LaboratorioImprimible({ solicitud }) {
             <div className="lab-title">
               <div className="name">Farmacias Shaddai</div>
               <div className="doc">Solicitud de laboratorio</div>
-              <div className="sub">Doctor Shaddai · Bienestar al alcance de todos</div>
+              <div className="sub">Bienestar al alcance de todos</div>
             </div>
 
             <div className="lab-folio">
@@ -6442,7 +6595,7 @@ function LaboratorioImprimible({ solicitud }) {
           </main>
 
           <div className="lab-footer">
-            Documento clínico interno · FSL-LAB-001-26
+
           </div>
         </div>
       </div>
@@ -6490,7 +6643,7 @@ function RecetaImprimible({ recetaGenerada, fechaActual, perfilDoctor }) {
             </p>
 
             <p className="mt-1 text-[11px] font-medium text-slate-500 print:text-[10px]">
-              Doctor Shaddai · Bienestar al alcance de todos
+              Bienestar al alcance de todos
             </p>
           </div>
 

@@ -172,6 +172,17 @@ const obtenerUrlArchivo = (ruta) => {
   return `${baseSinApi}/${ruta}`;
 };
 
+const obtenerNombreCompletoPaciente = (expediente = {}) => {
+  return [
+    expediente.nombre_paciente,
+    expediente.primer_apellido,
+    expediente.segundo_apellido,
+  ]
+    .map((parte) => String(parte || '').trim())
+    .filter(Boolean)
+    .join(' ');
+};
+
 export default function DoctorShaddaiRecetas() {
   const navigate = useNavigate();
 
@@ -318,7 +329,9 @@ export default function DoctorShaddaiRecetas() {
       );
 
       setPaciente({
-        nombre_paciente: expediente.nombre_paciente || '',
+        nombre_paciente: obtenerNombreCompletoPaciente(expediente),
+        primer_apellido: expediente.primer_apellido || '',
+        segundo_apellido: expediente.segundo_apellido || '',
         telefono: expediente.telefono || '',
         edad: expediente.edad || '',
         sexo: expediente.sexo || '',
@@ -446,6 +459,7 @@ export default function DoctorShaddaiRecetas() {
   const guardarSolicitudLaboratorio = async (solicitud) => {
     try {
 
+
       const payload = {
         id_paciente_expediente:
           expedienteSeleccionado?.id_expediente ||
@@ -454,11 +468,26 @@ export default function DoctorShaddaiRecetas() {
 
         id_fila: idFilaUrl ? Number(idFilaUrl) : null,
 
-        id_sucursal:
-          expedienteSeleccionado?.id_sucursal ||
-          null,
+        id_sucursal: expedienteSeleccionado?.id_sucursal || null,
 
         tipo_atencion: tipoAtencionActual.value,
+
+        medico: {
+          nombre_completo:
+            solicitud?.medico?.nombre ||
+            perfilDoctor?.nombre_completo ||
+            null,
+
+          cedula_profesional:
+            solicitud?.medico?.cedula ||
+            perfilDoctor?.cedula_profesional ||
+            null,
+
+          especialidad:
+            solicitud?.medico?.especialidad ||
+            perfilDoctor?.especialidad ||
+            null,
+        },
 
         paciente: {
           nombre_paciente:
@@ -831,7 +860,9 @@ export default function DoctorShaddaiRecetas() {
     );
 
     setPaciente({
-      nombre_paciente: expediente.nombre_paciente || '',
+      nombre_paciente: obtenerNombreCompletoPaciente(expediente),
+      primer_apellido: expediente.primer_apellido || '',
+      segundo_apellido: expediente.segundo_apellido || '',
       telefono: expediente.telefono || '',
       edad: expediente.edad || '',
       sexo: expediente.sexo || '',
@@ -1373,12 +1404,17 @@ export default function DoctorShaddaiRecetas() {
   };
 
   const manejarNotaMedicaGuardada = (nota) => {
-    setNotaMedicaActual(nota);
+    const notaConTipo = {
+      ...(nota || {}),
+      tipo_nota: normalizarTipoNota(nota?.tipo_nota),
+    };
+
+    setNotaMedicaActual(notaConTipo);
     setNotaMedicaGuardada(true);
     setModalNotaMedicaAbierto(false);
 
-    if (nota?.id_expediente) {
-      cargarNotasExpediente(nota.id_expediente);
+    if (notaConTipo?.id_expediente) {
+      cargarNotasExpediente(notaConTipo.id_expediente);
     }
   };
 
@@ -2070,179 +2106,179 @@ export default function DoctorShaddaiRecetas() {
 
 
 
-            <div className="mt-5 rounded-2xl border border-dashed border-violet-300 bg-violet-50 p-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm font-black text-violet-900">
-                    Medicamento libre
-                  </p>
-                  <p className="mt-1 text-xs leading-relaxed text-violet-700">
-                    Úsalo cuando el medicamento no existe en el inventario de la farmacia. Se imprimirá en la receta, pero caja no podrá cobrarlo ni surtirlo automáticamente.
-                  </p>
+              <div className="mt-5 rounded-2xl border border-dashed border-violet-300 bg-violet-50 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-black text-violet-900">
+                      Medicamento libre
+                    </p>
+                    <p className="mt-1 text-xs leading-relaxed text-violet-700">
+                      Úsalo cuando el medicamento no existe en el inventario de la farmacia.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setMostrarFormularioMedicamentoLibre((prev) => !prev)}
+                    disabled={!expedienteSeleccionado?.id_expediente}
+                    className="inline-flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-violet-700 px-4 py-2.5 text-sm font-black text-white transition hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <PlusCircle size={18} />
+                    {mostrarFormularioMedicamentoLibre ? 'Cerrar' : 'Agregar medicamento libre'}
+                  </button>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => setMostrarFormularioMedicamentoLibre((prev) => !prev)}
-                  disabled={!expedienteSeleccionado?.id_expediente}
-                  className="inline-flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-violet-700 px-4 py-2.5 text-sm font-black text-white transition hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <PlusCircle size={18} />
-                  {mostrarFormularioMedicamentoLibre ? 'Cerrar' : 'Agregar medicamento libre'}
-                </button>
+                {mostrarFormularioMedicamentoLibre && (
+                  <div className="mt-4 border-t border-violet-200 pt-4">
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="md:col-span-2">
+                        <label className="mb-1.5 block text-xs font-black uppercase tracking-wide text-violet-800">
+                          Nombre del medicamento *
+                        </label>
+                        <input
+                          type="text"
+                          name="nombre"
+                          value={medicamentoLibre.nombre}
+                          onChange={manejarCambioMedicamentoLibre}
+                          className="w-full rounded-xl border border-violet-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-500"
+                          placeholder="Ej. Amoxicilina con ácido clavulánico 875 mg / 125 mg"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-1.5 block text-xs font-black uppercase tracking-wide text-violet-800">
+                          Nombre genérico
+                        </label>
+                        <input
+                          type="text"
+                          name="nombre_generico"
+                          value={medicamentoLibre.nombre_generico}
+                          onChange={manejarCambioMedicamentoLibre}
+                          className="w-full rounded-xl border border-violet-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-500"
+                          placeholder="Opcional"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-1.5 block text-xs font-black uppercase tracking-wide text-violet-800">
+                          Presentación / concentración
+                        </label>
+                        <input
+                          type="text"
+                          name="presentacion"
+                          value={medicamentoLibre.presentacion}
+                          onChange={manejarCambioMedicamentoLibre}
+                          className="w-full rounded-xl border border-violet-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-500"
+                          placeholder="Ej. 500 mg, caja con 20 tabletas"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-1.5 block text-xs font-black uppercase tracking-wide text-violet-800">
+                          Forma farmacéutica
+                        </label>
+                        <input
+                          type="text"
+                          name="forma_farmaceutica"
+                          value={medicamentoLibre.forma_farmaceutica}
+                          onChange={manejarCambioMedicamentoLibre}
+                          className="w-full rounded-xl border border-violet-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-500"
+                          placeholder="Ej. Tabletas, suspensión, crema"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-1.5 block text-xs font-black uppercase tracking-wide text-violet-800">
+                          Cantidad *
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          name="cantidad"
+                          value={medicamentoLibre.cantidad}
+                          onChange={manejarCambioMedicamentoLibre}
+                          className="w-full rounded-xl border border-violet-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-1.5 block text-xs font-black uppercase tracking-wide text-violet-800">
+                          Dosis
+                        </label>
+                        <input
+                          type="text"
+                          name="dosis"
+                          value={medicamentoLibre.dosis}
+                          onChange={manejarCambioMedicamentoLibre}
+                          className="w-full rounded-xl border border-violet-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-500"
+                          placeholder="Ej. 1 tableta"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-1.5 block text-xs font-black uppercase tracking-wide text-violet-800">
+                          Frecuencia
+                        </label>
+                        <input
+                          type="text"
+                          name="frecuencia"
+                          value={medicamentoLibre.frecuencia}
+                          onChange={manejarCambioMedicamentoLibre}
+                          className="w-full rounded-xl border border-violet-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-500"
+                          placeholder="Ej. cada 8 horas"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-1.5 block text-xs font-black uppercase tracking-wide text-violet-800">
+                          Duración
+                        </label>
+                        <input
+                          type="text"
+                          name="duracion"
+                          value={medicamentoLibre.duracion}
+                          onChange={manejarCambioMedicamentoLibre}
+                          className="w-full rounded-xl border border-violet-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-500"
+                          placeholder="Ej. por 7 días"
+                        />
+                      </div>
+
+                      <div className="md:col-span-2">
+                        <label className="mb-1.5 block text-xs font-black uppercase tracking-wide text-violet-800">
+                          Indicaciones
+                        </label>
+                        <textarea
+                          name="indicaciones"
+                          value={medicamentoLibre.indicaciones}
+                          onChange={manejarCambioMedicamentoLibre}
+                          rows="3"
+                          className="w-full resize-none rounded-xl border border-violet-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-500"
+                          placeholder="Ej. Tomar después de alimentos. No suspender tratamiento."
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                      <button
+                        type="button"
+                        onClick={cancelarMedicamentoLibre}
+                        className="rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-slate-700 ring-1 ring-violet-200 transition hover:bg-violet-100"
+                      >
+                        Cancelar
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={agregarMedicamentoLibre}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 py-2.5 text-sm font-black text-white transition hover:bg-violet-800"
+                      >
+                        <Plus size={17} />
+                        Agregar a la receta
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
-
-              {mostrarFormularioMedicamentoLibre && (
-                <div className="mt-4 border-t border-violet-200 pt-4">
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <div className="md:col-span-2">
-                      <label className="mb-1.5 block text-xs font-black uppercase tracking-wide text-violet-800">
-                        Nombre del medicamento *
-                      </label>
-                      <input
-                        type="text"
-                        name="nombre"
-                        value={medicamentoLibre.nombre}
-                        onChange={manejarCambioMedicamentoLibre}
-                        className="w-full rounded-xl border border-violet-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-500"
-                        placeholder="Ej. Amoxicilina con ácido clavulánico 875 mg / 125 mg"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-1.5 block text-xs font-black uppercase tracking-wide text-violet-800">
-                        Nombre genérico
-                      </label>
-                      <input
-                        type="text"
-                        name="nombre_generico"
-                        value={medicamentoLibre.nombre_generico}
-                        onChange={manejarCambioMedicamentoLibre}
-                        className="w-full rounded-xl border border-violet-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-500"
-                        placeholder="Opcional"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-1.5 block text-xs font-black uppercase tracking-wide text-violet-800">
-                        Presentación / concentración
-                      </label>
-                      <input
-                        type="text"
-                        name="presentacion"
-                        value={medicamentoLibre.presentacion}
-                        onChange={manejarCambioMedicamentoLibre}
-                        className="w-full rounded-xl border border-violet-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-500"
-                        placeholder="Ej. 500 mg, caja con 20 tabletas"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-1.5 block text-xs font-black uppercase tracking-wide text-violet-800">
-                        Forma farmacéutica
-                      </label>
-                      <input
-                        type="text"
-                        name="forma_farmaceutica"
-                        value={medicamentoLibre.forma_farmaceutica}
-                        onChange={manejarCambioMedicamentoLibre}
-                        className="w-full rounded-xl border border-violet-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-500"
-                        placeholder="Ej. Tabletas, suspensión, crema"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-1.5 block text-xs font-black uppercase tracking-wide text-violet-800">
-                        Cantidad *
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        name="cantidad"
-                        value={medicamentoLibre.cantidad}
-                        onChange={manejarCambioMedicamentoLibre}
-                        className="w-full rounded-xl border border-violet-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-1.5 block text-xs font-black uppercase tracking-wide text-violet-800">
-                        Dosis
-                      </label>
-                      <input
-                        type="text"
-                        name="dosis"
-                        value={medicamentoLibre.dosis}
-                        onChange={manejarCambioMedicamentoLibre}
-                        className="w-full rounded-xl border border-violet-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-500"
-                        placeholder="Ej. 1 tableta"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-1.5 block text-xs font-black uppercase tracking-wide text-violet-800">
-                        Frecuencia
-                      </label>
-                      <input
-                        type="text"
-                        name="frecuencia"
-                        value={medicamentoLibre.frecuencia}
-                        onChange={manejarCambioMedicamentoLibre}
-                        className="w-full rounded-xl border border-violet-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-500"
-                        placeholder="Ej. cada 8 horas"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-1.5 block text-xs font-black uppercase tracking-wide text-violet-800">
-                        Duración
-                      </label>
-                      <input
-                        type="text"
-                        name="duracion"
-                        value={medicamentoLibre.duracion}
-                        onChange={manejarCambioMedicamentoLibre}
-                        className="w-full rounded-xl border border-violet-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-500"
-                        placeholder="Ej. por 7 días"
-                      />
-                    </div>
-
-                    <div className="md:col-span-2">
-                      <label className="mb-1.5 block text-xs font-black uppercase tracking-wide text-violet-800">
-                        Indicaciones
-                      </label>
-                      <textarea
-                        name="indicaciones"
-                        value={medicamentoLibre.indicaciones}
-                        onChange={manejarCambioMedicamentoLibre}
-                        rows="3"
-                        className="w-full resize-none rounded-xl border border-violet-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-500"
-                        placeholder="Ej. Tomar después de alimentos. No suspender tratamiento."
-                      />
-                    </div>
-                  </div>
-
-                  <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
-                    <button
-                      type="button"
-                      onClick={cancelarMedicamentoLibre}
-                      className="rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-slate-700 ring-1 ring-violet-200 transition hover:bg-violet-100"
-                    >
-                      Cancelar
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={agregarMedicamentoLibre}
-                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 py-2.5 text-sm font-black text-white transition hover:bg-violet-800"
-                    >
-                      <Plus size={17} />
-                      Agregar a la receta
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
 
               <div className="mt-4 max-h-[420px] space-y-3 overflow-y-auto pr-1">
                 {!expedienteSeleccionado?.id_expediente ? (
@@ -2365,240 +2401,240 @@ export default function DoctorShaddaiRecetas() {
             </div>
 
             <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm">
-            <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div>
-                <h2 className="text-xl font-bold text-slate-800">Tabla de receta</h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  Productos seleccionados e indicaciones médicas.
-                </p>
-                {receta.length > 0 && (
-                  <p className="mt-2 text-xs font-bold text-sky-700">
-                    {totalProductosReceta} producto(s) · {totalPiezas} pieza(s)
+              <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h2 className="text-xl font-bold text-slate-800">Tabla de receta</h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Productos seleccionados e indicaciones médicas.
                   </p>
-                )}
-              </div>
-
-              <button
-                type="button"
-                onClick={limpiarReceta}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-100 px-4 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-200"
-              >
-                <Trash2 size={17} />
-                Limpiar
-              </button>
-            </div>
-
-            {receta.length === 0 ? (
-              <div className="flex min-h-[420px] flex-col items-center justify-center rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center">
-                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-sky-100 text-sky-700">
-                  <ClipboardList size={34} />
+                  {receta.length > 0 && (
+                    <p className="mt-2 text-xs font-bold text-sky-700">
+                      {totalProductosReceta} producto(s) · {totalPiezas} pieza(s)
+                    </p>
+                  )}
                 </div>
 
-                <h3 className="text-lg font-bold text-slate-800">Receta vacía</h3>
-
-                <p className="mt-2 max-w-sm text-sm text-slate-500">
-                  Busca productos de la farmacia y agrégalos a la receta. También pueden incluirse aunque no haya existencias actuales.
-                </p>
+                <button
+                  type="button"
+                  onClick={limpiarReceta}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-100 px-4 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-200"
+                >
+                  <Trash2 size={17} />
+                  Limpiar
+                </button>
               </div>
-            ) : (
-              <div className="space-y-4">
-                {receta.map((item) => (
-                  <div key={item.id_item || item.id_producto || item.nombre} className="rounded-3xl border border-slate-100 bg-slate-50 p-4">
-                    <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="font-bold text-slate-900">{item.nombre}</h3>
+
+              {receta.length === 0 ? (
+                <div className="flex min-h-[420px] flex-col items-center justify-center rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center">
+                  <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-sky-100 text-sky-700">
+                    <ClipboardList size={34} />
+                  </div>
+
+                  <h3 className="text-lg font-bold text-slate-800">Receta vacía</h3>
+
+                  <p className="mt-2 max-w-sm text-sm text-slate-500">
+                    Busca productos de la farmacia y agrégalos a la receta. También pueden incluirse aunque no haya existencias actuales.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {receta.map((item) => (
+                    <div key={item.id_item || item.id_producto || item.nombre} className="rounded-3xl border border-slate-100 bg-slate-50 p-4">
+                      <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="font-bold text-slate-900">{item.nombre}</h3>
+
+                            {item.producto_libre ? (
+                              <>
+                                <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-black text-violet-800">
+                                  MEDICAMENTO LIBRE
+                                </span>
+                                <span className="rounded-full bg-slate-200 px-3 py-1 text-xs font-black text-slate-700">
+                                  NO REGISTRADO EN INVENTARIO
+                                </span>
+                              </>
+                            ) : (
+                              <span className="rounded-full bg-sky-100 px-3 py-1 text-xs font-black text-sky-800">
+                                PRODUCTO DE FARMACIA
+                              </span>
+                            )}
+                          </div>
+
+                          {(item.nombre_generico || item.presentacion || item.forma_farmaceutica) && (
+                            <p className="mt-1 text-xs text-slate-500">
+                              {[item.nombre_generico, item.presentacion, item.forma_farmaceutica]
+                                .filter(Boolean)
+                                .join(' · ')}
+                            </p>
+                          )}
 
                           {item.producto_libre ? (
-                            <>
-                              <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-black text-violet-800">
-                                MEDICAMENTO LIBRE
-                              </span>
-                              <span className="rounded-full bg-slate-200 px-3 py-1 text-xs font-black text-slate-700">
-                                NO REGISTRADO EN INVENTARIO
-                              </span>
-                            </>
+                            <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-violet-100 px-3 py-1 text-xs font-bold text-violet-800">
+                              <AlertTriangle size={14} />
+                              Se imprimirá en la receta; caja no podrá cobrarlo ni surtirlo automáticamente.
+                            </div>
                           ) : (
-                            <span className="rounded-full bg-sky-100 px-3 py-1 text-xs font-black text-sky-800">
-                              PRODUCTO DE FARMACIA
-                            </span>
+                            <p className="mt-1 text-xs text-slate-500">
+                              Stock total actual en farmacia: {item.stock}
+                            </p>
+                          )}
+
+                          {!item.producto_libre && !item.disponible_inventario && (
+                            <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">
+                              <AlertTriangle size={14} />
+                              Sin existencia actual: se conserva en la receta y caja decidirá el surtido.
+                            </div>
+                          )}
+
+                          {!item.producto_libre && item.disponible_inventario && Number(item.cantidad || 0) > Number(item.stock || 0) && (
+                            <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">
+                              <AlertTriangle size={14} />
+                              Cantidad recetada mayor al stock actual: caja podrá surtirla parcialmente.
+                            </div>
+                          )}
+
+                          {!item.producto_libre && item.disponibilidad_sucursales?.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {item.disponibilidad_sucursales.map((sucursal) => (
+                                <span
+                                  key={`${item.id_item || item.id_producto || item.nombre}-${sucursal.id_sucursal}`}
+                                  className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600"
+                                >
+                                  {sucursal.sucursal}: {sucursal.stock}
+                                </span>
+                              ))}
+                            </div>
                           )}
                         </div>
 
-                        {(item.nombre_generico || item.presentacion || item.forma_farmaceutica) && (
-                          <p className="mt-1 text-xs text-slate-500">
-                            {[item.nombre_generico, item.presentacion, item.forma_farmaceutica]
-                              .filter(Boolean)
-                              .join(' · ')}
-                          </p>
-                        )}
-
-                        {item.producto_libre ? (
-                          <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-violet-100 px-3 py-1 text-xs font-bold text-violet-800">
-                            <AlertTriangle size={14} />
-                            Se imprimirá en la receta; caja no podrá cobrarlo ni surtirlo automáticamente.
-                          </div>
-                        ) : (
-                          <p className="mt-1 text-xs text-slate-500">
-                            Stock total actual en farmacia: {item.stock}
-                          </p>
-                        )}
-
-                        {!item.producto_libre && !item.disponible_inventario && (
-                          <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">
-                            <AlertTriangle size={14} />
-                            Sin existencia actual: se conserva en la receta y caja decidirá el surtido.
-                          </div>
-                        )}
-
-                        {!item.producto_libre && item.disponible_inventario && Number(item.cantidad || 0) > Number(item.stock || 0) && (
-                          <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">
-                            <AlertTriangle size={14} />
-                            Cantidad recetada mayor al stock actual: caja podrá surtirla parcialmente.
-                          </div>
-                        )}
-
-                        {!item.producto_libre && item.disponibilidad_sucursales?.length > 0 && (
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {item.disponibilidad_sucursales.map((sucursal) => (
-                              <span
-                                key={`${item.id_item || item.id_producto || item.nombre}-${sucursal.id_sucursal}`}
-                                className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600"
-                              >
-                                {sucursal.sucursal}: {sucursal.stock}
-                              </span>
-                            ))}
-                          </div>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => eliminarProductoReceta(item)}
+                          className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-red-100 text-red-700 transition hover:bg-red-200"
+                        >
+                          <Trash2 size={17} />
+                        </button>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => eliminarProductoReceta(item)}
-                        className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-red-100 text-red-700 transition hover:bg-red-200"
-                      >
-                        <Trash2 size={17} />
-                      </button>
-                    </div>
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div>
+                          <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                            Cantidad
+                          </label>
 
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <div>
-                        <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">
-                          Cantidad
-                        </label>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => disminuirCantidad(item)}
+                              className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-slate-700 hover:bg-slate-100"
+                            >
+                              <Minus size={16} />
+                            </button>
 
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => disminuirCantidad(item)}
-                            className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-slate-700 hover:bg-slate-100"
-                          >
-                            <Minus size={16} />
-                          </button>
+                            <input
+                              type="number"
+                              min="1"
+                              value={item.cantidad}
+                              onChange={(e) =>
+                                actualizarItemReceta(item.id_item, 'cantidad', e.target.value)
+                              }
+                              className="h-10 w-20 rounded-xl border border-slate-200 text-center text-sm font-bold outline-none focus:ring-2 focus:ring-sky-500"
+                            />
 
-                          <input
-                            type="number"
-                            min="1"
-                            value={item.cantidad}
+                            <button
+                              type="button"
+                              onClick={() => aumentarCantidad(item)}
+                              className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-slate-700 hover:bg-slate-100"
+                            >
+                              <PlusCircle size={16} />
+                            </button>
+                          </div>
+                        </div>
+
+                        <CampoTextoReceta
+                          label="Dosis"
+                          value={item.dosis}
+                          placeholder="Ej. 1 tableta"
+                          onChange={(value) => actualizarItemReceta(item.id_item, 'dosis', value)}
+                        />
+
+                        <CampoTextoReceta
+                          label="Frecuencia"
+                          value={item.frecuencia}
+                          placeholder="Ej. cada 8 horas"
+                          onChange={(value) => actualizarItemReceta(item.id_item, 'frecuencia', value)}
+                        />
+
+                        <CampoTextoReceta
+                          label="Duración"
+                          value={item.duracion}
+                          placeholder="Ej. por 5 días"
+                          onChange={(value) => actualizarItemReceta(item.id_item, 'duracion', value)}
+                        />
+
+                        <div className="md:col-span-2">
+                          <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                            Indicaciones
+                          </label>
+
+                          <textarea
+                            value={item.indicaciones}
                             onChange={(e) =>
-                              actualizarItemReceta(item.id_item, 'cantidad', e.target.value)
+                              actualizarItemReceta(item.id_item, 'indicaciones', e.target.value)
                             }
-                            className="h-10 w-20 rounded-xl border border-slate-200 text-center text-sm font-bold outline-none focus:ring-2 focus:ring-sky-500"
+                            rows="3"
+                            className="w-full resize-none rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-sky-500"
+                            placeholder="Ej. Tomar después de alimentos. No suspender tratamiento."
                           />
-
-                          <button
-                            type="button"
-                            onClick={() => aumentarCantidad(item)}
-                            className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-slate-700 hover:bg-slate-100"
-                          >
-                            <PlusCircle size={16} />
-                          </button>
                         </div>
                       </div>
-
-                      <CampoTextoReceta
-                        label="Dosis"
-                        value={item.dosis}
-                        placeholder="Ej. 1 tableta"
-                        onChange={(value) => actualizarItemReceta(item.id_item, 'dosis', value)}
-                      />
-
-                      <CampoTextoReceta
-                        label="Frecuencia"
-                        value={item.frecuencia}
-                        placeholder="Ej. cada 8 horas"
-                        onChange={(value) => actualizarItemReceta(item.id_item, 'frecuencia', value)}
-                      />
-
-                      <CampoTextoReceta
-                        label="Duración"
-                        value={item.duracion}
-                        placeholder="Ej. por 5 días"
-                        onChange={(value) => actualizarItemReceta(item.id_item, 'duracion', value)}
-                      />
-
-                      <div className="md:col-span-2">
-                        <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">
-                          Indicaciones
-                        </label>
-
-                        <textarea
-                          value={item.indicaciones}
-                          onChange={(e) =>
-                            actualizarItemReceta(item.id_item, 'indicaciones', e.target.value)
-                          }
-                          rows="3"
-                          className="w-full resize-none rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-sky-500"
-                          placeholder="Ej. Tomar después de alimentos. No suspender tratamiento."
-                        />
-                      </div>
                     </div>
+                  ))}
+
+                  <div className="flex flex-col gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
+                    <button
+                      type="button"
+                      onClick={limpiarReceta}
+                      className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-100 px-5 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-200"
+                    >
+                      <Trash2 size={18} />
+                      Limpiar receta
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={abrirVistaPrevia}
+                      className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-bold text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-50"
+                    >
+                      <Eye size={18} />
+                      Vista previa
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={enviarReceta}
+                      disabled={enviando || cargandoPerfil || !perfilDoctorCompleto || !recetaHabilitadaPorTipo}
+                      className="inline-flex items-center justify-center gap-2 rounded-2xl bg-sky-700 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-sky-900/20 transition hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {enviando || cargandoPerfil ? (
+                        <Loader2 size={18} className="animate-spin" />
+                      ) : (
+                        <Send size={18} />
+                      )}
+                      {cargandoPerfil
+                        ? 'Validando...'
+                        : !perfilDoctorCompleto
+                          ? 'Completa perfil'
+                          : enviando
+                            ? 'Generando...'
+                            : requiereNotaMedica && !notaMedicaGuardada
+                              ? 'Nota médica pendiente'
+                              : 'Generar receta'}
+                    </button>
                   </div>
-                ))}
-
-                <div className="flex flex-col gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
-                  <button
-                    type="button"
-                    onClick={limpiarReceta}
-                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-100 px-5 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-200"
-                  >
-                    <Trash2 size={18} />
-                    Limpiar receta
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={abrirVistaPrevia}
-                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-bold text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-50"
-                  >
-                    <Eye size={18} />
-                    Vista previa
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={enviarReceta}
-                    disabled={enviando || cargandoPerfil || !perfilDoctorCompleto || !recetaHabilitadaPorTipo}
-                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-sky-700 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-sky-900/20 transition hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {enviando || cargandoPerfil ? (
-                      <Loader2 size={18} className="animate-spin" />
-                    ) : (
-                      <Send size={18} />
-                    )}
-                    {cargandoPerfil
-                      ? 'Validando...'
-                      : !perfilDoctorCompleto
-                        ? 'Completa perfil'
-                        : enviando
-                          ? 'Generando...'
-                          : requiereNotaMedica && !notaMedicaGuardada
-                            ? 'Nota médica pendiente'
-                            : 'Generar receta'}
-                  </button>
                 </div>
-              </div>
-            )}
+              )}
             </div>
           </div>
         </section>

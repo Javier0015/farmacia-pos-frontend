@@ -553,7 +553,7 @@ export default function ModalServicioClinico({
           title: 'Perfil médico incompleto',
           text:
             error.response?.data?.mensaje ||
-            'Debes completar tu perfil de Doctor Shaddai antes de generar servicios clínicos.',
+            'Debes completar tu perfil antes de generar servicios clínicos.',
           confirmButtonColor: '#0284c7',
         });
 

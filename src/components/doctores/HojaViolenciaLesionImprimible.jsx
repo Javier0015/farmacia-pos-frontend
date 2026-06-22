@@ -276,18 +276,48 @@ const OPCIONES = {
 const pares = (catalogo) =>
   Object.entries(catalogo || {}).map(([value, label]) => ({ value, label }));
 
+const obtenerPartesFecha = (fecha) => {
+  if (!fecha) return null;
+
+  if (fecha instanceof Date) {
+    if (Number.isNaN(fecha.getTime())) return null;
+
+    return {
+      anio: String(fecha.getFullYear()),
+      mes: String(fecha.getMonth() + 1).padStart(2, '0'),
+      dia: String(fecha.getDate()).padStart(2, '0'),
+    };
+  }
+
+  const texto = String(fecha).trim();
+
+  // Ejemplos: 1998-10-12 o 1998-10-12T00:00:00.000Z
+  const fechaISO = /^(\d{4})-(\d{2})-(\d{2})(?:$|T)/.exec(texto);
+
+  if (fechaISO) {
+    const [, anio, mes, dia] = fechaISO;
+
+    return { anio, mes, dia };
+  }
+
+  // Ejemplo: 12/10/1998
+  const fechaLatina = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(texto);
+
+  if (fechaLatina) {
+    const [, dia, mes, anio] = fechaLatina;
+
+    return { anio, mes, dia };
+  }
+
+  return null;
+};
+
 const formatearFecha = (fecha) => {
-  if (!fecha) return 'N/A';
+  const partes = obtenerPartesFecha(fecha);
 
-  const valor = new Date(fecha);
+  if (!partes) return 'N/A';
 
-  if (Number.isNaN(valor.getTime())) return 'N/A';
-
-  return valor.toLocaleDateString('es-MX', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
+  return `${partes.dia}/${partes.mes}/${partes.anio}`;
 };
 
 const formatearHora = (hora) => {
@@ -1091,9 +1121,11 @@ export default function HojaViolenciaLesionImprimible({
               <p>
                 <strong>Especialidad:</strong> {especialidadDoctor}
               </p>
-              <p>
+              {/* 
+             <p>
                 <strong>CURP:</strong> {datosFinal.responsable_curp || 'N/A'}
               </p>
+              */}
               <p>
                 <strong>Cédula profesional:</strong> {cedulaResponsable}
               </p>
@@ -1104,9 +1136,10 @@ export default function HojaViolenciaLesionImprimible({
             </div>
           </footer>
 
-          <p className="vl-note">
+         {/* <p className="vl-note">
             Este formato es una herramienta de apoyo para el registro clínico. Ajusta su uso conforme a los protocolos internos y disposiciones aplicables.
           </p>
+          */}
         </div>
       </div>
     </>

@@ -941,8 +941,8 @@ export default function ModalSolicitudLaboratorio({
 
                 <div class="titulo-institucion">
                   <div class="nombre">Farmacias Shaddai</div>
-                  <div class="documento">Solicitud de laboratorio</div>
-                  <div class="subtitulo">Doctor Shaddai · Bienestar al alcance de todos</div>
+                  <div class="documento">Solicitud de laboratorio y gabinete</div>
+                  <div class="subtitulo">Bienestar al alcance de todos</div>
                 </div>
 
                 <div class="folio-card">
@@ -1050,7 +1050,7 @@ export default function ModalSolicitudLaboratorio({
               </div>
 
               <div class="footer">
-                Documento clínico interno · FSL-LAB-001-26
+               
               </div>
             </div>
           </div>

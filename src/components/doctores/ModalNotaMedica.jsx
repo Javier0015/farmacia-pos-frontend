@@ -291,7 +291,26 @@ export default function ModalNotaMedica({
         showConfirmButton: false,
       });
 
-      onGuardada?.(data.nota);
+
+      const notaGuardada = {
+        ...(data.nota || {}),
+
+        id_nota: data.nota?.id_nota || null,
+
+        id_expediente:
+          data.nota?.id_expediente ||
+          expediente?.id_expediente ||
+          null,
+
+        id_fila:
+          data.nota?.id_fila ??
+          (idFila ? Number(idFila) : null),
+
+        tipo_nota: tipoNotaSeleccionado,
+      };
+
+      onGuardada?.(notaGuardada);
+
       onClose?.();
     } catch (error) {
       console.error('Error al guardar nota médica:', error);
@@ -408,19 +427,17 @@ export default function ModalNotaMedica({
                       key={tipo.value}
                       type="button"
                       onClick={() => setTipoNotaSeleccionado(tipo.value)}
-                      className={`rounded-2xl border p-4 text-left transition ${
-                        seleccionado
+                      className={`rounded-2xl border p-4 text-left transition ${seleccionado
                           ? tipo.cardSelected
                           : 'border-slate-200 bg-slate-50 hover:border-sky-200 hover:bg-white'
-                      }`}
+                        }`}
                     >
                       <div className="flex items-start gap-3">
                         <span
-                          className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${
-                            seleccionado
+                          className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${seleccionado
                               ? 'bg-slate-900 text-white'
                               : 'bg-white text-slate-500'
-                          }`}
+                            }`}
                         >
                           {seleccionado ? <CheckCircle2 size={17} /> : <Icono size={17} />}
                         </span>

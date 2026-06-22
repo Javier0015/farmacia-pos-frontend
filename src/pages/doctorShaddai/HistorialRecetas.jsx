@@ -1352,7 +1352,7 @@ function RecetaImprimible({ recetaGenerada, fechaActual, perfilDoctor }) {
             </p>
 
             <p className="mt-1 text-[11px] font-medium text-slate-500 print:text-[10px]">
-              Doctor Shaddai · Bienestar al alcance de todos
+              Bienestar al alcance de todos
             </p>
           </div>
 

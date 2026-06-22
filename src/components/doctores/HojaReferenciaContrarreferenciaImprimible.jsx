@@ -47,14 +47,32 @@ const textoCatalogo = (catalogo, v) => {
 const formatearFecha = (fecha) => {
   if (!fecha) return '';
 
-  const d = new Date(fecha);
-  if (Number.isNaN(d.getTime())) return fecha;
+  if (typeof fecha === 'string') {
+    const texto = fecha.trim();
 
-  return d.toLocaleDateString('es-MX', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
+    const fechaISO = /^(\d{4})-(\d{2})-(\d{2})(?:T.*)?$/.exec(texto);
+
+    if (fechaISO) {
+      const [, anio, mes, dia] = fechaISO;
+      return `${dia}/${mes}/${anio}`;
+    }
+
+    const fechaLatina = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(texto);
+
+    if (fechaLatina) {
+      return texto;
+    }
+  }
+
+  const d = fecha instanceof Date ? fecha : new Date(fecha);
+
+  if (Number.isNaN(d.getTime())) {
+    return String(fecha);
+  }
+
+  return `${String(d.getDate()).padStart(2, '0')}/${String(
+    d.getMonth() + 1
+  ).padStart(2, '0')}/${d.getFullYear()}`;
 };
 
 const nombrePacienteCompleto = (expediente = {}, paciente = {}, datos = {}) => {
