@@ -305,10 +305,17 @@ function ReporteCierreCajaImprimible({ reporte }) {
   const formatoFecha = (fecha) => {
     if (!fecha) return '—';
 
-    return new Date(fecha).toLocaleString('es-MX', {
+    const fechaObj = new Date(fecha);
+
+    if (Number.isNaN(fechaObj.getTime())) {
+      return '—';
+    }
+
+    return new Intl.DateTimeFormat('es-MX', {
       dateStyle: 'medium',
       timeStyle: 'short',
-    });
+      timeZone: 'America/Mexico_City',
+    }).format(fechaObj);
   };
 
   const sesion = reporte?.sesion || {};
@@ -886,10 +893,17 @@ export default function Caja() {
   const formatoFecha = (fecha) => {
     if (!fecha) return '—';
 
-    return new Date(fecha).toLocaleString('es-MX', {
+    const fechaObj = new Date(fecha);
+
+    if (Number.isNaN(fechaObj.getTime())) {
+      return '—';
+    }
+
+    return new Intl.DateTimeFormat('es-MX', {
       dateStyle: 'medium',
       timeStyle: 'short',
-    });
+      timeZone: 'America/Mexico_City',
+    }).format(fechaObj);
   };
 
   const sucursalActual = useMemo(() => {
@@ -2092,7 +2106,7 @@ export default function Caja() {
                   textoBotonAplicar="Usar como monto inicial"
                 />
 
-             
+
               </div>
 
               <div className="px-4 sm:px-6 py-5 flex flex-col sm:flex-row justify-end gap-3 border-t border-slate-100 bg-white shrink-0">
