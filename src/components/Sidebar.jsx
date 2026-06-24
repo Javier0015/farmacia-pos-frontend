@@ -195,6 +195,12 @@ const links = [
     modulo: 'configuracion-puntos',
   },
   {
+    to: '/app/configuracion-ticket',
+    label: 'Config. ticket',
+    icon: ReceiptText,
+    modulo: 'configuracion-ticket',
+  },
+  {
     to: '/app/puntos',
     label: 'Puntos',
     icon: Award,
@@ -228,12 +234,12 @@ const links = [
     modulo: 'doctor-shaddai-recetas',
   },*/
 
- /* {
-    to: '/app/doctor-shaddai/historial-recetas',
-    label: 'Historial recetas',
-    icon: ClipboardList,
-    modulo: 'doctor-shaddai-recetas',
-  },*/
+  /* {
+     to: '/app/doctor-shaddai/historial-recetas',
+     label: 'Historial recetas',
+     icon: ClipboardList,
+     modulo: 'doctor-shaddai-recetas',
+   },*/
 
 
   {

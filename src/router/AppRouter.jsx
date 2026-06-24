@@ -46,6 +46,8 @@ import VentasServiciosClinicos from '../pages/ventas/VentasServiciosClinicos';
 
 import CatalogoServiciosClinicos from '../pages/doctorShaddai/CatalogoServiciosClinicos';
 
+import ConfiguracionTicket from '../pages/configuracion/ConfiguracionTicket';
+
 export default function AppRouter() {
   return (
     <BrowserRouter>
@@ -143,6 +145,15 @@ export default function AppRouter() {
             element={
               <RoleRoute modulo="puntos">
                 <Puntos />
+              </RoleRoute>
+            }
+          />
+
+          <Route
+            path="configuracion-ticket"
+            element={
+              <RoleRoute modulo="configuracion-ticket">
+                <ConfiguracionTicket />
               </RoleRoute>
             }
           />

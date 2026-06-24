@@ -14,6 +14,7 @@ import {
   Banknote,
   FileText,
   Undo2,
+  Loader2,
 } from 'lucide-react';
 import api from '../../api/axios';
 import { useAuth } from '../../context/AuthContext';
@@ -22,6 +23,20 @@ import {
   obtenerSucursalInicial,
   filtrarSucursalesPorRol,
 } from '../../utils/sucursalPermisos';
+
+/*
+ * Cambia modoPrueba a false únicamente cuando haya impresora física.
+ * Una reimpresión siempre se envía con no_abrir_caja: true.
+ */
+const CONFIGURACION_IMPRESION_LOCAL = {
+  url: 'http://localhost:3030',
+  apiKey: 'shaddai-printer-2026',
+  modoPrueba: true,
+};
+
+const API_IMPRESION_LOCAL = CONFIGURACION_IMPRESION_LOCAL.url;
+const PRINTER_KEY = CONFIGURACION_IMPRESION_LOCAL.apiKey;
+const MODO_PRUEBA_TICKET = CONFIGURACION_IMPRESION_LOCAL.modoPrueba;
 
 export default function Ventas() {
   const { usuario } = useAuth();
@@ -34,6 +49,11 @@ export default function Ventas() {
   const [detalleVenta, setDetalleVenta] = useState(null);
   const [detalleProductos, setDetalleProductos] = useState([]);
   const [detalleLotes, setDetalleLotes] = useState([]);
+  const [detallePagos, setDetallePagos] = useState([]);
+
+  const [ticketPrevisualizado, setTicketPrevisualizado] = useState('');
+  const [cargandoTicket, setCargandoTicket] = useState(false);
+  const [reimprimiendoTicket, setReimprimiendoTicket] = useState(false);
 
   const [idSucursal, setIdSucursal] = useState('');
   const [fechaInicio, setFechaInicio] = useState('');
@@ -231,6 +251,7 @@ export default function Ventas() {
         setDetalleVenta(data.venta);
         setDetalleProductos(data.detalle || []);
         setDetalleLotes(data.lotes || []);
+        setDetallePagos(data.pagos || []);
       }
     } catch (error) {
       console.error(error);
@@ -254,6 +275,8 @@ export default function Ventas() {
     setDetalleVenta(null);
     setDetalleProductos([]);
     setDetalleLotes([]);
+    setDetallePagos([]);
+    setTicketPrevisualizado('');
   };
 
   const abrirDevolucionVenta = async (idVenta) => {
@@ -404,7 +427,237 @@ export default function Ventas() {
     }
   };
 
-  const abrirTicket = () => {
+  const obtenerConfiguracionTicketParaImpresion = async (idSucursalVenta) => {
+    try {
+      const { data } = await api.get('/configuracion-ticket', {
+        params:
+          Number(idSucursalVenta) > 0
+            ? { id_sucursal: Number(idSucursalVenta) }
+            : {},
+      });
+
+      if (!data?.ok) {
+        throw new Error(
+          data?.mensaje || 'No se pudo obtener la configuración del ticket.'
+        );
+      }
+
+      return data?.configuracion?.configuracion || null;
+    } catch (error) {
+      console.warn(
+        'No se pudo cargar la configuración del ticket para la reimpresión:',
+        error
+      );
+
+      return null;
+    }
+  };
+
+  const construirDatosReimpresion = () => {
+    if (!detalleVenta) return null;
+
+    const idSucursalVenta = Number(
+      detalleVenta.id_sucursal || idSucursal || 0
+    );
+
+    const sucursalVenta =
+      sucursales.find(
+        (sucursal) =>
+          Number(sucursal.id_sucursal) === idSucursalVenta
+      ) || sucursalActual;
+
+    const productos = detalleProductos.map((item) => {
+      const loteRelacionado =
+        detalleLotes.find((lote) => {
+          const mismoProducto =
+            Number(lote.id_producto || 0) === Number(item.id_producto || 0);
+
+          const mismoLote =
+            !item.id_lote ||
+            !lote.id_lote ||
+            Number(lote.id_lote) === Number(item.id_lote);
+
+          return mismoProducto && mismoLote;
+        }) || null;
+
+      return {
+        id_producto: item.id_producto,
+        id_lote: item.id_lote || loteRelacionado?.id_lote || null,
+        nombre: item.producto || item.nombre || 'Producto',
+        cantidad: Number(item.cantidad || 0),
+        precio_unitario: Number(item.precio_unitario || 0),
+        precio_venta: Number(item.precio_unitario || 0),
+        descuento: Number(item.descuento || 0),
+        subtotal: Number(item.subtotal || 0),
+        lote: item.lote || loteRelacionado?.lote || null,
+        fecha_caducidad:
+          item.fecha_caducidad ||
+          loteRelacionado?.fecha_caducidad ||
+          null,
+      };
+    });
+
+    const pagos = detallePagos.length > 0
+      ? detallePagos.map((pago) => ({
+          metodo_pago: pago.metodo_pago,
+          monto: Number(pago.monto || 0),
+          referencia: pago.referencia || null,
+        }))
+      : [
+          {
+            metodo_pago: detalleVenta.metodo_pago || 'EFECTIVO',
+            monto: Number(detalleVenta.total || 0),
+            referencia: null,
+          },
+        ];
+
+    return {
+      venta: {
+        ...detalleVenta,
+        id_sucursal: idSucursalVenta || detalleVenta.id_sucursal || null,
+
+        sucursal:
+          detalleVenta.sucursal ||
+          sucursalVenta?.nombre ||
+          sucursalVenta?.nombre_sucursal ||
+          '',
+
+        nombre_sucursal:
+          detalleVenta.nombre_sucursal ||
+          detalleVenta.sucursal ||
+          sucursalVenta?.nombre ||
+          sucursalVenta?.nombre_sucursal ||
+          '',
+
+        direccion_sucursal:
+          detalleVenta.direccion_sucursal ||
+          sucursalVenta?.direccion ||
+          sucursalVenta?.domicilio ||
+          '',
+
+        telefono_sucursal:
+          detalleVenta.telefono_sucursal ||
+          sucursalVenta?.telefono ||
+          sucursalVenta?.telefono_contacto ||
+          '',
+
+        productos,
+        pagos,
+      },
+
+      resumen: {
+        subtotal: Number(detalleVenta.subtotal || 0),
+        subtotal_sin_descuento: Number(
+          detalleVenta.subtotal_sin_descuento ||
+          detalleVenta.subtotal ||
+          0
+        ),
+        descuento_ofertas: Number(detalleVenta.descuento_ofertas || 0),
+        descuento: Number(detalleVenta.descuento || 0),
+        impuesto: Number(detalleVenta.impuesto || 0),
+        total: Number(detalleVenta.total || 0),
+        monto_recibido: Number(detalleVenta.monto_recibido || 0),
+        cambio: Number(detalleVenta.cambio || 0),
+        pagos,
+      },
+
+      /*
+       * Esta bandera evita que una reimpresión abra la caja registradora.
+       * Requiere el pequeño ajuste indicado en server.js.
+       */
+      no_abrir_caja: true,
+      reimpresion: true,
+    };
+  };
+
+  const prepararDatosReimpresion = async () => {
+    const datosTicket = construirDatosReimpresion();
+
+    if (!datosTicket?.venta) {
+      throw new Error('No se encontraron datos suficientes para reimprimir.');
+    }
+
+    const configuracionTicket =
+      await obtenerConfiguracionTicketParaImpresion(
+        datosTicket.venta.id_sucursal
+      );
+
+    return {
+      ...datosTicket,
+      ...(configuracionTicket
+        ? { configuracion_ticket: configuracionTicket }
+        : {}),
+    };
+  };
+
+  const llamarApiImpresionLocal = async (endpoint, datosTicket) => {
+    const response = await fetch(`${API_IMPRESION_LOCAL}${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-printer-key': PRINTER_KEY,
+      },
+      body: JSON.stringify(datosTicket),
+    });
+
+    let data = {};
+
+    try {
+      data = await response.json();
+    } catch (_) {
+      data = {};
+    }
+
+    if (!response.ok || !data.ok) {
+      throw new Error(
+        data.message ||
+        data.mensaje ||
+        'No se pudo procesar la reimpresión del ticket.'
+      );
+    }
+
+    return data;
+  };
+
+  const cargarVistaPreviaTicket = async () => {
+    try {
+      setCargandoTicket(true);
+
+      const datosTicket = await prepararDatosReimpresion();
+
+      const data = await llamarApiImpresionLocal(
+        '/vista-previa-ticket',
+        datosTicket
+      );
+
+      const ticket = String(data.ticket || '');
+
+      if (!ticket.trim()) {
+        throw new Error(
+          'La API local no devolvió el contenido de la vista previa.'
+        );
+      }
+
+      setTicketPrevisualizado(ticket);
+      return true;
+    } catch (error) {
+      console.error('Error al generar vista previa de reimpresión:', error);
+
+      Swal.fire({
+        icon: 'error',
+        title: 'No se pudo generar el ticket',
+        text:
+          error.message ||
+          'Verifica que la API local de impresión esté abierta.',
+      });
+
+      return false;
+    } finally {
+      setCargandoTicket(false);
+    }
+  };
+
+  const abrirTicket = async () => {
     if (!detalleVenta) {
       Swal.fire({
         icon: 'warning',
@@ -414,120 +667,59 @@ export default function Ventas() {
       return;
     }
 
+    setTicketPrevisualizado('');
     setModalTicket(true);
+
+    await cargarVistaPreviaTicket();
   };
 
-  const imprimirTicket = () => {
-    const contenido = document.getElementById('ticket-print-area');
+  const cerrarTicket = () => {
+    if (cargandoTicket || reimprimiendoTicket) return;
 
-    if (!contenido) {
+    setModalTicket(false);
+    setTicketPrevisualizado('');
+  };
+
+  const reimprimirTicket = async () => {
+    try {
+      setReimprimiendoTicket(true);
+
+      /*
+       * En modo de pruebas actualiza la misma vista previa.
+       * Con modoPrueba: false, envía el ticket a la impresora local.
+       */
+      if (MODO_PRUEBA_TICKET) {
+        await cargarVistaPreviaTicket();
+        return;
+      }
+
+      const datosTicket = await prepararDatosReimpresion();
+
+      await llamarApiImpresionLocal(
+        '/imprimir-ticket',
+        datosTicket
+      );
+
+      Swal.fire({
+        icon: 'success',
+        title: 'Ticket reimpreso',
+        text: 'El ticket fue enviado a la impresora sin abrir la caja.',
+        timer: 1600,
+        showConfirmButton: false,
+      });
+    } catch (error) {
+      console.error('Error al reimprimir ticket:', error);
+
       Swal.fire({
         icon: 'error',
-        title: 'Error',
-        text: 'No se encontró el contenido del ticket.',
+        title: 'Error de reimpresión',
+        text:
+          error.message ||
+          'No se pudo reimprimir el ticket. Verifica que la API local esté abierta.',
       });
-      return;
+    } finally {
+      setReimprimiendoTicket(false);
     }
-
-    const ventana = window.open('', '_blank', 'width=420,height=650');
-
-    ventana.document.write(`
-      <html>
-        <head>
-          <title>Ticket ${detalleVenta?.folio || ''}</title>
-          <style>
-            * {
-              box-sizing: border-box;
-            }
-
-            body {
-              font-family: Arial, sans-serif;
-              margin: 0;
-              padding: 12px;
-              color: #111827;
-              background: #ffffff;
-            }
-
-            .ticket {
-              width: 280px;
-              margin: 0 auto;
-            }
-
-            .center {
-              text-align: center;
-            }
-
-            .title {
-              font-size: 18px;
-              font-weight: bold;
-              margin-bottom: 4px;
-            }
-
-            .small {
-              font-size: 11px;
-            }
-
-            .line {
-              border-top: 1px dashed #111827;
-              margin: 10px 0;
-            }
-
-            table {
-              width: 100%;
-              border-collapse: collapse;
-              font-size: 11px;
-            }
-
-            th, td {
-              padding: 3px 0;
-              vertical-align: top;
-            }
-
-            th {
-              text-align: left;
-              border-bottom: 1px dashed #111827;
-            }
-
-            .right {
-              text-align: right;
-            }
-
-            .bold {
-              font-weight: bold;
-            }
-
-            .total {
-              font-size: 14px;
-              font-weight: bold;
-            }
-
-            @page {
-              margin: 4mm;
-            }
-
-            @media print {
-              body {
-                margin: 0;
-                padding: 0;
-              }
-            }
-          </style>
-        </head>
-        <body>
-          ${contenido.innerHTML}
-          <script>
-            window.onload = function() {
-              window.print();
-              window.onafterprint = function() {
-                window.close();
-              };
-            };
-          </script>
-        </body>
-      </html>
-    `);
-
-    ventana.document.close();
   };
 
   useEffect(() => {
@@ -1454,193 +1646,90 @@ export default function Ventas() {
         <div className="fixed inset-0 z-[60] flex items-start sm:items-center justify-center px-3 sm:px-4 py-4 sm:py-8 overflow-y-auto">
           <div
             className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm"
-            onClick={() => setModalTicket(false)}
+            onClick={cerrarTicket}
           />
 
-          <div className="relative bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-3xl max-h-[92vh] overflow-hidden my-auto">
-            <div className="px-4 sm:px-6 py-5 border-b border-slate-100 flex items-start justify-between gap-4">
+          <div className="relative flex h-[calc(100dvh-2rem)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl sm:h-[92dvh] sm:rounded-3xl my-auto">
+            <div className="shrink-0 px-4 py-5 border-b border-slate-100 flex items-start justify-between gap-4 sm:px-6">
               <div className="min-w-0">
                 <h2 className="text-lg sm:text-xl font-bold text-slate-800">
-                  Ticket de venta
+                  {MODO_PRUEBA_TICKET
+                    ? 'Vista previa de reimpresión'
+                    : 'Reimpresión de ticket'}
                 </h2>
+
                 <p className="text-sm text-slate-500 break-words">
                   {detalleVenta.folio}
+                </p>
+
+                <p className="mt-1 text-xs text-slate-400">
+                  {MODO_PRUEBA_TICKET
+                    ? 'Generado por la API local. No se imprime ni abre caja.'
+                    : 'Se enviará a la impresora local sin abrir la caja.'}
                 </p>
               </div>
 
               <button
-                onClick={() => setModalTicket(false)}
-                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center shrink-0"
+                onClick={cerrarTicket}
+                disabled={cargandoTicket || reimprimiendoTicket}
+                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center shrink-0 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <X size={20} />
               </button>
             </div>
 
-            <div className="p-4 sm:p-6 overflow-y-auto max-h-[75vh] bg-slate-100">
-              <div className="mx-auto bg-white rounded-2xl shadow-sm border border-slate-200 p-5 max-w-sm overflow-x-auto">
-                <div id="ticket-print-area">
-                  <div className="ticket">
-                    <div className="center">
-                      <div className="title">FARMACIA SHADDAI</div>
-                      <div className="small">{detalleVenta.sucursal}</div>
-                      <div className="small">Punto de venta multi-sucursal</div>
-                    </div>
-
-                    <div className="line"></div>
-
-                    <table>
-                      <tbody>
-                        <tr>
-                          <td className="bold">Folio:</td>
-                          <td className="right">{detalleVenta.folio}</td>
-                        </tr>
-                        <tr>
-                          <td className="bold">Fecha:</td>
-                          <td className="right">
-                            {formatoFecha(detalleVenta.fecha_venta)}
-                          </td>
-                        </tr>
-                        <tr>
-                          <td className="bold">Caja:</td>
-                          <td className="right">{detalleVenta.caja}</td>
-                        </tr>
-                        <tr>
-                          <td className="bold">Cajero:</td>
-                          <td className="right">{detalleVenta.usuario}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-
-                    <div className="line"></div>
-
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Producto</th>
-                          <th className="right">Cant.</th>
-                          <th className="right">Importe</th>
-                        </tr>
-                      </thead>
-
-                      <tbody>
-                        {detalleProductos.map((item) => (
-                          <tr key={item.id_detalle}>
-                            <td>
-                              <div className="bold">{item.producto}</div>
-                              <div className="small">
-                                {formatoNumero(item.cantidad)} x{' '}
-                                {formatoMoneda(item.precio_unitario)}
-                              </div>
-                            </td>
-                            <td className="right">
-                              {formatoNumero(item.cantidad)}
-                            </td>
-                            <td className="right">
-                              {formatoMoneda(item.subtotal)}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-
-                    <div className="line"></div>
-
-                    <table>
-                      <tbody>
-                        <tr>
-                          <td>Subtotal:</td>
-                          <td className="right">
-                            {formatoMoneda(detalleVenta.subtotal)}
-                          </td>
-                        </tr>
-                        <tr>
-                          <td>Descuento:</td>
-                          <td className="right">
-                            -{formatoMoneda(detalleVenta.descuento)}
-                          </td>
-                        </tr>
-                        <tr>
-                          <td>Impuesto:</td>
-                          <td className="right">
-                            {formatoMoneda(detalleVenta.impuesto)}
-                          </td>
-                        </tr>
-                        <tr>
-                          <td className="total">TOTAL:</td>
-                          <td className="right total">
-                            {formatoMoneda(detalleVenta.total)}
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-
-                    <div className="line"></div>
-
-                    <table>
-                      <tbody>
-                        <tr>
-                          <td>Método:</td>
-                          <td className="right">{detalleVenta.metodo_pago}</td>
-                        </tr>
-                        <tr>
-                          <td>Recibido:</td>
-                          <td className="right">
-                            {formatoMoneda(detalleVenta.monto_recibido)}
-                          </td>
-                        </tr>
-                        <tr>
-                          <td>Cambio:</td>
-                          <td className="right">{formatoMoneda(detalleVenta.cambio)}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-
-                    <div className="line"></div>
-
-                    {detalleLotes.length > 0 && (
-                      <>
-                        <div className="small bold">Lotes descontados:</div>
-
-                        <table>
-                          <tbody>
-                            {detalleLotes.map((lote) => (
-                              <tr key={lote.id_movimiento}>
-                                <td className="small">{lote.lote || 'SIN LOTE'}</td>
-                                <td className="right small">
-                                  {formatoNumero(lote.cantidad)}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-
-                        <div className="line"></div>
-                      </>
-                    )}
-
-                    <div className="center small">Gracias por su compra</div>
-                    <div className="center small">
-                      Este ticket no es comprobante fiscal
-                    </div>
+            <div className="min-h-0 flex-1 overflow-y-auto bg-slate-200 p-4 sm:p-6">
+              {cargandoTicket ? (
+                <div className="flex min-h-[360px] items-center justify-center">
+                  <div className="flex items-center gap-3 rounded-2xl bg-white px-5 py-4 text-sm font-semibold text-slate-600 shadow-sm">
+                    <Loader2 className="animate-spin text-sky-700" size={21} />
+                    Generando ticket desde la API local...
                   </div>
                 </div>
-              </div>
+              ) : ticketPrevisualizado ? (
+                <pre className="mx-auto w-fit min-w-[290px] max-w-full overflow-x-auto bg-white px-4 py-5 font-mono text-[12px] leading-[1.4] text-slate-900 shadow-lg whitespace-pre">
+                  {ticketPrevisualizado}
+                </pre>
+              ) : (
+                <div className="rounded-2xl bg-white p-8 text-center text-sm text-slate-500 shadow-sm">
+                  No se pudo generar la vista previa del ticket.
+                </div>
+              )}
             </div>
 
-            <div className="px-4 sm:px-6 py-5 border-t border-slate-100 flex flex-col sm:flex-row justify-end gap-3">
+            <div className="shrink-0 px-4 py-5 border-t border-slate-100 flex flex-col justify-end gap-3 sm:flex-row sm:px-6">
               <button
-                onClick={() => setModalTicket(false)}
-                className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition"
+                onClick={cerrarTicket}
+                disabled={cargandoTicket || reimprimiendoTicket}
+                className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cerrar
               </button>
 
               <button
-                onClick={imprimirTicket}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold transition"
+                onClick={reimprimirTicket}
+                disabled={
+                  cargandoTicket ||
+                  reimprimiendoTicket ||
+                  !ticketPrevisualizado
+                }
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold transition disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <ReceiptText size={19} />
-                Imprimir ticket
+                {reimprimiendoTicket ? (
+                  <Loader2 className="animate-spin" size={19} />
+                ) : MODO_PRUEBA_TICKET ? (
+                  <RefreshCw size={19} />
+                ) : (
+                  <ReceiptText size={19} />
+                )}
+
+                {reimprimiendoTicket
+                  ? MODO_PRUEBA_TICKET
+                    ? 'Actualizando...'
+                    : 'Reimprimiendo...'
+                  : MODO_PRUEBA_TICKET
+                    ? 'Actualizar vista previa'
+                    : 'Reimprimir ticket'}
               </button>
             </div>
           </div>

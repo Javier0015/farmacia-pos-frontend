@@ -22,6 +22,7 @@ import {
   Loader2,
   CheckCircle,
   AlertTriangle,
+  Mail,
 } from 'lucide-react';
 
 import BarcodeScannerModal from '../../components/BarcodeScannerModal';
@@ -58,6 +59,19 @@ const METODOS_PAGO_POS = [
 
 
 const DIAS_ALERTA_CADUCIDAD_POS = 30;
+
+const esCorreoValido = (correo = '') => {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(correo).trim());
+};
+
+const escaparHtmlSeguro = (valor = '') => {
+  return String(valor ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+};
 
 const normalizarFechaLocal = (fecha) => {
   if (!fecha) return null;
@@ -229,6 +243,15 @@ export default function POS() {
   const [ventaFinalizada, setVentaFinalizada] = useState(null);
   const [configuracionPuntos, setConfiguracionPuntos] = useState(null);
 
+  /*
+   * Ticket digital:
+   * La configuración SMTP se consulta por sucursal. El POS solo envía la
+   * decisión del cajero; el backend conserva y usa las credenciales SMTP.
+   */
+  const [configuracionCorreoSmtp, setConfiguracionCorreoSmtp] = useState(null);
+  const [cargandoConfiguracionCorreo, setCargandoConfiguracionCorreo] = useState(false);
+  const [enviarTicketDigital, setEnviarTicketDigital] = useState(false);
+
   const [modalLotesProducto, setModalLotesProducto] = useState(false);
   const [productoSeleccionadoLotes, setProductoSeleccionadoLotes] = useState(null);
   const [lotesProducto, setLotesProducto] = useState([]);
@@ -274,6 +297,20 @@ export default function POS() {
   const cajaActual = useMemo(() => {
     return cajas.find((c) => Number(c.id_caja) === Number(idCaja));
   }, [cajas, idCaja]);
+
+  const correoTicketDigital = String(tarjetaPuntos?.correo || '')
+    .trim()
+    .toLowerCase();
+
+  const tieneCorreoTicketDigital = esCorreoValido(correoTicketDigital);
+  const servicioCorreoActivo = Boolean(configuracionCorreoSmtp?.activo);
+
+  /*
+   * Solo habilitamos el checkbox cuando existe correo válido en la tarjeta y
+   * una configuración SMTP activa (global o de la sucursal).
+   */
+  const puedeEnviarTicketDigital =
+    tieneCorreoTicketDigital && servicioCorreoActivo;
 
   const recetaEnCarrito = useMemo(() => {
     const item = carrito.find((p) => p.id_receta_shaddai);
@@ -567,6 +604,49 @@ export default function POS() {
     }
   };
 
+  const cargarConfiguracionCorreoTicket = async () => {
+    const idSucursalNumerico = Number(idSucursal);
+
+    if (!Number.isInteger(idSucursalNumerico) || idSucursalNumerico <= 0) {
+      setConfiguracionCorreoSmtp(null);
+      setEnviarTicketDigital(false);
+      return;
+    }
+
+    try {
+      setCargandoConfiguracionCorreo(true);
+
+      const { data } = await api.get('/configuracion-correo-smtp', {
+        params: {
+          id_sucursal: idSucursalNumerico,
+        },
+      });
+
+      if (!data?.ok) {
+        throw new Error(
+          data?.mensaje ||
+          'No se pudo cargar la configuración de correo para la sucursal.'
+        );
+      }
+
+      setConfiguracionCorreoSmtp(data.configuracion || null);
+    } catch (error) {
+      /*
+       * No bloqueamos el POS si el servicio de correo no está disponible.
+       * Simplemente se deshabilita la opción de ticket digital.
+       */
+      console.warn(
+        'No se pudo cargar la configuración de correo para ticket digital:',
+        error
+      );
+
+      setConfiguracionCorreoSmtp(null);
+      setEnviarTicketDigital(false);
+    } finally {
+      setCargandoConfiguracionCorreo(false);
+    }
+  };
+
   const cargarSucursales = async () => {
     try {
       const { data } = await api.get('/sucursales');
@@ -792,6 +872,8 @@ export default function POS() {
       setDetalleServicio([]);
       setTarjetaPuntos(null);
       setCodigoTarjeta('');
+      setEnviarTicketDigital(false);
+      setConfiguracionCorreoSmtp(null);
       setMetodoPago('EFECTIVO');
       setMontoRecibido('');
       setPagoMixtoActivo(false);
@@ -800,9 +882,32 @@ export default function POS() {
       cargarInventario();
       cargarRecetasPendientes();
       cargarServiciosPendientes();
+      cargarConfiguracionCorreoTicket();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idSucursal]);
+
+  /*
+   * Cuando la tarjeta tiene correo y la configuración de la sucursal indica
+   * envío automático, el checkbox inicia seleccionado. El cajero aún puede
+   * desactivarlo antes de cobrar.
+   */
+  useEffect(() => {
+    if (!tarjetaPuntos || !tieneCorreoTicketDigital || !servicioCorreoActivo) {
+      setEnviarTicketDigital(false);
+      return;
+    }
+
+    if (configuracionCorreoSmtp?.enviar_ticket_automatico) {
+      setEnviarTicketDigital(true);
+    }
+  }, [
+    tarjetaPuntos?.id_tarjeta,
+    tarjetaPuntos?.correo,
+    tieneCorreoTicketDigital,
+    servicioCorreoActivo,
+    configuracionCorreoSmtp?.enviar_ticket_automatico,
+  ]);
 
   useEffect(() => {
     if (idCaja) cargarSesionAbierta();
@@ -828,6 +933,7 @@ export default function POS() {
 
   const refrescarTodo = async () => {
     await cargarConfiguracionPuntos();
+    await cargarConfiguracionCorreoTicket();
     await cargarCajas();
     await cargarSesionAbierta();
     await cargarInventario();
@@ -1714,6 +1820,7 @@ export default function POS() {
     setVentaFinalizada(null);
     setTarjetaPuntos(null);
     setCodigoTarjeta('');
+    setEnviarTicketDigital(false);
   };
 
   const seleccionarMetodoPago = (metodo) => {
@@ -1751,6 +1858,7 @@ export default function POS() {
 
         setTarjetaPuntos(data.tarjeta);
         setCodigoTarjeta(data.tarjeta.codigo_barras);
+        setEnviarTicketDigital(false);
 
         Swal.fire({
           icon: 'success',
@@ -1763,6 +1871,7 @@ export default function POS() {
     } catch (error) {
       console.error(error);
       setTarjetaPuntos(null);
+      setEnviarTicketDigital(false);
       Swal.fire({
         icon: 'error',
         title: 'Tarjeta no encontrada',
@@ -1776,6 +1885,7 @@ export default function POS() {
   const quitarTarjetaPuntos = () => {
     setTarjetaPuntos(null);
     setCodigoTarjeta('');
+    setEnviarTicketDigital(false);
     setPagosMixtos((prev) => ({ ...prev, PUNTOS: '' }));
     if (metodoPago === 'PUNTOS') setMetodoPago('EFECTIVO');
   };
@@ -1995,6 +2105,14 @@ export default function POS() {
     const cambioMixto = Number(resumenPagosMixtos.cambio.toFixed(2));
     const totalAPagar = Number(resumen.total.toFixed(2));
 
+    /*
+     * El backend valida nuevamente tarjeta, correo y SMTP. Esto solo expresa
+     * la decisión capturada por el cajero para esta venta.
+     */
+    const ticketDigitalSolicitado = Boolean(
+      enviarTicketDigital && puedeEnviarTicketDigital
+    );
+
     if (pagoMixtoActivo) {
       if (pagosParaEnviar.length === 0) {
         Swal.fire({
@@ -2129,6 +2247,13 @@ export default function POS() {
         ${metodoPago === 'EFECTIVO' ? `<p><b>Recibido:</b> ${formatoMoneda(resumen.recibido)}</p><p><b>Cambio:</b> ${formatoMoneda(resumen.cambio)}</p>` : ''}
       `;
 
+    const detalleTicketDigitalHtml = ticketDigitalSolicitado
+      ? `
+        <hr style="margin:10px 0" />
+        <p><b>Ticket digital:</b> se enviará a ${escaparHtmlSeguro(correoTicketDigital)}</p>
+      `
+      : '';
+
     const confirmacion = await Swal.fire({
       icon: 'question',
       title: '¿Cobrar venta?',
@@ -2140,6 +2265,7 @@ export default function POS() {
           ${resumen.descuentoOfertas > 0 ? `<p><b>Descuento por ofertas:</b> -${formatoMoneda(resumen.descuentoOfertas)}</p>` : ''}
           <p><b>IVA:</b> ${cobrarImpuesto ? `Aplicado (${formatoMoneda(resumen.impuesto)})` : 'No aplicado'}</p>
           ${detallePagosHtml}
+          ${detalleTicketDigitalHtml}
         </div>
       `,
       showCancelButton: true,
@@ -2168,6 +2294,7 @@ export default function POS() {
         metodo_pago: metodoPagoFinal,
         monto_recibido: montoRecibidoFinal,
         pagos: pagoMixtoActivo ? pagosParaEnviar : undefined,
+        enviar_ticket_digital: ticketDigitalSolicitado,
         descuento: 0,
         descuento_ofertas: Number(resumen.descuentoOfertas || 0),
         subtotal_sin_descuento: Number(resumen.subtotalSinDescuento || 0),
@@ -2221,6 +2348,25 @@ export default function POS() {
 
         setVentaFinalizada(data);
 
+        const ticketDigitalResultado =
+          data?.venta?.ticket_digital ||
+          data?.resumen?.ticket_digital ||
+          null;
+
+        const detalleTicketDigitalResultadoHtml =
+          ticketDigitalResultado?.solicitado
+            ? ticketDigitalResultado.enviado
+              ? `
+                <hr style="margin:10px 0" />
+                <p><b>Ticket digital:</b> enviado correctamente a ${escaparHtmlSeguro(ticketDigitalResultado.correo_destino || correoTicketDigital)}.</p>
+              `
+              : `
+                <hr style="margin:10px 0" />
+                <p><b>Ticket digital:</b> la venta se registró, pero no se pudo enviar.</p>
+                <p style="font-size:12px;color:#92400e">${escaparHtmlSeguro(ticketDigitalResultado.mensaje || 'Revisa la configuración de correo e inténtalo de nuevo más tarde.')}</p>
+              `
+            : '';
+
         const resultadoAlerta = await Swal.fire({
           icon: 'success',
           title: 'Venta registrada',
@@ -2243,6 +2389,7 @@ export default function POS() {
                 ? `<p><b>Cambio:</b> ${formatoMoneda(data.resumen?.cambio || 0)}</p>`
                 : ''
             }
+              ${detalleTicketDigitalResultadoHtml}
             </div>
           `,
           showCancelButton: true,
@@ -2264,6 +2411,7 @@ export default function POS() {
         setCobrarImpuesto(false);
         setTarjetaPuntos(null);
         setCodigoTarjeta('');
+        setEnviarTicketDigital(false);
         setMetodoPago('EFECTIVO');
 
         await cargarConfiguracionPuntos();
@@ -2284,8 +2432,70 @@ export default function POS() {
     }
   };
 
-  const API_IMPRESION_LOCAL = 'http://localhost:3030';
-  const PRINTER_KEY = 'shaddai-printer-2026';
+  const CONFIGURACION_IMPRESION_LOCAL = {
+    url: 'http://localhost:3030',
+    apiKey: 'shaddai-printer-2026',
+
+    /*
+     * true  = solo genera y muestra la vista previa del ticket.
+     * false = envía el ticket a la impresora local y abre caja si corresponde.
+     */
+    modoPrueba: true,
+  };
+
+  const API_IMPRESION_LOCAL = CONFIGURACION_IMPRESION_LOCAL.url;
+  const PRINTER_KEY = CONFIGURACION_IMPRESION_LOCAL.apiKey;
+  const MODO_PRUEBA_TICKET = CONFIGURACION_IMPRESION_LOCAL.modoPrueba;
+
+  /*
+   * Evita que los caracteres especiales del ticket se interpreten como HTML
+   * al mostrar la vista previa dentro de SweetAlert.
+   */
+  const escaparHtmlTicket = (texto = '') =>
+    String(texto)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+
+  /*
+   * Obtiene la configuración activa para la sucursal que realizó la venta.
+   * Si la sucursal no tiene configuración propia, el backend devuelve la global.
+   * Si ocurre un error, el ticket sigue usando la configuración local de respaldo
+   * definida en el driver de impresión.
+   */
+  const obtenerConfiguracionTicketParaImpresion = async (datosTicket = {}) => {
+    const idSucursalVenta = Number(
+      datosTicket?.venta?.id_sucursal ||
+      datosTicket?.venta?.idSucursal ||
+      idSucursal ||
+      0
+    );
+
+    try {
+      const { data } = await api.get('/configuracion-ticket', {
+        params: idSucursalVenta > 0
+          ? { id_sucursal: idSucursalVenta }
+          : {},
+      });
+
+      if (!data?.ok) {
+        throw new Error(
+          data?.mensaje || 'No se pudo obtener la configuración del ticket.'
+        );
+      }
+
+      return data?.configuracion?.configuracion || null;
+    } catch (error) {
+      console.warn(
+        'No se pudo cargar la configuración del ticket. Se usará la configuración local de respaldo:',
+        error
+      );
+
+      return null;
+    }
+  };
 
   const imprimirTicketPOS = async (ventaData = null) => {
     const datosTicket = ventaData || ventaFinalizada;
@@ -2294,19 +2504,30 @@ export default function POS() {
       Swal.fire({
         icon: 'warning',
         title: 'Sin venta',
-        text: 'No hay una venta reciente para imprimir.',
+        text: 'No hay una venta reciente para generar el ticket.',
       });
       return;
     }
 
     try {
       Swal.fire({
-        title: 'Imprimiendo ticket...',
+        title: MODO_PRUEBA_TICKET
+          ? 'Generando vista previa...'
+          : 'Imprimiendo ticket...',
         html: `
         <div style="text-align:center">
-          <p>Enviando ticket a la impresora local.</p>
+          <p>
+            ${MODO_PRUEBA_TICKET
+            ? 'Generando el ticket sin enviarlo a la impresora.'
+            : 'Enviando ticket a la impresora local.'
+          }
+          </p>
+
           <p style="font-size:13px;color:#64748b;margin-top:6px">
-            No cierres esta ventana hasta que termine la impresión.
+            ${MODO_PRUEBA_TICKET
+            ? 'Podrás revisar cómo quedaría el ticket final.'
+            : 'No cierres esta ventana hasta que termine la impresión.'
+          }
           </p>
         </div>
       `,
@@ -2318,23 +2539,153 @@ export default function POS() {
         },
       });
 
-      console.log('Enviando ticket a API local:', datosTicket);
+      const configuracionTicket =
+        await obtenerConfiguracionTicketParaImpresion(datosTicket);
 
-      const response = await fetch(`${API_IMPRESION_LOCAL}/imprimir-ticket`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-printer-key': PRINTER_KEY,
+      const idSucursalVenta = Number(
+        datosTicket?.venta?.id_sucursal ||
+        datosTicket?.venta?.idSucursal ||
+        idSucursal ||
+        0
+      );
+
+      const nombreSucursalTicket =
+        sucursalActual?.nombre ||
+        sucursalActual?.nombre_sucursal ||
+        sucursalActual?.razon_social ||
+        sucursalActual?.sucursal ||
+        '';
+
+      const direccionSucursalTicket =
+        sucursalActual?.direccion ||
+        sucursalActual?.domicilio ||
+        '';
+
+      const telefonoSucursalTicket =
+        sucursalActual?.telefono ||
+        sucursalActual?.telefono_contacto ||
+        '';
+
+      const datosParaImprimir = {
+        ...datosTicket,
+
+        venta: {
+          ...datosTicket.venta,
+
+          ...(idSucursalVenta > 0
+            ? { id_sucursal: idSucursalVenta }
+            : {}),
+
+          sucursal:
+            datosTicket?.venta?.sucursal ||
+            datosTicket?.venta?.nombre_sucursal ||
+            nombreSucursalTicket,
+
+          nombre_sucursal:
+            datosTicket?.venta?.nombre_sucursal ||
+            datosTicket?.venta?.sucursal ||
+            nombreSucursalTicket,
+
+          direccion_sucursal:
+            datosTicket?.venta?.direccion_sucursal ||
+            direccionSucursalTicket,
+
+          telefono_sucursal:
+            datosTicket?.venta?.telefono_sucursal ||
+            telefonoSucursalTicket,
         },
-        body: JSON.stringify(datosTicket),
-      });
 
-      const data = await response.json();
+        ...(configuracionTicket
+          ? { configuracion_ticket: configuracionTicket }
+          : {}),
+      };
+
+      const endpoint = MODO_PRUEBA_TICKET
+        ? '/vista-previa-ticket'
+        : '/imprimir-ticket';
+
+      console.log(
+        `Enviando ticket a API local (${MODO_PRUEBA_TICKET ? 'MODO PRUEBA' : 'IMPRESIÓN REAL'}):`,
+        datosParaImprimir
+      );
+
+      const response = await fetch(
+        `${API_IMPRESION_LOCAL}${endpoint}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-printer-key': PRINTER_KEY,
+          },
+          body: JSON.stringify(datosParaImprimir),
+        }
+      );
+
+      let data = {};
+
+      try {
+        data = await response.json();
+      } catch (_) {
+        data = {};
+      }
 
       console.log('Respuesta API local:', data);
 
       if (!response.ok || !data.ok) {
-        throw new Error(data.message || 'No se pudo imprimir el ticket');
+        throw new Error(
+          data.message ||
+          data.mensaje ||
+          (
+            MODO_PRUEBA_TICKET
+              ? 'No se pudo generar la vista previa del ticket.'
+              : 'No se pudo imprimir el ticket.'
+          )
+        );
+      }
+
+      if (MODO_PRUEBA_TICKET) {
+        const ticketGenerado = data.ticket || '';
+
+        if (!ticketGenerado.trim()) {
+          throw new Error(
+            'La API local no devolvió el contenido de la vista previa.'
+          );
+        }
+
+        await Swal.fire({
+          title: 'Vista previa del ticket',
+          width: 560,
+          confirmButtonText: 'Cerrar',
+          confirmButtonColor: '#0369a1',
+          html: `
+          <div style="
+            max-height:540px;
+            overflow:auto;
+            background:#e2e8f0;
+            padding:18px;
+            border-radius:12px;
+          ">
+            <pre style="
+              margin:0 auto;
+              width:max-content;
+              min-width:290px;
+              max-width:100%;
+              overflow-x:auto;
+              padding:18px 14px 28px;
+              text-align:left;
+              white-space:pre;
+              background:#ffffff;
+              color:#111827;
+              font-family:'Courier New', Courier, monospace;
+              font-size:12px;
+              line-height:1.4;
+              box-shadow:0 8px 20px rgba(15,23,42,.18);
+            ">${escaparHtmlTicket(ticketGenerado)}</pre>
+          </div>
+        `,
+        });
+
+        return;
       }
 
       Swal.fire({
@@ -2345,14 +2696,25 @@ export default function POS() {
         showConfirmButton: false,
       });
     } catch (error) {
-      console.error('Error de impresión local:', error);
+      console.error(
+        MODO_PRUEBA_TICKET
+          ? 'Error al generar vista previa del ticket:'
+          : 'Error de impresión local:',
+        error
+      );
 
       Swal.fire({
         icon: 'error',
-        title: 'Error de impresión',
+        title: MODO_PRUEBA_TICKET
+          ? 'Error en vista previa'
+          : 'Error de impresión',
         text:
           error.message ||
-          'No se pudo imprimir el ticket. Verifica que la app local de impresión esté abierta.',
+          (
+            MODO_PRUEBA_TICKET
+              ? 'No se pudo generar la vista previa. Verifica que la API local de impresión esté abierta.'
+              : 'No se pudo imprimir el ticket. Verifica que la API local de impresión esté abierta.'
+          ),
       });
     }
   };
@@ -2853,6 +3215,13 @@ export default function POS() {
           puntosClienteActivo={puntosClienteActivo}
           porcentajeClientePuntos={porcentajeClientePuntos}
           recetaEnCarrito={recetaEnCarrito}
+          enviarTicketDigital={enviarTicketDigital}
+          setEnviarTicketDigital={setEnviarTicketDigital}
+          correoTicketDigital={correoTicketDigital}
+          tieneCorreoTicketDigital={tieneCorreoTicketDigital}
+          puedeEnviarTicketDigital={puedeEnviarTicketDigital}
+          configuracionCorreoSmtp={configuracionCorreoSmtp}
+          cargandoConfiguracionCorreo={cargandoConfiguracionCorreo}
         />
       </section>
 
@@ -3209,6 +3578,13 @@ function CarritoPOS({
   puntosClienteActivo,
   porcentajeClientePuntos,
   recetaEnCarrito,
+  enviarTicketDigital,
+  setEnviarTicketDigital,
+  correoTicketDigital,
+  tieneCorreoTicketDigital,
+  puedeEnviarTicketDigital,
+  configuracionCorreoSmtp,
+  cargandoConfiguracionCorreo,
 }) {
   return (
     <aside className="min-w-0 overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm xl:sticky xl:top-5 xl:max-h-[calc(100vh-2.5rem)] xl:overflow-y-auto">
@@ -3377,15 +3753,78 @@ function CarritoPOS({
                 type="button"
                 onClick={quitarTarjetaPuntos}
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-emerald-800 shadow-sm hover:bg-emerald-100"
+                title="Quitar tarjeta vinculada"
               >
                 <X size={16} />
               </button>
             </div>
+
             {puntosClienteActivo && ((!pagoMixtoActivo && metodoPago !== 'PUNTOS') || (pagoMixtoActivo && resumenPagosMixtos.puntos <= 0)) && (
               <p className="mt-3 rounded-2xl bg-white px-3 py-2 text-xs font-bold text-emerald-700">
                 Esta venta generaría {formatoNumero(resumen.puntosEstimados)} puntos ({formatoNumero(porcentajeClientePuntos)}%).
               </p>
             )}
+
+            <div className={`mt-3 rounded-2xl border p-3 ${puedeEnviarTicketDigital
+                ? 'border-sky-200 bg-sky-50 text-sky-950'
+                : 'border-amber-200 bg-amber-50 text-amber-950'
+              }`}>
+              <div className="flex items-start gap-2.5">
+                <div className={`mt-0.5 rounded-xl p-2 ${puedeEnviarTicketDigital
+                    ? 'bg-white text-sky-700'
+                    : 'bg-white text-amber-700'
+                  }`}>
+                  <Mail size={16} />
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-black">
+                    Ticket digital por correo
+                  </p>
+
+                  {tieneCorreoTicketDigital ? (
+                    <p className="mt-0.5 break-all text-[11px] font-semibold opacity-80">
+                      {correoTicketDigital}
+                    </p>
+                  ) : (
+                    <p className="mt-0.5 text-[11px] font-semibold opacity-80">
+                      Esta tarjeta no tiene un correo electrónico válido.
+                    </p>
+                  )}
+
+                  {cargandoConfiguracionCorreo ? (
+                    <p className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-bold">
+                      <Loader2 size={13} className="animate-spin" />
+                      Verificando servicio de correo...
+                    </p>
+                  ) : puedeEnviarTicketDigital ? (
+                    <label className="mt-3 flex cursor-pointer items-start gap-2 rounded-xl bg-white/80 px-3 py-2.5 text-[11px] font-bold shadow-sm">
+                      <input
+                        type="checkbox"
+                        checked={enviarTicketDigital}
+                        onChange={(event) =>
+                          setEnviarTicketDigital(event.target.checked)
+                        }
+                        className="mt-0.5 h-4 w-4 cursor-pointer rounded border-sky-300 text-sky-700 focus:ring-sky-600"
+                      />
+
+                      <span>
+                        Enviar ticket digital al finalizar esta venta
+                        {configuracionCorreoSmtp?.enviar_ticket_automatico
+                          ? ' (seleccionado automáticamente)'
+                          : ''}
+                      </span>
+                    </label>
+                  ) : (
+                    <p className="mt-2 text-[11px] font-bold">
+                      {tieneCorreoTicketDigital
+                        ? 'El servicio de ticket digital no está activo para esta sucursal.'
+                        : 'Registra un correo en la tarjeta para habilitar esta opción.'}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </section>
@@ -4623,10 +5062,10 @@ function ModalRecetasPendientes({
                                   )}
                                 </div>
                                 <div className={`mt-2 rounded-xl px-3 py-2 text-xs font-bold ${esMedicamentoLibre
-                                    ? 'bg-violet-100 text-violet-700'
-                                    : sinExistencia
-                                      ? 'bg-red-100 text-red-700'
-                                      : 'bg-emerald-100 text-emerald-700'
+                                  ? 'bg-violet-100 text-violet-700'
+                                  : sinExistencia
+                                    ? 'bg-red-100 text-red-700'
+                                    : 'bg-emerald-100 text-emerald-700'
                                   }`}>
                                   {disponibilidad.mensaje}
                                 </div>

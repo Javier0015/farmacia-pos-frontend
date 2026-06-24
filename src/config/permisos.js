@@ -24,23 +24,7 @@ export const permisosPorRol = {
     'reportes-cierre-caja',
     'control-sanitario',
     'catalogo-servicios-clinicos',
-  ],
-
-  ADMIN_SUCURSAL: [
-    'dashboard',
-    'productos',
-    'inventario',
-    'stock-sucursales',
-    'pos',
-    'caja',
-    'ventas',
-    'proveedores',
-    'compras',
-    'tarjetas-puntos',
-    'alertas',
-    'configuracion-puntos',
-    'recetas-admin',
-    'reportes-cierre-caja',
+    'configuracion-ticket',
   ],
 
   CAJERO: [
@@ -60,28 +44,6 @@ export const permisosPorRol = {
     'compras',
     'control-sanitario',
     'catalogo-servicios-clinicos',
-  ],
-
-  ALMACEN: [
-    'dashboard',
-    'productos',
-    'inventario',
-    'stock-sucursales',
-  ],
-
-  COMPRAS: [
-    'dashboard',
-    'proveedores',
-    'compras',
-    'inventario',
-    'stock-sucursales',
-  ],
-
-  LECTURA: [
-    'dashboard',
-    'ventas',
-    'inventario',
-    'stock-sucursales',
   ],
 
   DOCTOR: [
