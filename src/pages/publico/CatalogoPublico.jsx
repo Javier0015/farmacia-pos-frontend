@@ -428,7 +428,7 @@ export default function CatalogoPublico() {
                     Consulta nuestros productos
                   </h2>
                   <p className="text-sm text-slate-500 font-medium">
-                    Filtra por producto, laboratorio, presentación o categoría.
+                    Filtra por producto o categoría.
                   </p>
                 </div>
               </div>
