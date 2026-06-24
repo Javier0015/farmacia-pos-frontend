@@ -31,7 +31,7 @@ import {
 const CONFIGURACION_IMPRESION_LOCAL = {
   url: 'http://localhost:3030',
   apiKey: 'shaddai-printer-2026',
-  modoPrueba: true,
+  modoPrueba: false,
 };
 
 const API_IMPRESION_LOCAL = CONFIGURACION_IMPRESION_LOCAL.url;

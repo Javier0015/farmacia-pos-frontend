@@ -2440,7 +2440,7 @@ export default function POS() {
      * true  = solo genera y muestra la vista previa del ticket.
      * false = envía el ticket a la impresora local y abre caja si corresponde.
      */
-    modoPrueba: true,
+    modoPrueba: false,
   };
 
   const API_IMPRESION_LOCAL = CONFIGURACION_IMPRESION_LOCAL.url;
