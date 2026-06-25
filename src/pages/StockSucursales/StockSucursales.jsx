@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Search,
   Boxes,
@@ -23,13 +23,80 @@ export default function StockSucursales() {
   const [producto, setProducto] = useState(null);
   const [sucursales, setSucursales] = useState([]);
 
-  const buscarStock = async (e) => {
-    e.preventDefault();
+  const [sugerencias, setSugerencias] = useState([]);
+  const [cargandoSugerencias, setCargandoSugerencias] = useState(false);
+  const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
+  const [indiceSugerencia, setIndiceSugerencia] = useState(-1);
+  const [productoSeleccionadoId, setProductoSeleccionadoId] = useState(null);
 
+  useEffect(() => {
     const texto = busqueda.trim();
 
-    if (!texto) {
-      setMensaje('Escribe el nombre o código de barras');
+    if (productoSeleccionadoId || texto.length < 2) {
+      setSugerencias([]);
+      setMostrarSugerencias(false);
+      setIndiceSugerencia(-1);
+      setCargandoSugerencias(false);
+      return undefined;
+    }
+
+    /*
+     * El menú se abre desde que el usuario escribe dos caracteres.
+     * Así se muestra el loader inmediatamente, igual que en el POS,
+     * mientras se espera el debounce y la respuesta del endpoint.
+     */
+    setMostrarSugerencias(true);
+    setSugerencias([]);
+    setIndiceSugerencia(-1);
+    setCargandoSugerencias(true);
+
+    const controller = new AbortController();
+
+    const timeout = window.setTimeout(async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(
+          `${import.meta.env.VITE_API_URL}/inventario/stock-sucursales?modo=sugerencias&buscar=${encodeURIComponent(texto)}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+            signal: controller.signal,
+          }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok || !data.ok) {
+          setSugerencias([]);
+          return;
+        }
+
+        setSugerencias(data.productos || []);
+        setIndiceSugerencia(-1);
+      } catch (error) {
+        if (error.name !== 'AbortError') {
+          console.error('Error al buscar sugerencias de productos:', error);
+          setSugerencias([]);
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setCargandoSugerencias(false);
+        }
+      }
+    }, 300);
+
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [busqueda, productoSeleccionadoId]);
+
+  const consultarStock = async ({ idProducto = null, texto = '' } = {}) => {
+    const criterio = texto.trim();
+
+    if (!idProducto && !criterio) {
+      setMensaje('Escribe el nombre, código de barras o presentación del producto');
       setProducto(null);
       setSucursales([]);
       return;
@@ -40,11 +107,16 @@ export default function StockSucursales() {
       setMensaje('');
       setProducto(null);
       setSucursales([]);
+      setMostrarSugerencias(false);
 
       const token = localStorage.getItem('token');
 
+      const parametroBusqueda = idProducto
+        ? `id_producto=${encodeURIComponent(idProducto)}`
+        : `buscar=${encodeURIComponent(criterio)}`;
+
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/inventario/stock-sucursales?buscar=${encodeURIComponent(texto)}`,
+        `${import.meta.env.VITE_API_URL}/inventario/stock-sucursales?${parametroBusqueda}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -73,11 +145,77 @@ export default function StockSucursales() {
     }
   };
 
-  const limpiarBusqueda = () => {
-    setBusqueda('');
+  const buscarStock = async (e) => {
+    e.preventDefault();
+
+    if (productoSeleccionadoId) {
+      await consultarStock({ idProducto: productoSeleccionadoId });
+      return;
+    }
+
+    await consultarStock({ texto: busqueda });
+  };
+
+  const seleccionarProducto = async (item) => {
+    setProductoSeleccionadoId(item.id_producto);
+    setBusqueda(item.nombre || item.producto || '');
+    setSugerencias([]);
+    setMostrarSugerencias(false);
+    setIndiceSugerencia(-1);
+
+    await consultarStock({ idProducto: item.id_producto });
+  };
+
+  const manejarCambioBusqueda = (e) => {
+    setBusqueda(e.target.value);
+    setProductoSeleccionadoId(null);
     setProducto(null);
     setSucursales([]);
     setMensaje('');
+  };
+
+  const manejarTeclaBusqueda = (e) => {
+    if (e.key === 'Escape') {
+      setMostrarSugerencias(false);
+      setIndiceSugerencia(-1);
+      return;
+    }
+
+    if (!mostrarSugerencias || cargandoSugerencias || sugerencias.length === 0) {
+      return;
+    }
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setIndiceSugerencia((actual) =>
+        actual >= sugerencias.length - 1 ? 0 : actual + 1
+      );
+      return;
+    }
+
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setIndiceSugerencia((actual) =>
+        actual <= 0 ? sugerencias.length - 1 : actual - 1
+      );
+      return;
+    }
+
+    if (e.key === 'Enter' && indiceSugerencia >= 0) {
+      e.preventDefault();
+      seleccionarProducto(sugerencias[indiceSugerencia]);
+    }
+  };
+
+  const limpiarBusqueda = () => {
+    setBusqueda('');
+    setProductoSeleccionadoId(null);
+    setProducto(null);
+    setSucursales([]);
+    setSugerencias([]);
+    setMensaje('');
+    setMostrarSugerencias(false);
+    setIndiceSugerencia(-1);
   };
 
   const totalDisponible = sucursales.reduce(
@@ -193,7 +331,7 @@ export default function StockSucursales() {
       {/* BUSCADOR */}
       <section className="bg-white rounded-[2rem] shadow-sm border border-slate-100 p-4 sm:p-5">
         <form onSubmit={buscarStock} className="flex flex-col xl:flex-row gap-3">
-          <div className="relative flex-1">
+          <div className="relative flex-1 min-w-0">
             <Search
               size={21}
               className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
@@ -202,10 +340,86 @@ export default function StockSucursales() {
             <input
               type="text"
               value={busqueda}
-              onChange={(e) => setBusqueda(e.target.value)}
+              onChange={manejarCambioBusqueda}
+              onKeyDown={manejarTeclaBusqueda}
+              onFocus={() => {
+                if (busqueda.trim().length >= 2) {
+                  setMostrarSugerencias(true);
+                }
+              }}
+              onBlur={() => {
+                window.setTimeout(() => {
+                  setMostrarSugerencias(false);
+                  setIndiceSugerencia(-1);
+                }, 150);
+              }}
+              autoComplete="off"
+              role="combobox"
+              aria-autocomplete="list"
+              aria-expanded={mostrarSugerencias && busqueda.trim().length >= 2}
+              aria-controls="sugerencias-stock-sucursales"
               placeholder="Buscar por nombre, código de barras o descripción del producto..."
-              className="w-full pl-12 pr-4 py-4 rounded-2xl border border-slate-200 bg-slate-50/60 text-slate-800 font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
+              className="w-full pl-12 pr-12 py-4 rounded-2xl border border-slate-200 bg-slate-50/60 text-slate-800 font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
             />
+
+            {cargandoSugerencias && (
+              <Loader2
+                size={19}
+                className="absolute right-4 top-1/2 -translate-y-1/2 animate-spin text-sky-600"
+              />
+            )}
+
+            {mostrarSugerencias && busqueda.trim().length >= 2 && (
+              <div
+                id="sugerencias-stock-sucursales"
+                role="listbox"
+                className="absolute z-30 mt-2 w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/15"
+              >
+                {cargandoSugerencias ? (
+                  <div className="flex items-center gap-2 px-4 py-3 text-sm font-bold text-slate-500">
+                    <Loader2 size={17} className="animate-spin" />
+                    Buscando productos...
+                  </div>
+                ) : sugerencias.length === 0 ? (
+                  <div className="px-4 py-3 text-sm font-bold text-slate-500">
+                    No se encontraron productos con “{busqueda.trim()}”.
+                  </div>
+                ) : (
+                  <div className="max-h-80 overflow-y-auto py-2">
+                    {sugerencias.map((item, index) => (
+                      <button
+                        key={item.id_producto}
+                        type="button"
+                        role="option"
+                        aria-selected={indiceSugerencia === index}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => seleccionarProducto(item)}
+                        className={`flex w-full items-start justify-between gap-4 px-4 py-3 text-left transition ${
+                          indiceSugerencia === index
+                            ? 'bg-sky-50 text-sky-950'
+                            : 'hover:bg-sky-50 text-slate-800'
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-black">
+                            {item.nombre || item.producto || 'Producto sin nombre'}
+                          </p>
+                          <p className="mt-0.5 text-xs font-semibold text-slate-500">
+                            {item.codigo_barras || 'Sin código'}
+                            {item.laboratorio ? ` · ${item.laboratorio}` : ''}
+                            {item.presentacion ? ` · ${item.presentacion}` : ''}
+                          </p>
+                        </div>
+
+                        <span className="shrink-0 rounded-full bg-sky-50 px-2.5 py-1 text-[11px] font-black text-sky-700">
+                          Ver stock
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <button

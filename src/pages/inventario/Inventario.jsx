@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Swal from 'sweetalert2';
 import {
   Boxes,
@@ -14,6 +14,7 @@ import {
   Save,
   Package,
   Warehouse,
+  Loader2,
 } from 'lucide-react';
 import api from '../../api/axios';
 import { useAuth } from '../../context/AuthContext';
@@ -300,6 +301,14 @@ export default function Inventario() {
 
   const [idSucursal, setIdSucursal] = useState('');
   const [buscar, setBuscar] = useState('');
+  const [idProductoBusqueda, setIdProductoBusqueda] = useState('');
+  const [sugerenciasInventario, setSugerenciasInventario] = useState([]);
+  const [cargandoSugerenciasInventario, setCargandoSugerenciasInventario] = useState(false);
+  const [mostrandoSugerenciasInventario, setMostrandoSugerenciasInventario] = useState(false);
+  const [indiceSugerenciaInventario, setIndiceSugerenciaInventario] = useState(-1);
+
+  const solicitudSugerenciasInventarioRef = useRef(0);
+  const ignorarSiguienteSugerenciaRef = useRef(false);
 
   const [fechaInicio, setFechaInicio] = useState('');
   const [fechaFin, setFechaFin] = useState('');
@@ -453,7 +462,10 @@ export default function Inventario() {
     }
   };
 
-  const cargarInventario = async () => {
+  const cargarInventario = async ({
+    texto = null,
+    idProducto = undefined,
+  } = {}) => {
     if (!idSucursal) return;
 
     try {
@@ -462,8 +474,20 @@ export default function Inventario() {
       const params = new URLSearchParams();
       params.append('sucursal', idSucursal);
 
-      if (buscar.trim()) {
-        params.append('buscar', buscar.trim());
+      const textoBusqueda = String(texto ?? buscar ?? '').trim();
+      const productoSeleccionado = String(
+        idProducto !== undefined ? idProducto : idProductoBusqueda ?? ''
+      ).trim();
+
+      /*
+       * Cuando se selecciona una sugerencia enviamos id_producto, para que
+       * la tabla muestre exactamente el producto elegido. La búsqueda manual
+       * conserva el filtro ILIKE del controlador.
+       */
+      if (productoSeleccionado) {
+        params.append('id_producto', productoSeleccionado);
+      } else if (textoBusqueda) {
+        params.append('buscar', textoBusqueda);
       }
 
       const { data } = await api.get(`/inventario?${params.toString()}`);
@@ -486,7 +510,82 @@ export default function Inventario() {
     }
   };
 
+  const buscarSugerenciasInventario = async (termino) => {
+    const texto = String(termino || '').trim();
+
+    if (!idSucursal || texto.length < 2) {
+      solicitudSugerenciasInventarioRef.current += 1;
+      setSugerenciasInventario([]);
+      setCargandoSugerenciasInventario(false);
+      setMostrandoSugerenciasInventario(false);
+      setIndiceSugerenciaInventario(-1);
+      return;
+    }
+
+    const idSolicitud = ++solicitudSugerenciasInventarioRef.current;
+
+    try {
+      setCargandoSugerenciasInventario(true);
+
+      const params = new URLSearchParams();
+      params.append('sucursal', idSucursal);
+      params.append('buscar', texto);
+      params.append('autocomplete', '1');
+      params.append('limit', '8');
+
+      const { data } = await api.get(`/inventario?${params.toString()}`);
+
+      /*
+       * Ignora respuestas anteriores si el usuario siguió escribiendo antes
+       * de que terminara la solicitud.
+       */
+      if (idSolicitud !== solicitudSugerenciasInventarioRef.current) return;
+
+      const lista = data?.ok ? data.inventario || [] : [];
+
+      setSugerenciasInventario(lista.slice(0, 8));
+      setMostrandoSugerenciasInventario(true);
+      setIndiceSugerenciaInventario(-1);
+    } catch (error) {
+      if (idSolicitud !== solicitudSugerenciasInventarioRef.current) return;
+
+      console.error('Error al buscar sugerencias de inventario:', error);
+      setSugerenciasInventario([]);
+    } finally {
+      if (idSolicitud === solicitudSugerenciasInventarioRef.current) {
+        setCargandoSugerenciasInventario(false);
+      }
+    }
+  };
+
+  const seleccionarSugerenciaInventario = async (item) => {
+    if (!item?.id_producto) return;
+
+    const nombreProducto = item.producto || item.nombre || '';
+
+    /*
+     * Evita que el useEffect vuelva a abrir sugerencias inmediatamente
+     * después de colocar el nombre elegido en el input.
+     */
+    ignorarSiguienteSugerenciaRef.current = true;
+
+    setBuscar(nombreProducto);
+    setIdProductoBusqueda(String(item.id_producto));
+    setSugerenciasInventario([]);
+    setMostrandoSugerenciasInventario(false);
+    setCargandoSugerenciasInventario(false);
+    setIndiceSugerenciaInventario(-1);
+
+    await cargarInventario({
+      texto: nombreProducto,
+      idProducto: item.id_producto,
+    });
+  };
+
   const buscarInventarioYMovimientos = async () => {
+    setMostrandoSugerenciasInventario(false);
+    setIndiceSugerenciaInventario(-1);
+
     await cargarInventario();
 
     if (modalMovimientos) {
@@ -554,7 +653,13 @@ export default function Inventario() {
   };
 
   const limpiarFiltros = async () => {
+    solicitudSugerenciasInventarioRef.current += 1;
     setBuscar('');
+    setIdProductoBusqueda('');
+    setSugerenciasInventario([]);
+    setMostrandoSugerenciasInventario(false);
+    setCargandoSugerenciasInventario(false);
+    setIndiceSugerenciaInventario(-1);
     setFechaInicio('');
     setFechaFin('');
 
@@ -667,11 +772,56 @@ export default function Inventario() {
   }, [usuario]);
 
   useEffect(() => {
+    /*
+     * Al cambiar de sucursal conservamos el texto escrito, pero dejamos de
+     * usar cualquier ID seleccionado de la sucursal anterior.
+     */
+    setIdProductoBusqueda('');
+    solicitudSugerenciasInventarioRef.current += 1;
+    setSugerenciasInventario([]);
+    setMostrandoSugerenciasInventario(false);
+    setCargandoSugerenciasInventario(false);
+    setIndiceSugerenciaInventario(-1);
+
     if (idSucursal) {
-      cargarInventario();
+      cargarInventario({ idProducto: '' });
       cargarBajoStock();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idSucursal]);
+
+  useEffect(() => {
+    const texto = String(buscar || '').trim();
+
+    if (ignorarSiguienteSugerenciaRef.current) {
+      ignorarSiguienteSugerenciaRef.current = false;
+      return;
+    }
+
+    if (!idSucursal || texto.length < 2) {
+      solicitudSugerenciasInventarioRef.current += 1;
+      setSugerenciasInventario([]);
+      setMostrandoSugerenciasInventario(false);
+      setCargandoSugerenciasInventario(false);
+      setIndiceSugerenciaInventario(-1);
+      return;
+    }
+
+    /*
+     * Muestra el loader de inmediato y espera 300 ms antes de consultar,
+     * igual que el patrón del POS.
+     */
+    setMostrandoSugerenciasInventario(true);
+    setCargandoSugerenciasInventario(true);
+    setIndiceSugerenciaInventario(-1);
+
+    const temporizador = setTimeout(() => {
+      buscarSugerenciasInventario(texto);
+    }, 300);
+
+    return () => clearTimeout(temporizador);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buscar, idSucursal]);
 
   useEffect(() => {
     const cargarLotesParaMovimiento = async () => {
@@ -1217,8 +1367,8 @@ export default function Inventario() {
   );
 
   return (
-    <div className="w-full max-w-full overflow-hidden space-y-5 sm:space-y-6 pb-8">
-      <section className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-sm border border-slate-100 overflow-hidden">
+    <div className="w-full max-w-full overflow-visible space-y-5 sm:space-y-6 pb-8">
+      <section className="relative z-30 bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-sm border border-slate-100 overflow-visible">
         <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5">
           <div className="flex items-start sm:items-center gap-3 min-w-0">
             <div className="w-12 h-12 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
@@ -1270,7 +1420,7 @@ export default function Inventario() {
           </div>
         </div>
 
-        <div className="mt-6 grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div className="relative z-40 mt-6 grid grid-cols-1 md:grid-cols-5 gap-4">
           <div className="min-w-0">
             <label className="block text-sm font-bold text-slate-700 mb-2">
               Sucursal
@@ -1325,25 +1475,156 @@ export default function Inventario() {
             />
           </div>
 
-          <div className="md:col-span-2 min-w-0">
+          <div className="relative z-50 md:col-span-2 min-w-0">
             <label className="block text-sm font-bold text-slate-700 mb-2">
               Buscar
             </label>
             <div className="flex flex-col sm:flex-row gap-3">
-              <div className="relative flex-1 min-w-0">
+              <div className="relative z-[60] flex-1 min-w-0">
                 <Search
                   className="absolute left-4 top-3.5 text-slate-400"
                   size={20}
                 />
+
                 <input
                   value={buscar}
-                  onChange={(e) => setBuscar(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') buscarInventarioYMovimientos();
+                  onChange={(e) => {
+                    setBuscar(e.target.value);
+                    setIdProductoBusqueda('');
                   }}
-                  className="w-full min-w-0 pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  onFocus={() => {
+                    if (String(buscar || '').trim().length >= 2) {
+                      setMostrandoSugerenciasInventario(true);
+                    }
+                  }}
+                  onBlur={() => {
+                    window.setTimeout(() => {
+                      setMostrandoSugerenciasInventario(false);
+                      setIndiceSugerenciaInventario(-1);
+                    }, 150);
+                  }}
+                  onKeyDown={(e) => {
+                    const haySugerencias =
+                      mostrandoSugerenciasInventario &&
+                      sugerenciasInventario.length > 0;
+
+                    if (e.key === 'ArrowDown' && haySugerencias) {
+                      e.preventDefault();
+                      setIndiceSugerenciaInventario((indice) =>
+                        Math.min(
+                          indice + 1,
+                          sugerenciasInventario.length - 1
+                        )
+                      );
+                      return;
+                    }
+
+                    if (e.key === 'ArrowUp' && haySugerencias) {
+                      e.preventDefault();
+                      setIndiceSugerenciaInventario((indice) =>
+                        Math.max(indice - 1, 0)
+                      );
+                      return;
+                    }
+
+                    if (
+                      e.key === 'Enter' &&
+                      haySugerencias &&
+                      indiceSugerenciaInventario >= 0
+                    ) {
+                      e.preventDefault();
+                      seleccionarSugerenciaInventario(
+                        sugerenciasInventario[indiceSugerenciaInventario]
+                      );
+                      return;
+                    }
+
+                    if (e.key === 'Escape') {
+                      setMostrandoSugerenciasInventario(false);
+                      setIndiceSugerenciaInventario(-1);
+                      return;
+                    }
+
+                    if (e.key === 'Enter') {
+                      buscarInventarioYMovimientos();
+                    }
+                  }}
+                  className="w-full min-w-0 pl-12 pr-12 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
                   placeholder="Buscar por producto, código, laboratorio o presentación..."
+                  autoComplete="off"
+                  aria-label="Buscar en inventario"
+                  aria-expanded={mostrandoSugerenciasInventario}
+                  aria-controls="sugerencias-inventario"
                 />
+
+                {cargandoSugerenciasInventario && (
+                  <Loader2
+                    className="absolute right-4 top-3.5 animate-spin text-sky-600"
+                    size={20}
+                  />
+                )}
+
+                {mostrandoSugerenciasInventario &&
+                  String(buscar || '').trim().length >= 2 && (
+                    <div
+                      id="sugerencias-inventario"
+                      className="absolute left-0 right-0 top-full z-[100] mt-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/15"
+                    >
+                      {cargandoSugerenciasInventario ? (
+                        <div className="flex items-center gap-3 px-4 py-4 text-sm font-semibold text-slate-500">
+                          <Loader2 size={19} className="animate-spin text-sky-600" />
+                          Buscando productos...
+                        </div>
+                      ) : sugerenciasInventario.length === 0 ? (
+                        <div className="px-4 py-4 text-sm font-semibold text-slate-500">
+                          No se encontraron productos en el inventario de esta sucursal.
+                        </div>
+                      ) : (
+                        <div className="max-h-80 overflow-y-auto py-2">
+                          {sugerenciasInventario.map((item, index) => {
+                            const seleccionado =
+                              index === indiceSugerenciaInventario;
+
+                            return (
+                              <button
+                                key={item.id_inventario || item.id_producto}
+                                type="button"
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  seleccionarSugerenciaInventario(item);
+                                }}
+                                className={`flex w-full items-start justify-between gap-4 px-4 py-3 text-left transition ${
+                                  seleccionado
+                                    ? 'bg-sky-50 text-sky-800'
+                                    : 'text-slate-700 hover:bg-slate-50'
+                                }`}
+                              >
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-black">
+                                    {item.producto || item.nombre || 'Producto sin nombre'}
+                                  </p>
+
+                                  <p className="mt-0.5 truncate text-xs font-semibold text-slate-500">
+                                    {[
+                                      item.codigo_barras || 'Sin código',
+                                      item.laboratorio,
+                                      item.presentacion,
+                                    ]
+                                      .filter(Boolean)
+                                      .join(' · ')}
+                                  </p>
+                                </div>
+
+                                <span className="shrink-0 rounded-full bg-sky-50 px-3 py-1 text-xs font-black text-sky-700">
+                                  Stock: {formatoNumero(item.stock_actual)}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
               </div>
 
               <button

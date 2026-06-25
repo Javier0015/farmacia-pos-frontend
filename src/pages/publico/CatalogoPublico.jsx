@@ -10,18 +10,152 @@ import {
   ShieldCheck,
   ShoppingBag,
   X,
+  ArrowUpRight,
+  Share2,
+  MapPin,
+  Music2,
+  MessageCircle,
+  Phone,
 } from 'lucide-react';
 import api from '../../api/axios';
 import ProductoCatalogoCard from '../../components/catalogo/ProductoCatalogoCard';
 import ProductoCatalogoModal from '../../components/catalogo/ProductoCatalogoModal';
 import logoFarmacia from '../../assets/logoShaddai.png';
 
+const CONFIGURACION_REDES_SOCIALES = {
+  FACEBOOK: {
+    clase: 'border-blue-100 bg-blue-50 text-blue-600',
+    textoAccion: 'Visitar página oficial',
+  },
+  INSTAGRAM: {
+    clase: 'border-fuchsia-100 bg-fuchsia-50 text-fuchsia-600',
+    textoAccion: 'Visitar perfil oficial',
+  },
+  WHATSAPP: {
+    clase: 'border-emerald-100 bg-emerald-50 text-emerald-600',
+    textoAccion: 'Escríbenos por WhatsApp',
+  },
+  TIKTOK: {
+    clase: 'border-slate-200 bg-slate-50 text-slate-900',
+    textoAccion: 'Visitar perfil oficial',
+  },
+  X: {
+    clase: 'border-slate-200 bg-slate-50 text-slate-900',
+    textoAccion: 'Visitar perfil oficial',
+  },
+  YOUTUBE: {
+    clase: 'border-red-100 bg-red-50 text-red-600',
+    textoAccion: 'Visitar canal oficial',
+  },
+  GOOGLE_MAPS: {
+    clase: 'border-emerald-100 bg-emerald-50 text-emerald-700',
+    textoAccion: 'Ver ubicación y cómo llegar',
+  },
+};
+
+const obtenerConfiguracionRedSocial = (clave) => {
+  return (
+    CONFIGURACION_REDES_SOCIALES[String(clave || '').toUpperCase()] || {
+      clase: 'border-sky-100 bg-sky-50 text-sky-700',
+      textoAccion: 'Abrir enlace oficial',
+    }
+  );
+};
+
+function IconoRedSocial({ clave, size = 22 }) {
+  const props = {
+    width: size,
+    height: size,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 2,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+    'aria-hidden': true,
+  };
+
+  switch (String(clave || '').toUpperCase()) {
+    case 'FACEBOOK':
+      return (
+        <svg
+          width={size}
+          height={size}
+          viewBox="0 0 24 24"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <path d="M13.8 21v-8h2.7l.4-3.2h-3.1V7.76c0-.93.26-1.56 1.59-1.56h1.7V3.34c-.3-.04-1.31-.13-2.5-.13-2.47 0-4.16 1.5-4.16 4.26V9.8H7.6V13h2.81v8h3.39Z" />
+        </svg>
+      );
+
+    case 'INSTAGRAM':
+      return (
+        <svg {...props}>
+          <rect x="3" y="3" width="18" height="18" rx="5" />
+          <circle cx="12" cy="12" r="4" />
+          <circle cx="17.3" cy="6.7" r="0.8" fill="currentColor" stroke="none" />
+        </svg>
+      );
+
+    case 'WHATSAPP':
+      return (
+        <span className="relative flex h-full w-full items-center justify-center">
+          <MessageCircle size={size + 1} strokeWidth={2.2} />
+          <span className="absolute flex h-4 w-4 items-center justify-center"><Phone size={10} strokeWidth={2.8} /></span>
+        </span>
+      );
+
+    case 'TIKTOK':
+      return <Music2 size={size + 1} strokeWidth={2.3} />;
+
+    case 'X':
+      return (
+        <svg
+          width={size}
+          height={size}
+          viewBox="0 0 24 24"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <path d="M4.3 3h4.13l4.23 5.66L17.68 3H20l-6.28 7.23L20.3 21h-4.12l-4.57-6.12L6.3 21H4l6.55-7.54L4.3 3Zm2.2 1.66 10.57 14.68h1.16L7.67 4.66H6.5Z" />
+        </svg>
+      );
+
+    case 'YOUTUBE':
+      return (
+        <svg
+          width={size + 2}
+          height={size + 2}
+          viewBox="0 0 24 24"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <path d="M21.58 7.19a2.93 2.93 0 0 0-2.06-2.08C17.7 4.62 12 4.62 12 4.62s-5.7 0-7.52.49A2.93 2.93 0 0 0 2.42 7.2C1.93 9 1.93 12 1.93 12s0 3 .49 4.81a2.93 2.93 0 0 0 2.06 2.08c1.82.49 7.52.49 7.52.49s5.7 0 7.52-.49a2.93 2.93 0 0 0 2.06-2.08c.49-1.81.49-4.81.49-4.81s0-3-.49-4.81ZM10.1 15.02V8.98L15.4 12l-5.3 3.02Z" />
+        </svg>
+      );
+
+    case 'GOOGLE_MAPS':
+      return <MapPin size={size + 1} strokeWidth={2.25} />;
+
+    default:
+      return <Share2 size={size} strokeWidth={2.2} />;
+  }
+}
+
 export default function CatalogoPublico() {
   const [productos, setProductos] = useState([]);
   const [categorias, setCategorias] = useState([]);
+  const [redesSociales, setRedesSociales] = useState([]);
 
   const [busqueda, setBusqueda] = useState('');
   const [categoriaSeleccionada, setCategoriaSeleccionada] = useState('');
+  const [idCatalogoSeleccionado, setIdCatalogoSeleccionado] = useState('');
+
+  const [sugerenciasProductos, setSugerenciasProductos] = useState([]);
+  const [cargandoSugerencias, setCargandoSugerencias] = useState(false);
+  const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
+  const [indiceSugerencia, setIndiceSugerencia] = useState(-1);
 
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
@@ -41,19 +175,44 @@ export default function CatalogoPublico() {
     }
   };
 
-  const cargarCatalogo = async () => {
+  const cargarRedesSociales = async () => {
+    try {
+      const { data } = await api.get('/public/catalogo/redes-sociales');
+
+      if (data.ok) {
+        setRedesSociales(data.redes_sociales || []);
+      } else {
+        setRedesSociales([]);
+      }
+    } catch (error) {
+      /*
+       * Las redes sociales no bloquean la consulta del catálogo. Si el
+       * servicio no está disponible, simplemente no mostramos este bloque.
+       */
+      console.warn('No se pudieron cargar las redes sociales públicas:', error);
+      setRedesSociales([]);
+    }
+  };
+
+  const cargarCatalogo = async ({
+    idCatalogo = idCatalogoSeleccionado,
+    textoBusqueda = busqueda,
+    categoria = categoriaSeleccionada,
+  } = {}) => {
     try {
       setCargando(true);
       setError('');
 
       const params = {};
 
-      if (busqueda.trim()) {
-        params.q = busqueda.trim();
+      if (idCatalogo) {
+        params.id_catalogo = idCatalogo;
+      } else if (String(textoBusqueda || '').trim()) {
+        params.q = String(textoBusqueda).trim();
       }
 
-      if (categoriaSeleccionada) {
-        params.categoria = categoriaSeleccionada;
+      if (categoria) {
+        params.categoria = categoria;
       }
 
       const { data } = await api.get('/public/catalogo', { params });
@@ -69,6 +228,96 @@ export default function CatalogoPublico() {
       setError('Error al conectar con el catálogo');
     } finally {
       setCargando(false);
+    }
+  };
+
+  const buscarSugerenciasProductos = async (termino, signal) => {
+    const texto = String(termino || '').trim();
+
+    if (texto.length < 2 || idCatalogoSeleccionado) {
+      setSugerenciasProductos([]);
+      setMostrarSugerencias(false);
+      setIndiceSugerencia(-1);
+      return;
+    }
+
+    try {
+      setCargandoSugerencias(true);
+      setMostrarSugerencias(true);
+
+      const { data } = await api.get('/public/catalogo', {
+        params: {
+          autocomplete: 1,
+          q: texto,
+          categoria: categoriaSeleccionada || undefined,
+          limit: 8,
+        },
+        signal,
+      });
+
+      if (data?.ok) {
+        setSugerenciasProductos(data.productos || []);
+        setIndiceSugerencia(-1);
+      } else {
+        setSugerenciasProductos([]);
+      }
+    } catch (error) {
+      if (error?.code === 'ERR_CANCELED' || error?.name === 'CanceledError') {
+        return;
+      }
+
+      console.error('Error al consultar sugerencias del catálogo:', error);
+      setSugerenciasProductos([]);
+    } finally {
+      if (!signal?.aborted) {
+        setCargandoSugerencias(false);
+      }
+    }
+  };
+
+  const seleccionarSugerencia = (producto) => {
+    const nombre =
+      producto?.titulo_catalogo ||
+      producto?.nombre_producto ||
+      producto?.nombre ||
+      '';
+
+    setBusqueda(nombre);
+    setIdCatalogoSeleccionado(producto?.id_catalogo || '');
+    setSugerenciasProductos([]);
+    setMostrarSugerencias(false);
+    setIndiceSugerencia(-1);
+  };
+
+  const manejarTeclaBusqueda = (event) => {
+    const hayOpciones = sugerenciasProductos.length > 0;
+
+    if (event.key === 'ArrowDown' && hayOpciones) {
+      event.preventDefault();
+      setMostrarSugerencias(true);
+      setIndiceSugerencia((actual) =>
+        actual >= sugerenciasProductos.length - 1 ? 0 : actual + 1
+      );
+      return;
+    }
+
+    if (event.key === 'ArrowUp' && hayOpciones) {
+      event.preventDefault();
+      setIndiceSugerencia((actual) =>
+        actual <= 0 ? sugerenciasProductos.length - 1 : actual - 1
+      );
+      return;
+    }
+
+    if (event.key === 'Enter' && indiceSugerencia >= 0 && hayOpciones) {
+      event.preventDefault();
+      seleccionarSugerencia(sugerenciasProductos[indiceSugerencia]);
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      setMostrarSugerencias(false);
+      setIndiceSugerencia(-1);
     }
   };
 
@@ -94,19 +343,53 @@ export default function CatalogoPublico() {
   const limpiarFiltros = () => {
     setBusqueda('');
     setCategoriaSeleccionada('');
+    setIdCatalogoSeleccionado('');
+    setSugerenciasProductos([]);
+    setMostrarSugerencias(false);
+    setIndiceSugerencia(-1);
   };
 
   useEffect(() => {
     cargarCategorias();
+    cargarRedesSociales();
   }, []);
 
   useEffect(() => {
+    if (idCatalogoSeleccionado) {
+      cargarCatalogo();
+      return undefined;
+    }
+
     const timer = setTimeout(() => {
       cargarCatalogo();
     }, 350);
 
     return () => clearTimeout(timer);
-  }, [busqueda, categoriaSeleccionada]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busqueda, categoriaSeleccionada, idCatalogoSeleccionado]);
+
+  useEffect(() => {
+    const texto = String(busqueda || '').trim();
+
+    if (idCatalogoSeleccionado || texto.length < 2) {
+      setSugerenciasProductos([]);
+      setMostrarSugerencias(false);
+      setIndiceSugerencia(-1);
+      setCargandoSugerencias(false);
+      return undefined;
+    }
+
+    const controlador = new AbortController();
+    const timer = setTimeout(() => {
+      buscarSugerenciasProductos(texto, controlador.signal);
+    }, 280);
+
+    return () => {
+      clearTimeout(timer);
+      controlador.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busqueda, categoriaSeleccionada, idCatalogoSeleccionado]);
 
   const totalProductos = productos.length;
 
@@ -122,6 +405,10 @@ export default function CatalogoPublico() {
         String(categoria.id_categoria) === String(categoriaSeleccionada)
     );
   }, [categoriaSeleccionada, categorias]);
+
+  const redesVisibles = useMemo(() => {
+    return (redesSociales || []).filter((red) => Boolean(String(red?.url || '').trim()));
+  }, [redesSociales]);
 
   const hayFiltros = busqueda.trim() || categoriaSeleccionada;
 
@@ -354,7 +641,7 @@ export default function CatalogoPublico() {
             </div>
           </nav>
 
-          <div className="mt-14 grid grid-cols-1 lg:grid-cols-[1fr_420px] gap-10 lg:items-center">
+          <div className="mt-12 grid grid-cols-1 gap-8 lg:grid-cols-[1fr_440px] lg:items-center">
             <div className="catalogo-fade-up" style={{ animationDelay: '.08s' }}>
               <div className="inline-flex items-center gap-2 rounded-full bg-white/15 border border-white/25 px-4 py-2 text-sm font-black text-white backdrop-blur-md shadow-lg shadow-sky-950/10">
                 <Sparkles size={17} />
@@ -373,49 +660,141 @@ export default function CatalogoPublico() {
                 antes de visitarnos.
               </p>
 
-            
+              <div className="mt-7 inline-flex items-center gap-2 rounded-2xl border border-white/20 bg-white/10 px-4 py-3 text-sm font-bold text-sky-50 backdrop-blur-md">
+                <ShieldCheck size={18} className="text-cyan-100" />
+                Consulta productos y promociones desde cualquier dispositivo.
+              </div>
             </div>
 
-
- {/* Tarjeta visual derecha */}
-            <div className="relative">
+            {/* Tarjeta de marca */}
+            <aside
+              className="catalogo-fade-up relative"
+              style={{ animationDelay: '.18s' }}
+            >
               <div className="absolute -inset-4 rounded-[3rem] bg-white/20 blur-2xl" />
 
-              <div className="relative rounded-[3rem] bg-white/15 border border-white/25 backdrop-blur-xl p-6 shadow-2xl shadow-sky-950/20">
-                <div className="rounded-[2.5rem] bg-white p-6 overflow-hidden relative">
-                  <div className="absolute -top-16 -right-16 w-40 h-40 rounded-full bg-cyan-100" />
-                  <div className="absolute -bottom-20 -left-20 w-48 h-48 rounded-full bg-sky-100" />
+              <div className="relative overflow-hidden rounded-[3rem] border border-white/25 bg-white/15 p-3 shadow-2xl shadow-sky-950/20 backdrop-blur-xl sm:p-4">
+                <div className="relative overflow-hidden rounded-[2.5rem] bg-white p-7 sm:p-8">
+                  <div className="absolute -top-16 -right-16 h-40 w-40 rounded-full bg-cyan-100" />
+                  <div className="absolute -bottom-24 -left-20 h-48 w-48 rounded-full bg-sky-100" />
 
-                  <div className="relative flex flex-col items-center text-center">
-                    <div className="relative w-32 h-32 rounded-[2.7rem] bg-gradient-to-br from-sky-50 via-white to-cyan-50 flex items-center justify-center shadow-inner border border-sky-100">
+                  <div className="relative flex min-h-[260px] flex-col items-center justify-center text-center">
+                    <div className="relative flex h-32 w-32 items-center justify-center rounded-[2.7rem] border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-cyan-50 shadow-inner">
                       <div className="absolute inset-3 rounded-[2.2rem] bg-white shadow-lg" />
-
                       <img
                         src={logoFarmacia}
                         alt="Logo Farmacias Shaddai"
-                        className="relative w-24 h-24 object-contain drop-shadow-sm"
+                        className="relative h-24 w-24 object-contain drop-shadow-sm"
                       />
                     </div>
 
-                    
+                    <span className="mt-5 inline-flex items-center gap-2 rounded-full border border-sky-100 bg-sky-50 px-4 py-2 text-xs font-black text-sky-700">
+                      <Sparkles size={15} />
+                      Catálogo digital
+                    </span>
 
-                    <p className="mt-2 text-slate-500 font-semibold">
-                      ¡Puedes consultar nuestras promociones!
+                    <h2 className="mt-4 text-2xl font-black leading-tight text-slate-900">
+                      Salud y bienestar,
+                      <span className="block text-sky-700">más cerca de ti.</span>
+                    </h2>
+
+                    <p className="mt-3 max-w-sm text-sm font-medium leading-relaxed text-slate-500">
+                      Conoce productos, promociones y disponibilidad antes de visitarnos.
                     </p>
-
-                   
-                    </div>
-                    </div>
-                    </div>
-                    </div>
+                  </div>
+                </div>
+              </div>
+            </aside>
           </div>
         </div>
       </header>
 
       {/* Contenido */}
-      <main className="relative max-w-7xl mx-auto px-5 pb-12">
+      <main className="relative mx-auto max-w-7xl px-5 pb-12">
+        {/* Barra de redes: visible al iniciar, sin competir con el encabezado */}
+        {redesVisibles.length > 0 && (
+          <section
+            className="catalogo-fade-up relative z-20 -mt-14"
+            style={{ animationDelay: '.22s' }}
+          >
+            <div className="rounded-[2rem] border border-white bg-white/95 p-4 shadow-2xl shadow-sky-900/10 backdrop-blur-xl sm:p-5">
+              <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(230px,0.8fr)_minmax(0,1.35fr)] lg:items-center lg:gap-6">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-600 to-cyan-500 text-white shadow-lg shadow-sky-500/20">
+                    <Share2 size={21} />
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-[0.16em] text-sky-700">
+                      Canales oficiales
+                    </p>
+                    <h2 className="mt-0.5 text-lg font-black text-slate-900">
+                      Síguenos y mantente informado
+                    </h2>
+                  </div>
+                </div>
+
+                <div className="grid w-full grid-cols-3 gap-2 sm:grid-cols-2 sm:gap-3 lg:grid-cols-3">
+                  {redesVisibles.map((red) => {
+                    const configuracion = obtenerConfiguracionRedSocial(red.clave);
+
+                    return (
+                      <a
+                        key={red.id_red_social || red.clave}
+                        href={red.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        title={red.nombre}
+                        aria-label={red.nombre}
+                        className="
+                          group flex aspect-square items-center justify-center
+                          rounded-2xl border border-slate-200 bg-white
+                          p-3 shadow-sm transition
+                          hover:-translate-y-0.5 hover:border-sky-200 hover:shadow-md
+                          sm:aspect-auto sm:min-h-[58px] sm:justify-start sm:gap-3
+                          sm:px-4 sm:py-3 lg:min-w-0 lg:px-3 xl:px-4
+                        "
+                      >
+                        <div
+                          className={`
+                            flex h-10 w-10 shrink-0 items-center justify-center
+                            rounded-2xl ${configuracion.clase}
+                          `}
+                        >
+                          <IconoRedSocial clave={red.clave} size={21} />
+                        </div>
+
+                        {/* En móvil se muestra únicamente el icono. */}
+                        <div className="hidden min-w-0 flex-1 sm:block">
+                          <p className="truncate text-sm font-black text-slate-800">
+                            {red.nombre}
+                          </p>
+
+                          {/* La descripción aparece solo cuando hay espacio suficiente. */}
+                          <p className="mt-0.5 hidden text-xs font-semibold text-slate-500 xl:block">
+                            {configuracion.textoAccion}
+                          </p>
+                        </div>
+
+                        <ArrowUpRight
+                          size={17}
+                          className="hidden shrink-0 text-slate-400 transition group-hover:text-sky-600 lg:block"
+                        />
+                      </a>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+
         {/* Filtros flotantes */}
-        <section className="-mt-20 relative z-10 catalogo-fade-up">
+        <section
+          className={`${redesVisibles.length > 0 ? 'mt-5' : '-mt-20'} relative ${
+            mostrarSugerencias ? 'z-40' : 'z-10'
+          } catalogo-fade-up`}
+        >
           <div className="bg-white/90 backdrop-blur-xl rounded-[2rem] border border-white shadow-2xl shadow-sky-900/10 p-5 lg:p-6">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-5">
               <div className="flex items-center gap-3">
@@ -455,15 +834,126 @@ export default function CatalogoPublico() {
                 <input
                   type="text"
                   value={busqueda}
-                  onChange={(e) => setBusqueda(e.target.value)}
+                  onChange={(e) => {
+                    setBusqueda(e.target.value);
+                    setIdCatalogoSeleccionado('');
+                    setMostrarSugerencias(e.target.value.trim().length >= 2);
+                    setIndiceSugerencia(-1);
+                  }}
+                  onFocus={() => {
+                    if (String(busqueda || '').trim().length >= 2 && !idCatalogoSeleccionado) {
+                      setMostrarSugerencias(true);
+                    }
+                  }}
+                  onBlur={() => {
+                    window.setTimeout(() => {
+                      setMostrarSugerencias(false);
+                      setIndiceSugerencia(-1);
+                    }, 160);
+                  }}
+                  onKeyDown={manejarTeclaBusqueda}
                   placeholder="Buscar medicamento o producto..."
-                  className="w-full pl-12 pr-4 py-4 rounded-2xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-4 focus:ring-sky-100 focus:border-sky-400 text-slate-700 font-bold transition"
+                  className="w-full pl-12 pr-12 py-4 rounded-2xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-4 focus:ring-sky-100 focus:border-sky-400 text-slate-700 font-bold transition"
+                  autoComplete="off"
                 />
+
+                {cargandoSugerencias && (
+                  <RefreshCw
+                    size={19}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 animate-spin text-sky-600"
+                  />
+                )}
+
+                {mostrarSugerencias &&
+                  !idCatalogoSeleccionado &&
+                  String(busqueda || '').trim().length >= 2 && (
+                    <div className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/15">
+                      {cargandoSugerencias ? (
+                        <div className="flex items-center gap-3 px-4 py-4 text-sm font-bold text-slate-500">
+                          <RefreshCw size={18} className="animate-spin text-sky-600" />
+                          Buscando productos...
+                        </div>
+                      ) : sugerenciasProductos.length === 0 ? (
+                        <div className="px-4 py-4 text-sm font-semibold text-slate-500">
+                          No encontramos productos con esa búsqueda.
+                        </div>
+                      ) : (
+                        <div className="max-h-80 overflow-y-auto py-2">
+                          {sugerenciasProductos.map((producto, indice) => {
+                            const nombre =
+                              producto.titulo_catalogo ||
+                              producto.nombre_producto ||
+                              producto.nombre ||
+                              'Producto sin nombre';
+                            const detalle = [
+                              producto.codigo_barras,
+                              producto.laboratorio,
+                              producto.presentacion,
+                            ]
+                              .filter(Boolean)
+                              .join(' · ');
+
+                            return (
+                              <button
+                                key={producto.id_catalogo}
+                                type="button"
+                                onMouseDown={(event) => event.preventDefault()}
+                                onClick={() => seleccionarSugerencia(producto)}
+                                className={`flex w-full items-center gap-3 px-4 py-3 text-left transition ${
+                                  indiceSugerencia === indice
+                                    ? 'bg-sky-50'
+                                    : 'hover:bg-slate-50'
+                                }`}
+                              >
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-100 bg-sky-50 text-sky-600">
+                                  {producto.imagen_url ? (
+                                    <img
+                                      src={producto.imagen_url}
+                                      alt=""
+                                      className="h-full w-full object-contain"
+                                    />
+                                  ) : (
+                                    <PackageSearch size={20} />
+                                  )}
+                                </div>
+
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate text-sm font-black text-slate-800">
+                                    {nombre}
+                                  </p>
+                                  <p className="mt-0.5 truncate text-xs font-semibold text-slate-500">
+                                    {detalle || producto.nombre_categoria || 'Catálogo digital'}
+                                  </p>
+                                </div>
+
+                                <span className="shrink-0 rounded-xl bg-sky-50 px-2.5 py-1 text-xs font-black text-sky-700">
+                                  {Number(
+                                    producto.precio_final ?? producto.precio_venta ?? 0
+                                  ).toLocaleString('es-MX', {
+                                    style: 'currency',
+                                    currency: 'MXN',
+                                  })}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
               </div>
 
               <select
                 value={categoriaSeleccionada}
-                onChange={(e) => setCategoriaSeleccionada(e.target.value)}
+                onChange={(e) => {
+                  setCategoriaSeleccionada(e.target.value);
+                  setIdCatalogoSeleccionado('');
+                  setIndiceSugerencia(-1);
+
+                  if (String(busqueda || '').trim().length >= 2) {
+                    setMostrarSugerencias(true);
+                  }
+                }}
                 className="w-full px-4 py-4 rounded-2xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-4 focus:ring-sky-100 focus:border-sky-400 text-slate-700 font-bold transition"
               >
                 <option value="">Todas las categorías</option>
@@ -574,10 +1064,10 @@ export default function CatalogoPublico() {
                   Explora nuestros productos
                 </h2>
 
-              <br />
+                <br />
               </div>
 
-             
+
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">

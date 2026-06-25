@@ -364,13 +364,7 @@ export default function CertificadoMedicoImprimible({
               className="cert-logo-farmacia"
             />
 
-            {logoUniversidadFinal && (
-              <img
-                src={logoUniversidadFinal}
-                alt="Logo universidad"
-                className="cert-logo-universidad"
-              />
-            )}
+           
           </div>
 
           <div className="cert-contacto">

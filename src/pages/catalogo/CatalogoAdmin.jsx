@@ -16,6 +16,13 @@ import {
   Save,
   Pill,
   AlertTriangle,
+  Share2,
+  Globe2,
+  MessageCircle,
+  MapPin,
+  ExternalLink,
+  CheckCircle2,
+  Loader2,
 } from 'lucide-react';
 import api from '../../api/axios';
 
@@ -45,6 +52,62 @@ const estadoInicialFormulario = {
   imagen_url_actual: '',
 };
 
+
+const configuracionRedes = {
+  FACEBOOK: {
+    abreviatura: 'f',
+    claseIcono: 'bg-blue-50 text-blue-700 border-blue-100',
+    placeholder: 'https://www.facebook.com/tu-pagina',
+  },
+  INSTAGRAM: {
+    abreviatura: 'IG',
+    claseIcono: 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-100',
+    placeholder: 'https://www.instagram.com/tu-cuenta',
+  },
+  WHATSAPP: {
+    abreviatura: 'WA',
+    claseIcono: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+    placeholder: 'https://wa.me/5215555555555',
+  },
+  TIKTOK: {
+    abreviatura: 'TT',
+    claseIcono: 'bg-slate-100 text-slate-800 border-slate-200',
+    placeholder: 'https://www.tiktok.com/@tu-cuenta',
+  },
+  X: {
+    abreviatura: 'X',
+    claseIcono: 'bg-slate-100 text-slate-900 border-slate-200',
+    placeholder: 'https://x.com/tu-cuenta',
+  },
+  YOUTUBE: {
+    abreviatura: 'YT',
+    claseIcono: 'bg-red-50 text-red-700 border-red-100',
+    placeholder: 'https://www.youtube.com/@tu-canal',
+  },
+  GOOGLE_MAPS: {
+    abreviatura: 'MAP',
+    claseIcono: 'bg-sky-50 text-sky-700 border-sky-100',
+    placeholder: 'https://maps.google.com/?q=tu-negocio',
+  },
+};
+
+const obtenerConfiguracionRed = (clave) => {
+  return (
+    configuracionRedes[clave] || {
+      abreviatura: 'WEB',
+      claseIcono: 'bg-slate-100 text-slate-700 border-slate-200',
+      placeholder: 'https://ejemplo.com',
+    }
+  );
+};
+
+const IconoRedSocial = ({ clave, size = 20 }) => {
+  if (clave === 'WHATSAPP') return <MessageCircle size={size} />;
+  if (clave === 'GOOGLE_MAPS') return <MapPin size={size} />;
+  if (clave === 'FACEBOOK' || clave === 'INSTAGRAM') return <Globe2 size={size} />;
+  return <Share2 size={size} />;
+};
+
 export default function CatalogoAdmin() {
   const [catalogo, setCatalogo] = useState([]);
   const [productosDisponibles, setProductosDisponibles] = useState([]);
@@ -58,6 +121,11 @@ export default function CatalogoAdmin() {
   const [modalAbierto, setModalAbierto] = useState(false);
   const [modoEdicion, setModoEdicion] = useState(false);
   const [formulario, setFormulario] = useState(estadoInicialFormulario);
+
+  const [modalRedesAbierto, setModalRedesAbierto] = useState(false);
+  const [redesSociales, setRedesSociales] = useState([]);
+  const [cargandoRedes, setCargandoRedes] = useState(false);
+  const [guardandoRedes, setGuardandoRedes] = useState(false);
 
   const cargarCatalogo = async () => {
     try {
@@ -105,6 +173,117 @@ export default function CatalogoAdmin() {
     cargarCatalogo();
     cargarProductosDisponibles();
   }, []);
+
+
+  const cargarRedesSociales = async () => {
+    try {
+      setCargandoRedes(true);
+
+      const { data } = await api.get('/catalogo/redes-sociales');
+
+      if (data.ok) {
+        setRedesSociales(data.redes_sociales || []);
+      }
+    } catch (error) {
+      console.error('Error al cargar redes sociales:', error);
+
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text:
+          error.response?.data?.mensaje ||
+          'No se pudieron cargar las redes sociales del catálogo.',
+      });
+    } finally {
+      setCargandoRedes(false);
+    }
+  };
+
+  const abrirModalRedes = async () => {
+    setModalRedesAbierto(true);
+    await cargarRedesSociales();
+  };
+
+  const cerrarModalRedes = () => {
+    if (guardandoRedes) return;
+
+    setModalRedesAbierto(false);
+    setRedesSociales([]);
+  };
+
+  const actualizarRedSocialLocal = (idRedSocial, campo, valor) => {
+    setRedesSociales((prev) =>
+      prev.map((red) =>
+        Number(red.id_red_social) === Number(idRedSocial)
+          ? { ...red, [campo]: valor }
+          : red
+      )
+    );
+  };
+
+  const guardarRedesSociales = async () => {
+    const redesActivasSinUrl = redesSociales.filter(
+      (red) => red.activo && !String(red.url || '').trim()
+    );
+
+    if (redesActivasSinUrl.length > 0) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Faltan enlaces',
+        text: `Captura un enlace válido para: ${redesActivasSinUrl
+          .map((red) => red.nombre)
+          .join(', ')}.`,
+      });
+      return;
+    }
+
+    try {
+      setGuardandoRedes(true);
+
+      for (const red of redesSociales) {
+        const { data } = await api.put(
+          `/catalogo/redes-sociales/${red.id_red_social}`,
+          {
+            url: String(red.url || '').trim() || null,
+            activo: Boolean(red.activo),
+            orden:
+              red.orden === '' || red.orden === null || red.orden === undefined
+                ? 0
+                : Number(red.orden),
+          }
+        );
+
+        if (!data?.ok) {
+          throw new Error(
+            data?.mensaje || `No se pudo guardar ${red.nombre}.`
+          );
+        }
+      }
+
+      await cargarRedesSociales();
+
+      Swal.fire({
+        icon: 'success',
+        title: 'Redes sociales actualizadas',
+        text: 'La configuración se guardó correctamente.',
+        timer: 1500,
+        showConfirmButton: false,
+      });
+    } catch (error) {
+      console.error('Error al guardar redes sociales:', error);
+
+      Swal.fire({
+        icon: 'error',
+        title: 'No se pudo guardar',
+        text:
+          error.response?.data?.mensaje ||
+          error.message ||
+          'No se pudieron actualizar las redes sociales.',
+      });
+    } finally {
+      setGuardandoRedes(false);
+    }
+  };
 
   const catalogoFiltrado = useMemo(() => {
     const texto = busqueda.trim().toLowerCase();
@@ -403,14 +582,25 @@ export default function CatalogoAdmin() {
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={abrirModalNuevo}
-            className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-white text-sky-700 hover:bg-sky-50 font-black shadow-lg transition"
-          >
-            <Plus size={20} />
-            Agregar producto
-          </button>
+          <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
+            <button
+              type="button"
+              onClick={abrirModalRedes}
+              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-950/20 hover:bg-slate-950/30 border border-white/25 text-white font-black transition"
+            >
+              <Share2 size={20} />
+              Redes y contacto
+            </button>
+
+            <button
+              type="button"
+              onClick={abrirModalNuevo}
+              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-white text-sky-700 hover:bg-sky-50 font-black shadow-lg transition"
+            >
+              <Plus size={20} />
+              Agregar producto
+            </button>
+          </div>
         </div>
       </section>
 
@@ -467,6 +657,7 @@ export default function CatalogoAdmin() {
             onClick={() => {
               cargarCatalogo();
               cargarProductosDisponibles();
+              if (modalRedesAbierto) cargarRedesSociales();
             }}
             className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-black transition"
           >
@@ -667,6 +858,221 @@ export default function CatalogoAdmin() {
           </div>
         )}
       </section>
+
+      {/* Modal redes sociales */}
+      {modalRedesAbierto && (
+        <div className="fixed inset-0 z-[9998] bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-5xl max-h-[92vh] overflow-y-auto bg-white rounded-[2rem] shadow-2xl">
+            <div className="sticky top-0 z-20 bg-white border-b border-slate-100 p-5 flex items-start justify-between gap-4 rounded-t-[2rem]">
+              <div className="min-w-0">
+                <div className="inline-flex items-center gap-2 rounded-2xl bg-sky-50 border border-sky-100 px-3 py-2 text-sm font-black text-sky-700">
+                  <Share2 size={18} />
+                  Redes sociales y contacto
+                </div>
+                <h2 className="mt-3 text-2xl font-black text-slate-900">
+                  Configuración pública del catálogo
+                </h2>
+                <p className="mt-1 text-sm text-slate-500 font-semibold">
+                  Captura el enlace de cada red y activa únicamente los botones que deseas mostrar a tus clientes.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={cerrarModalRedes}
+                disabled={guardandoRedes}
+                className="w-11 h-11 rounded-2xl bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-600 flex items-center justify-center transition disabled:opacity-60 shrink-0"
+                title="Cerrar"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="p-5 lg:p-6">
+              <div className="mb-5 rounded-3xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-start gap-3 text-amber-800">
+                <AlertTriangle size={21} className="mt-0.5 shrink-0" />
+                <p className="text-sm font-semibold leading-relaxed">
+                  Una red solo se mostrará en el catálogo público cuando tenga un enlace válido y esté marcada como visible.
+                </p>
+              </div>
+
+              {cargandoRedes ? (
+                <div className="py-16 flex flex-col items-center justify-center text-slate-500">
+                  <Loader2 size={34} className="animate-spin text-sky-600" />
+                  <p className="mt-3 font-bold">Cargando redes sociales...</p>
+                </div>
+              ) : redesSociales.length === 0 ? (
+                <div className="rounded-3xl bg-slate-50 border border-slate-100 px-5 py-10 text-center">
+                  <Share2 size={38} className="mx-auto text-slate-400" />
+                  <p className="mt-3 font-black text-slate-700">
+                    No hay redes sociales configuradas.
+                  </p>
+                 
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {redesSociales.map((red) => {
+                    const configuracion = obtenerConfiguracionRed(red.clave);
+                    const tieneUrl = Boolean(String(red.url || '').trim());
+
+                    return (
+                      <article
+                        key={red.id_red_social}
+                        className={`rounded-3xl border p-4 transition ${
+                          red.activo
+                            ? 'border-sky-200 bg-sky-50/40'
+                            : 'border-slate-200 bg-white'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div
+                              className={`w-11 h-11 rounded-2xl border flex items-center justify-center font-black text-xs shrink-0 ${configuracion.claseIcono}`}
+                            >
+                              {red.clave === 'WHATSAPP' || red.clave === 'GOOGLE_MAPS' ? (
+                                <IconoRedSocial clave={red.clave} size={21} />
+                              ) : (
+                                configuracion.abreviatura
+                              )}
+                            </div>
+
+                            <div className="min-w-0">
+                              <p className="font-black text-slate-900 truncate">
+                                {red.nombre}
+                              </p>
+                              <p className="text-xs text-slate-500 font-semibold truncate">
+                                {red.clave}
+                              </p>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              actualizarRedSocialLocal(
+                                red.id_red_social,
+                                'activo',
+                                !red.activo
+                              )
+                            }
+                            disabled={guardandoRedes}
+                            className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-black transition disabled:opacity-60 ${
+                              red.activo
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                                : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'
+                            }`}
+                          >
+                            {red.activo ? <CheckCircle2 size={16} /> : <EyeOff size={16} />}
+                            {red.activo ? 'Visible' : 'Oculto'}
+                          </button>
+                        </div>
+
+                        <label className="block mt-4">
+                          <span className="text-xs font-black uppercase tracking-wide text-slate-500">
+                            Enlace público
+                          </span>
+                          <div className="relative mt-1.5">
+                            <Globe2
+                              size={18}
+                              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
+                            />
+                            <input
+                              type="url"
+                              value={red.url || ''}
+                              onChange={(e) =>
+                                actualizarRedSocialLocal(
+                                  red.id_red_social,
+                                  'url',
+                                  e.target.value
+                                )
+                              }
+                              disabled={guardandoRedes}
+                              placeholder={configuracion.placeholder}
+                              className="w-full pl-10 pr-11 py-3 rounded-2xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 text-sm font-semibold text-slate-700 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                            />
+
+                            {tieneUrl && (
+                              <a
+                                href={red.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-xl bg-sky-50 text-sky-700 hover:bg-sky-100 flex items-center justify-center transition"
+                                title="Abrir enlace"
+                              >
+                                <ExternalLink size={16} />
+                              </a>
+                            )}
+                          </div>
+                        </label>
+
+                        <div className="mt-4 flex items-end justify-between gap-3">
+                          <label className="block w-28">
+                            <span className="text-xs font-black uppercase tracking-wide text-slate-500">
+                              Orden
+                            </span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="1"
+                              value={red.orden ?? 0}
+                              onChange={(e) =>
+                                actualizarRedSocialLocal(
+                                  red.id_red_social,
+                                  'orden',
+                                  e.target.value
+                                )
+                              }
+                              disabled={guardandoRedes}
+                              className="mt-1.5 w-full px-3 py-2.5 rounded-2xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm font-black text-slate-700 disabled:bg-slate-100"
+                            />
+                          </label>
+
+                          <div className="text-right">
+                            <p className="text-xs font-black text-slate-500">Estado público</p>
+                            <p className={`mt-1 text-sm font-black ${red.activo && tieneUrl ? 'text-emerald-700' : 'text-slate-400'}`}>
+                              {red.activo && tieneUrl ? 'Se mostrará' : 'No se mostrará'}
+                            </p>
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div className="mt-6 flex flex-col sm:flex-row justify-end gap-3 border-t border-slate-100 pt-5">
+                <button
+                  type="button"
+                  onClick={cerrarModalRedes}
+                  disabled={guardandoRedes}
+                  className="px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-black transition disabled:opacity-60"
+                >
+                  Cerrar
+                </button>
+
+                <button
+                  type="button"
+                  onClick={guardarRedesSociales}
+                  disabled={guardandoRedes || cargandoRedes || redesSociales.length === 0}
+                  className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-2xl bg-sky-600 hover:bg-sky-700 text-white font-black shadow-lg shadow-sky-900/20 transition disabled:opacity-60"
+                >
+                  {guardandoRedes ? (
+                    <>
+                      <Loader2 size={20} className="animate-spin" />
+                      Guardando...
+                    </>
+                  ) : (
+                    <>
+                      <Save size={20} />
+                      Guardar redes sociales
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal */}
       {modalAbierto && (

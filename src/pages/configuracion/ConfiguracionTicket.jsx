@@ -26,12 +26,83 @@ import {
 import Swal from 'sweetalert2';
 import api from '../../api/axios';
 
+const FORMATOS_TICKET = Object.freeze({
+  '58mm_30': {
+    clave: '58mm_30',
+    etiqueta: '58 mm · 30 columnas',
+    descripcion: 'Para impresoras térmicas de 58 mm configuradas a 30 columnas.',
+    ancho_mm: 58,
+    columnas: 30,
+  },
+  '80mm_48': {
+    clave: '80mm_48',
+    etiqueta: '80 mm · 48 columnas',
+    descripcion: 'Para impresoras térmicas de 80 mm configuradas a 48 columnas.',
+    ancho_mm: 80,
+    columnas: 48,
+  },
+});
+
+const FORMATO_TICKET_DEFAULT = '58mm_30';
+
+const normalizarFormatoTicket = (
+  valor,
+  valorDefault = FORMATO_TICKET_DEFAULT
+) => {
+  const texto = String(valor ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '');
+
+  if (
+    [
+      '80mm_48',
+      '80mm-48',
+      '80',
+      '48',
+      '80mm',
+      '80mmreceipt',
+      '80mmxreceipt(48columns)',
+    ].includes(texto) ||
+    texto.includes('80') ||
+    texto.includes('48column')
+  ) {
+    return '80mm_48';
+  }
+
+  if (
+    [
+      '58mm_30',
+      '58mm-30',
+      '58',
+      '30',
+      '58mm',
+      '58mmreceipt',
+      '58mmxreceipt(30columns)',
+    ].includes(texto) ||
+    texto.includes('58') ||
+    texto.includes('30column')
+  ) {
+    return '58mm_30';
+  }
+
+  return FORMATOS_TICKET[valorDefault]
+    ? valorDefault
+    : FORMATO_TICKET_DEFAULT;
+};
+
+const obtenerFormatoTicket = (valor) =>
+  FORMATOS_TICKET[normalizarFormatoTicket(valor)];
+
 const CONFIGURACION_DEFAULT = {
   nombre_negocio: 'FARMACIAS SHADDAI',
   encabezado: [],
   rfc: '',
   direccion: '',
   telefono: '',
+
+  // 58 mm = 30 columnas; 80 mm = 48 columnas.
+  formato_ticket: FORMATO_TICKET_DEFAULT,
 
   mostrar_nombre_negocio: true,
   mostrar_sucursal: true,
@@ -238,13 +309,27 @@ const normalizarLineas = (valor, limite = 8) => {
 };
 
 const normalizarConfiguracion = (configuracion = {}) => {
+  const entrada =
+    configuracion && typeof configuracion === 'object' ? configuracion : {};
+
   const combinada = {
     ...CONFIGURACION_DEFAULT,
-    ...(configuracion || {}),
+    ...entrada,
   };
 
   return {
     ...combinada,
+
+    formato_ticket: normalizarFormatoTicket(
+      entrada.formato_ticket ??
+        entrada.formatoTicket ??
+        entrada.formato_papel ??
+        entrada.formatoPapel ??
+        entrada.ancho_ticket_mm ??
+        entrada.ticket_width_mm ??
+        entrada.ticketWidth ??
+        combinada.formato_ticket
+    ),
 
     nombre_negocio:
       String(combinada.nombre_negocio || '')
@@ -472,8 +557,26 @@ const partirTexto = (texto = '', largo = 16) => {
   return lineas.length ? lineas : [''];
 };
 
+const obtenerColumnasArticulo = (ancho) => {
+  const columnasCantidad = 4;
+  const columnasImporte = ancho >= 45 ? 10 : 8;
+  const columnasDescripcion = Math.max(
+    ancho - columnasCantidad - columnasImporte - 2,
+    12
+  );
+
+  return {
+    columnasCantidad,
+    columnasDescripcion,
+    columnasImporte,
+    sangriaDetalle: columnasCantidad + 1,
+  };
+};
+
 const generarVistaPrevia = (configuracion) => {
-  const ancho = 30;
+  const formatoTicket = obtenerFormatoTicket(configuracion?.formato_ticket);
+  const ancho = formatoTicket.columnas;
+  const columnasArticulo = obtenerColumnasArticulo(ancho);
   const lineas = [];
 
   const productos = [
@@ -559,28 +662,52 @@ const generarVistaPrevia = (configuracion) => {
   if (datosVenta.length > 0) lineas.push('');
 
   if (configuracion.mostrar_articulos) {
-    lineas.push('CANT DESCRIPCION       IMPORTE');
+    const {
+      columnasCantidad,
+      columnasDescripcion,
+      columnasImporte,
+      sangriaDetalle,
+    } = columnasArticulo;
+
+    lineas.push(
+      `${'CANT'.padEnd(columnasCantidad, ' ')} ${'DESCRIPCION'
+        .padEnd(columnasDescripcion, ' ')
+        .slice(0, columnasDescripcion)} ${'IMPORTE'.padStart(
+        columnasImporte,
+        ' '
+      )}`.slice(0, ancho)
+    );
     lineas.push('='.repeat(ancho));
 
     productos.forEach((producto) => {
-      const nombreLineas = partirTexto(producto.nombre, 16);
+      const nombreLineas = partirTexto(
+        producto.nombre,
+        columnasDescripcion
+      );
+      const sangria = ' '.repeat(sangriaDetalle);
 
       lineas.push(
-        `${String(producto.cantidad).padEnd(3, ' ')} ${nombreLineas[0]
-          .padEnd(16, ' ')
-          .slice(0, 16)} ${producto.importe.toFixed(2).padStart(8, ' ')}`
+        `${String(producto.cantidad)
+          .padEnd(columnasCantidad, ' ')
+          .slice(0, columnasCantidad)} ${nombreLineas[0]
+          .padEnd(columnasDescripcion, ' ')
+          .slice(0, columnasDescripcion)} ${producto.importe
+          .toFixed(2)
+          .padStart(columnasImporte, ' ')}`.slice(0, ancho)
       );
 
       nombreLineas.slice(1).forEach((lineaExtra) => {
-        lineas.push(`    ${lineaExtra}`);
+        lineas.push(`${sangria}${lineaExtra}`.slice(0, ancho));
       });
 
       if (configuracion.mostrar_lote) {
-        lineas.push(`    Lote: ${producto.lote}`);
+        lineas.push(`${sangria}Lote: ${producto.lote}`.slice(0, ancho));
       }
 
       if (configuracion.mostrar_caducidad) {
-        lineas.push(`    Cad: ${producto.caducidad}`);
+        lineas.push(
+          `${sangria}Cad: ${producto.caducidad}`.slice(0, ancho)
+        );
       }
     });
   }
@@ -751,6 +878,10 @@ export default function ConfiguracionTicket() {
   const [probandoCorreo, setProbandoCorreo] = useState(false);
 
   const esConfiguracionSucursal = Boolean(idSucursalSeleccionada);
+
+  const formatoTicketSeleccionado = useMemo(() => {
+    return obtenerFormatoTicket(formulario.formato_ticket);
+  }, [formulario.formato_ticket]);
 
   const sucursalSeleccionada = useMemo(() => {
     if (!esConfiguracionSucursal) return null;
@@ -1353,6 +1484,75 @@ export default function ConfiguracionTicket() {
 
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="mb-5 flex items-start gap-3">
+              <div className="rounded-xl bg-indigo-50 p-2 text-indigo-700">
+                <ReceiptText size={20} />
+              </div>
+
+              <div>
+                <h2 className="font-bold text-slate-800">
+                  Formato físico del ticket
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Elige el ancho y número de columnas que utilizará la sucursal
+                  al generar los tickets físicos.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              {Object.values(FORMATOS_TICKET).map((formato) => {
+                const seleccionado =
+                  formulario.formato_ticket === formato.clave;
+
+                return (
+                  <button
+                    key={formato.clave}
+                    type="button"
+                    role="radio"
+                    aria-checked={seleccionado}
+                    onClick={() =>
+                      actualizarCampo('formato_ticket', formato.clave)
+                    }
+                    className={`rounded-2xl border p-4 text-left transition ${
+                      seleccionado
+                        ? 'border-sky-600 bg-sky-50 ring-4 ring-sky-100'
+                        : 'border-slate-200 bg-white hover:border-sky-300'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-bold text-slate-800">
+                          {formato.etiqueta}
+                        </p>
+                        <p className="mt-1 text-sm leading-5 text-slate-500">
+                          {formato.descripcion}
+                        </p>
+                      </div>
+
+                      <span
+                        className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${
+                          seleccionado
+                            ? 'bg-sky-600 text-white'
+                            : 'bg-slate-100 text-slate-600'
+                        }`}
+                      >
+                        {formato.ancho_mm} mm
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900">
+              Para una impresora de 80 mm como la Star BSC10, selecciona
+              <strong> 80 mm · 48 columnas</strong> aquí y, en Windows, usa el
+              tamaño de papel <strong>80mm x Receipt (48 Columns)</strong>.
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="mb-5 flex items-start gap-3">
               <div className="rounded-xl bg-sky-50 p-2 text-sky-700">
                 <Building2 size={20} />
               </div>
@@ -1871,13 +2071,14 @@ export default function ConfiguracionTicket() {
                 <div>
                   <h2 className="font-bold text-slate-800">Vista previa</h2>
                   <p className="text-xs text-slate-500">
-                    Simulación local, no imprime.
+                    Simulación local de {formatoTicketSeleccionado.columnas}{' '}
+                    columnas, no imprime.
                   </p>
                 </div>
               </div>
 
               <span className="rounded-full bg-sky-100 px-2.5 py-1 text-xs font-bold text-sky-700">
-                58 mm
+                {formatoTicketSeleccionado.etiqueta}
               </span>
             </div>
 

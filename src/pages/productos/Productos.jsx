@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Swal from 'sweetalert2';
 import {
   Plus,
@@ -10,6 +10,7 @@ import {
   X,
   Save,
   Camera,
+  Loader2,
 } from 'lucide-react';
 
 import api from '../../api/axios';
@@ -34,6 +35,13 @@ export default function Productos() {
   const [categorias, setCategorias] = useState([]);
 
   const [buscar, setBuscar] = useState('');
+  const [sugerenciasProductos, setSugerenciasProductos] = useState([]);
+  const [cargandoSugerencias, setCargandoSugerencias] = useState(false);
+  const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
+  const [indiceSugerencia, setIndiceSugerencia] = useState(-1);
+  const [idProductoSeleccionado, setIdProductoSeleccionado] = useState('');
+  const solicitudSugerenciasRef = useRef(0);
+
   const [busquedaCategoria, setBusquedaCategoria] = useState('');
   const [mostrarCategorias, setMostrarCategorias] = useState(false);
 
@@ -66,14 +74,21 @@ export default function Productos() {
     }
   };
 
-  const cargarProductos = async () => {
+  const cargarProductos = async ({
+    termino = buscar,
+    idProducto = idProductoSeleccionado,
+  } = {}) => {
     try {
       setCargando(true);
 
       const params = new URLSearchParams();
+      const texto = String(termino || '').trim();
+      const idProductoNumerico = Number(idProducto || 0);
 
-      if (buscar.trim()) {
-        params.append('buscar', buscar.trim());
+      if (Number.isInteger(idProductoNumerico) && idProductoNumerico > 0) {
+        params.append('id_producto', String(idProductoNumerico));
+      } else if (texto) {
+        params.append('buscar', texto);
       }
 
       const { data } = await api.get(`/productos?${params.toString()}`);
@@ -87,10 +102,110 @@ export default function Productos() {
       Swal.fire({
         icon: 'error',
         title: 'Error',
-        text: 'No se pudieron cargar los productos.',
+        text:
+          error.response?.data?.mensaje ||
+          'No se pudieron cargar los productos.',
       });
     } finally {
       setCargando(false);
+    }
+  };
+
+  const buscarSugerenciasProductos = async (termino) => {
+    const texto = String(termino || '').trim();
+
+    if (texto.length < 2) {
+      setCargandoSugerencias(false);
+      setSugerenciasProductos([]);
+      setMostrarSugerencias(false);
+      setIndiceSugerencia(-1);
+      return;
+    }
+
+    const solicitudActual = solicitudSugerenciasRef.current + 1;
+    solicitudSugerenciasRef.current = solicitudActual;
+
+    try {
+      setCargandoSugerencias(true);
+      setMostrarSugerencias(true);
+
+      const params = new URLSearchParams();
+      params.append('buscar', texto);
+      params.append('autocomplete', '1');
+      params.append('limit', '8');
+
+      const { data } = await api.get(`/productos?${params.toString()}`);
+
+      if (solicitudActual !== solicitudSugerenciasRef.current) return;
+
+      if (data.ok) {
+        setSugerenciasProductos(data.productos || []);
+      } else {
+        setSugerenciasProductos([]);
+      }
+
+      setIndiceSugerencia(-1);
+    } catch (error) {
+      if (solicitudActual !== solicitudSugerenciasRef.current) return;
+
+      console.error('Error al buscar sugerencias de productos:', error);
+      setSugerenciasProductos([]);
+    } finally {
+      if (solicitudActual === solicitudSugerenciasRef.current) {
+        setCargandoSugerencias(false);
+      }
+    }
+  };
+
+  const seleccionarSugerenciaProducto = async (producto) => {
+    const idProducto = Number(producto?.id_producto || 0);
+
+    if (!Number.isInteger(idProducto) || idProducto <= 0) return;
+
+    solicitudSugerenciasRef.current += 1;
+
+    setBuscar(producto.nombre || '');
+    setIdProductoSeleccionado(idProducto);
+    setCargandoSugerencias(false);
+    setSugerenciasProductos([]);
+    setMostrarSugerencias(false);
+    setIndiceSugerencia(-1);
+
+    await cargarProductos({
+      termino: producto.nombre || '',
+      idProducto,
+    });
+  };
+
+  const ejecutarBusquedaProductos = async () => {
+    solicitudSugerenciasRef.current += 1;
+
+    setIdProductoSeleccionado('');
+    setCargandoSugerencias(false);
+    setSugerenciasProductos([]);
+    setMostrarSugerencias(false);
+    setIndiceSugerencia(-1);
+
+    await cargarProductos({
+      termino: buscar,
+      idProducto: null,
+    });
+  };
+
+  const manejarCambioBusqueda = (valor) => {
+    solicitudSugerenciasRef.current += 1;
+
+    setBuscar(valor);
+    setIdProductoSeleccionado('');
+    setIndiceSugerencia(-1);
+
+    if (String(valor || '').trim().length >= 2) {
+      setCargandoSugerencias(true);
+      setMostrarSugerencias(true);
+    } else {
+      setCargandoSugerencias(false);
+      setSugerenciasProductos([]);
+      setMostrarSugerencias(false);
     }
   };
 
@@ -98,6 +213,21 @@ export default function Productos() {
     cargarCategorias();
     cargarProductos();
   }, []);
+
+  useEffect(() => {
+    const texto = String(buscar || '').trim();
+
+    if (idProductoSeleccionado || texto.length < 2) {
+      return undefined;
+    }
+
+    const temporizador = setTimeout(() => {
+      buscarSugerenciasProductos(texto);
+    }, 300);
+
+    return () => clearTimeout(temporizador);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buscar, idProductoSeleccionado]);
 
   const abrirNuevo = () => {
     setForm(formInicial);
@@ -334,7 +464,7 @@ export default function Productos() {
 
   return (
     <div className="space-y-6">
-      <section className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+      <section className="relative z-30 overflow-visible bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
         <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5">
           <div>
             <div className="flex items-center gap-3">
@@ -364,7 +494,7 @@ export default function Productos() {
         </div>
 
         <div className="mt-6 flex flex-col md:flex-row gap-3">
-          <div className="relative flex-1">
+          <div className="relative z-50 flex-1">
             <Search
               className="absolute left-4 top-3.5 text-slate-400"
               size={20}
@@ -372,22 +502,152 @@ export default function Productos() {
 
             <input
               value={buscar}
-              onChange={(e) => setBuscar(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') cargarProductos();
+              onChange={(e) => manejarCambioBusqueda(e.target.value)}
+              onFocus={() => {
+                if (String(buscar || '').trim().length >= 2) {
+                  setMostrarSugerencias(true);
+                }
               }}
-              className="w-full pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+              onBlur={() => {
+                window.setTimeout(() => {
+                  setMostrarSugerencias(false);
+                  setIndiceSugerencia(-1);
+                }, 160);
+              }}
+              onKeyDown={(e) => {
+                const totalSugerencias = sugerenciasProductos.length;
+
+                if (
+                  e.key === 'ArrowDown' &&
+                  mostrarSugerencias &&
+                  totalSugerencias > 0
+                ) {
+                  e.preventDefault();
+                  setIndiceSugerencia((indice) =>
+                    indice < totalSugerencias - 1 ? indice + 1 : 0
+                  );
+                  return;
+                }
+
+                if (
+                  e.key === 'ArrowUp' &&
+                  mostrarSugerencias &&
+                  totalSugerencias > 0
+                ) {
+                  e.preventDefault();
+                  setIndiceSugerencia((indice) =>
+                    indice > 0 ? indice - 1 : totalSugerencias - 1
+                  );
+                  return;
+                }
+
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+
+                  if (
+                    mostrarSugerencias &&
+                    indiceSugerencia >= 0 &&
+                    sugerenciasProductos[indiceSugerencia]
+                  ) {
+                    seleccionarSugerenciaProducto(
+                      sugerenciasProductos[indiceSugerencia]
+                    );
+                    return;
+                  }
+
+                  ejecutarBusquedaProductos();
+                  return;
+                }
+
+                if (e.key === 'Escape') {
+                  setMostrarSugerencias(false);
+                  setIndiceSugerencia(-1);
+                }
+              }}
+              className="w-full pl-12 pr-12 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
               placeholder="Buscar por nombre, código, laboratorio o presentación..."
+              autoComplete="off"
             />
+
+            {cargandoSugerencias && (
+              <Loader2
+                size={20}
+                className="absolute right-4 top-1/2 -translate-y-1/2 animate-spin text-sky-600"
+              />
+            )}
+
+            {mostrarSugerencias && String(buscar || '').trim().length >= 2 && (
+              <div className="absolute left-0 right-0 top-full z-[80] mt-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/15">
+                {cargandoSugerencias ? (
+                  <div className="flex items-center gap-3 px-4 py-4 text-sm font-semibold text-slate-500">
+                    <Loader2 size={19} className="animate-spin text-sky-600" />
+                    Buscando productos...
+                  </div>
+                ) : sugerenciasProductos.length === 0 ? (
+                  <div className="px-4 py-4 text-sm font-semibold text-slate-500">
+                    No se encontraron productos.
+                  </div>
+                ) : (
+                  <div className="max-h-80 overflow-y-auto py-2">
+                    {sugerenciasProductos.map((producto, indice) => {
+                      const seleccionado = indice === indiceSugerencia;
+                      const detalle = [
+                        producto.codigo_barras || 'Sin código',
+                        producto.laboratorio,
+                        producto.presentacion,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ');
+
+                      return (
+                        <button
+                          key={producto.id_producto}
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            seleccionarSugerenciaProducto(producto);
+                          }}
+                          className={`flex w-full items-start justify-between gap-4 px-4 py-3 text-left transition ${
+                            seleccionado
+                              ? 'bg-sky-50 text-sky-800'
+                              : 'text-slate-700 hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-black">
+                              {producto.nombre || 'Producto sin nombre'}
+                            </p>
+                            <p className="mt-0.5 truncate text-xs font-semibold text-slate-500">
+                              {detalle || 'Sin información adicional'}
+                            </p>
+                          </div>
+
+                          <span
+                            className={`shrink-0 rounded-full px-3 py-1 text-xs font-black ${
+                              producto.activo
+                                ? 'bg-emerald-50 text-emerald-700'
+                                : 'bg-slate-100 text-slate-600'
+                            }`}
+                          >
+                            {producto.activo ? 'Activo' : 'Inactivo'}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <button
             type="button"
-            onClick={cargarProductos}
-            className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition"
+            onClick={ejecutarBusquedaProductos}
+            disabled={cargando}
+            className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition disabled:opacity-60"
           >
             <RefreshCw size={19} className={cargando ? 'animate-spin' : ''} />
-            Buscar
+            {cargando ? 'Buscando...' : 'Buscar'}
           </button>
         </div>
 
@@ -434,7 +694,7 @@ export default function Productos() {
         </div>
       </section>
 
-      <section className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+      <section className="relative z-0 bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1100px]">
             <thead className="bg-slate-50 border-b border-slate-100">

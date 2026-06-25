@@ -28,7 +28,7 @@ export const permisosPorRol = {
   ],
 
   CAJERO: [
-    'dashboard',
+   /* 'dashboard',*/
     'pos',
     'stock-sucursales',
     'caja',

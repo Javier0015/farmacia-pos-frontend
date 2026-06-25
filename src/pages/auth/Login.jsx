@@ -51,6 +51,11 @@ export default function Login() {
       return '/app/doctor-shaddai/fila-espera';
     }
 
+     if (rol === 'CAJERO') {
+      return '/app/pos';
+    }
+
+
     return '/app/dashboard';
   };
 
