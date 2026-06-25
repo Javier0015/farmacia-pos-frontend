@@ -959,8 +959,8 @@ export default function CatalogoPublico() {
                                 onMouseDown={(event) => event.preventDefault()}
                                 onClick={() => seleccionarSugerencia(producto)}
                                 className={`flex w-full items-center gap-3 px-4 py-3 text-left transition ${indiceSugerencia === indice
-                                    ? 'bg-sky-50'
-                                    : 'hover:bg-slate-50'
+                                  ? 'bg-sky-50'
+                                  : 'hover:bg-slate-50'
                                   }`}
                               >
                                 <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-100 bg-sky-50 text-sky-600">
@@ -1144,7 +1144,7 @@ export default function CatalogoPublico() {
       {/* Selector de sucursal para WhatsApp */}
       {modalWhatsappAbierto && (
         <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-3xl overflow-hidden rounded-[2rem] bg-white shadow-2xl">
+          <div className="w-full max-w-7xl overflow-hidden rounded-[2rem] bg-white shadow-2xl">
             <div className="flex items-start justify-between gap-4 border-b border-slate-100 p-5 sm:p-6">
               <div className="flex min-w-0 items-start gap-3">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-600/20">
@@ -1195,7 +1195,7 @@ export default function CatalogoPublico() {
                   </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   {sucursalesWhatsapp.map((sucursal) => (
                     <article
                       key={sucursal.id_sucursal}
@@ -1209,9 +1209,7 @@ export default function CatalogoPublico() {
                           <h3 className="font-black leading-snug text-slate-900">
                             {sucursal.nombre}
                           </h3>
-                          <p className="mt-0.5 text-xs font-bold text-emerald-700">
-                            {sucursal.clave || 'Sucursal'}
-                          </p>
+
                         </div>
                       </div>
 
