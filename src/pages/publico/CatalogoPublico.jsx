@@ -47,10 +47,6 @@ const CONFIGURACION_REDES_SOCIALES = {
     clase: 'border-red-100 bg-red-50 text-red-600',
     textoAccion: 'Visitar canal oficial',
   },
-  GOOGLE_MAPS: {
-    clase: 'border-emerald-100 bg-emerald-50 text-emerald-700',
-    textoAccion: 'Ver ubicación y cómo llegar',
-  },
 };
 
 const obtenerConfiguracionRedSocial = (clave) => {
@@ -135,9 +131,6 @@ function IconoRedSocial({ clave, size = 22 }) {
         </svg>
       );
 
-    case 'GOOGLE_MAPS':
-      return <MapPin size={size + 1} strokeWidth={2.25} />;
-
     default:
       return <Share2 size={size} strokeWidth={2.2} />;
   }
@@ -147,6 +140,10 @@ export default function CatalogoPublico() {
   const [productos, setProductos] = useState([]);
   const [categorias, setCategorias] = useState([]);
   const [redesSociales, setRedesSociales] = useState([]);
+  const [modalWhatsappAbierto, setModalWhatsappAbierto] = useState(false);
+  const [sucursalesWhatsapp, setSucursalesWhatsapp] = useState([]);
+  const [cargandoSucursalesWhatsapp, setCargandoSucursalesWhatsapp] = useState(false);
+  const [errorSucursalesWhatsapp, setErrorSucursalesWhatsapp] = useState('');
 
   const [busqueda, setBusqueda] = useState('');
   const [categoriaSeleccionada, setCategoriaSeleccionada] = useState('');
@@ -192,6 +189,38 @@ export default function CatalogoPublico() {
       console.warn('No se pudieron cargar las redes sociales públicas:', error);
       setRedesSociales([]);
     }
+  };
+
+  const cargarSucursalesWhatsapp = async () => {
+    try {
+      setCargandoSucursalesWhatsapp(true);
+      setErrorSucursalesWhatsapp('');
+
+      const { data } = await api.get('/public/catalogo/sucursales-whatsapp');
+
+      if (data.ok) {
+        setSucursalesWhatsapp(data.sucursales || []);
+      } else {
+        setSucursalesWhatsapp([]);
+        setErrorSucursalesWhatsapp(
+          data.mensaje || 'No se pudieron cargar las sucursales.'
+        );
+      }
+    } catch (error) {
+      console.error('Error al cargar sucursales de WhatsApp:', error);
+      setSucursalesWhatsapp([]);
+      setErrorSucursalesWhatsapp(
+        error.response?.data?.mensaje ||
+          'No se pudieron cargar las sucursales para WhatsApp.'
+      );
+    } finally {
+      setCargandoSucursalesWhatsapp(false);
+    }
+  };
+
+  const abrirSelectorWhatsapp = async () => {
+    setModalWhatsappAbierto(true);
+    await cargarSucursalesWhatsapp();
   };
 
   const cargarCatalogo = async ({
@@ -407,7 +436,13 @@ export default function CatalogoPublico() {
   }, [categoriaSeleccionada, categorias]);
 
   const redesVisibles = useMemo(() => {
-    return (redesSociales || []).filter((red) => Boolean(String(red?.url || '').trim()));
+    return (redesSociales || []).filter((red) => {
+      const clave = String(red?.clave || '').toUpperCase();
+
+      if (clave === 'WHATSAPP') return true;
+
+      return Boolean(String(red?.url || '').trim());
+    });
   }, [redesSociales]);
 
   const hayFiltros = busqueda.trim() || categoriaSeleccionada;
@@ -737,24 +772,20 @@ export default function CatalogoPublico() {
                 <div className="grid w-full grid-cols-3 gap-2 sm:grid-cols-2 sm:gap-3 lg:grid-cols-3">
                   {redesVisibles.map((red) => {
                     const configuracion = obtenerConfiguracionRedSocial(red.clave);
+                    const esWhatsapp =
+                      String(red.clave || '').toUpperCase() === 'WHATSAPP';
 
-                    return (
-                      <a
-                        key={red.id_red_social || red.clave}
-                        href={red.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        title={red.nombre}
-                        aria-label={red.nombre}
-                        className="
-                          group flex aspect-square items-center justify-center
-                          rounded-2xl border border-slate-200 bg-white
-                          p-3 shadow-sm transition
-                          hover:-translate-y-0.5 hover:border-sky-200 hover:shadow-md
-                          sm:aspect-auto sm:min-h-[58px] sm:justify-start sm:gap-3
-                          sm:px-4 sm:py-3 lg:min-w-0 lg:px-3 xl:px-4
-                        "
-                      >
+                    const claseBoton = `
+                      group flex aspect-square items-center justify-center
+                      rounded-2xl border border-slate-200 bg-white
+                      p-3 shadow-sm transition
+                      hover:-translate-y-0.5 hover:border-sky-200 hover:shadow-md
+                      sm:aspect-auto sm:min-h-[58px] sm:justify-start sm:gap-3
+                      sm:px-4 sm:py-3 lg:min-w-0 lg:px-3 xl:px-4
+                    `;
+
+                    const contenido = (
+                      <>
                         <div
                           className={`
                             flex h-10 w-10 shrink-0 items-center justify-center
@@ -780,6 +811,35 @@ export default function CatalogoPublico() {
                           size={17}
                           className="hidden shrink-0 text-slate-400 transition group-hover:text-sky-600 lg:block"
                         />
+                      </>
+                    );
+
+                    if (esWhatsapp) {
+                      return (
+                        <button
+                          key={red.id_red_social || red.clave}
+                          type="button"
+                          onClick={abrirSelectorWhatsapp}
+                          title="Elegir sucursal para WhatsApp"
+                          aria-label="Elegir sucursal para WhatsApp"
+                          className={claseBoton}
+                        >
+                          {contenido}
+                        </button>
+                      );
+                    }
+
+                    return (
+                      <a
+                        key={red.id_red_social || red.clave}
+                        href={red.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        title={red.nombre}
+                        aria-label={red.nombre}
+                        className={claseBoton}
+                      >
+                        {contenido}
                       </a>
                     );
                   })}
@@ -1082,6 +1142,113 @@ export default function CatalogoPublico() {
           </section>
         )}
       </main>
+
+      {/* Selector de sucursal para WhatsApp */}
+      {modalWhatsappAbierto && (
+        <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-3xl overflow-hidden rounded-[2rem] bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 p-5 sm:p-6">
+              <div className="flex min-w-0 items-start gap-3">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-600/20">
+                  <MessageCircle size={23} />
+                </div>
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.14em] text-emerald-700">
+                    Atención por WhatsApp
+                  </p>
+                  <h2 className="mt-1 text-xl font-black text-slate-900 sm:text-2xl">
+                    Elige la sucursal que deseas contactar
+                  </h2>
+                  <p className="mt-1 text-sm font-semibold leading-relaxed text-slate-500">
+                    Selecciona una sucursal para abrir una conversación directa por WhatsApp.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setModalWhatsappAbierto(false)}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-600 transition hover:bg-red-50 hover:text-red-600"
+                title="Cerrar"
+                aria-label="Cerrar selector de sucursal"
+              >
+                <X size={23} />
+              </button>
+            </div>
+
+            <div className="max-h-[68vh] overflow-y-auto p-5 sm:p-6">
+              {cargandoSucursalesWhatsapp ? (
+                <div className="flex flex-col items-center justify-center py-14 text-slate-500">
+                  <RefreshCw size={34} className="animate-spin text-emerald-600" />
+                  <p className="mt-3 font-black text-slate-700">Cargando sucursales...</p>
+                </div>
+              ) : errorSucursalesWhatsapp ? (
+                <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">
+                  {errorSucursalesWhatsapp}
+                </div>
+              ) : sucursalesWhatsapp.length === 0 ? (
+                <div className="rounded-3xl border border-slate-100 bg-slate-50 px-5 py-12 text-center">
+                  <MessageCircle size={40} className="mx-auto text-slate-400" />
+                  <h3 className="mt-4 text-lg font-black text-slate-800">
+                    Aún no hay sucursales disponibles
+                  </h3>
+                  <p className="mt-1 text-sm font-semibold text-slate-500">
+                    Intenta más tarde o consulta nuestras demás redes oficiales.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  {sucursalesWhatsapp.map((sucursal) => (
+                    <article
+                      key={sucursal.id_sucursal}
+                      className="rounded-3xl border border-emerald-100 bg-emerald-50/40 p-4"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-emerald-600 shadow-sm">
+                          <Store size={21} />
+                        </div>
+                        <div className="min-w-0">
+                          <h3 className="font-black leading-snug text-slate-900">
+                            {sucursal.nombre}
+                          </h3>
+                          <p className="mt-0.5 text-xs font-bold text-emerald-700">
+                            {sucursal.clave || 'Sucursal'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 space-y-3 text-sm">
+                        <div className="flex items-start gap-2 text-slate-600">
+                          <MapPin size={17} className="mt-0.5 shrink-0 text-sky-600" />
+                          <span className="whitespace-pre-line font-semibold leading-relaxed">
+                            {sucursal.direccion || 'Dirección disponible al contactar la sucursal.'}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2 text-slate-700">
+                          <Phone size={17} className="shrink-0 text-emerald-600" />
+                          <span className="font-black">{sucursal.telefono}</span>
+                        </div>
+                      </div>
+
+                      <a
+                        href={sucursal.url_whatsapp}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 font-black text-white shadow-lg shadow-emerald-600/20 transition hover:-translate-y-0.5 hover:bg-emerald-700"
+                      >
+                        <MessageCircle size={19} />
+                        Abrir WhatsApp
+                        <ArrowUpRight size={17} />
+                      </a>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Overlay detalle */}
       {cargandoDetalle && (

@@ -23,6 +23,7 @@ import {
   ExternalLink,
   CheckCircle2,
   Loader2,
+   Phone,
 } from 'lucide-react';
 import api from '../../api/axios';
 
@@ -84,11 +85,6 @@ const configuracionRedes = {
     claseIcono: 'bg-red-50 text-red-700 border-red-100',
     placeholder: 'https://www.youtube.com/@tu-canal',
   },
-  GOOGLE_MAPS: {
-    abreviatura: 'MAP',
-    claseIcono: 'bg-sky-50 text-sky-700 border-sky-100',
-    placeholder: 'https://maps.google.com/?q=tu-negocio',
-  },
 };
 
 const obtenerConfiguracionRed = (clave) => {
@@ -126,6 +122,9 @@ export default function CatalogoAdmin() {
   const [redesSociales, setRedesSociales] = useState([]);
   const [cargandoRedes, setCargandoRedes] = useState(false);
   const [guardandoRedes, setGuardandoRedes] = useState(false);
+
+  const [sucursalesWhatsapp, setSucursalesWhatsapp] = useState([]);
+  const [cargandoSucursalesWhatsapp, setCargandoSucursalesWhatsapp] = useState(false);
 
   const cargarCatalogo = async () => {
     try {
@@ -199,9 +198,35 @@ export default function CatalogoAdmin() {
     }
   };
 
+  const cargarSucursalesWhatsapp = async () => {
+    try {
+      setCargandoSucursalesWhatsapp(true);
+
+      const { data } = await api.get('/catalogo/sucursales-whatsapp');
+
+      if (data.ok) {
+        setSucursalesWhatsapp(data.sucursales || []);
+      } else {
+        setSucursalesWhatsapp([]);
+      }
+    } catch (error) {
+      console.error('Error al cargar sucursales de WhatsApp:', error);
+
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text:
+          error.response?.data?.mensaje ||
+          'No se pudieron cargar las sucursales para WhatsApp.',
+      });
+    } finally {
+      setCargandoSucursalesWhatsapp(false);
+    }
+  };
+
   const abrirModalRedes = async () => {
     setModalRedesAbierto(true);
-    await cargarRedesSociales();
+    await Promise.all([cargarRedesSociales(), cargarSucursalesWhatsapp()]);
   };
 
   const cerrarModalRedes = () => {
@@ -209,6 +234,7 @@ export default function CatalogoAdmin() {
 
     setModalRedesAbierto(false);
     setRedesSociales([]);
+    setSucursalesWhatsapp([]);
   };
 
   const actualizarRedSocialLocal = (idRedSocial, campo, valor) => {
@@ -221,9 +247,22 @@ export default function CatalogoAdmin() {
     );
   };
 
+  const actualizarSucursalWhatsappLocal = (idSucursal, valor) => {
+    setSucursalesWhatsapp((prev) =>
+      prev.map((sucursal) =>
+        Number(sucursal.id_sucursal) === Number(idSucursal)
+          ? { ...sucursal, mostrar_whatsapp_catalogo: valor }
+          : sucursal
+      )
+    );
+  };
+
   const guardarRedesSociales = async () => {
     const redesActivasSinUrl = redesSociales.filter(
-      (red) => red.activo && !String(red.url || '').trim()
+      (red) =>
+        red.clave !== 'WHATSAPP' &&
+        red.activo &&
+        !String(red.url || '').trim()
     );
 
     if (redesActivasSinUrl.length > 0) {
@@ -244,7 +283,10 @@ export default function CatalogoAdmin() {
         const { data } = await api.put(
           `/catalogo/redes-sociales/${red.id_red_social}`,
           {
-            url: String(red.url || '').trim() || null,
+            url:
+              red.clave === 'WHATSAPP'
+                ? null
+                : String(red.url || '').trim() || null,
             activo: Boolean(red.activo),
             orden:
               red.orden === '' || red.orden === null || red.orden === undefined
@@ -260,12 +302,30 @@ export default function CatalogoAdmin() {
         }
       }
 
-      await cargarRedesSociales();
+      for (const sucursal of sucursalesWhatsapp) {
+        const { data } = await api.put(
+          `/catalogo/sucursales-whatsapp/${sucursal.id_sucursal}`,
+          {
+            mostrar_whatsapp_catalogo: Boolean(
+              sucursal.mostrar_whatsapp_catalogo
+            ),
+          }
+        );
+
+        if (!data?.ok) {
+          throw new Error(
+            data?.mensaje ||
+              `No se pudo actualizar la sucursal ${sucursal.nombre}.`
+          );
+        }
+      }
+
+      await Promise.all([cargarRedesSociales(), cargarSucursalesWhatsapp()]);
 
       Swal.fire({
         icon: 'success',
         title: 'Redes sociales actualizadas',
-        text: 'La configuración se guardó correctamente.',
+        text: 'La configuración de redes y sucursales se guardó correctamente.',
         timer: 1500,
         showConfirmButton: false,
       });
@@ -559,8 +619,16 @@ export default function CatalogoAdmin() {
     }
   };
 
-  return (
-    <div className="p-4 lg:p-6 space-y-6">
+return (
+  <div className="p-4 lg:p-6 space-y-6">
+    <style>
+      {`
+        .swal2-container {
+          z-index: 10050 !important;
+        }
+      `}
+    </style>
+
       {/* Header */}
       <section className="bg-gradient-to-br from-sky-700 via-sky-600 to-cyan-500 rounded-[2rem] p-6 lg:p-8 text-white shadow-sm overflow-hidden relative">
         <div className="absolute -top-20 -right-20 w-72 h-72 bg-white/20 rounded-full blur-3xl" />
@@ -657,7 +725,10 @@ export default function CatalogoAdmin() {
             onClick={() => {
               cargarCatalogo();
               cargarProductosDisponibles();
-              if (modalRedesAbierto) cargarRedesSociales();
+              if (modalRedesAbierto) {
+                cargarRedesSociales();
+                cargarSucursalesWhatsapp();
+              }
             }}
             className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-black transition"
           >
@@ -914,6 +985,16 @@ export default function CatalogoAdmin() {
                   {redesSociales.map((red) => {
                     const configuracion = obtenerConfiguracionRed(red.clave);
                     const tieneUrl = Boolean(String(red.url || '').trim());
+                    const esWhatsapp = red.clave === 'WHATSAPP';
+                    const tieneSucursalWhatsappVisible = sucursalesWhatsapp.some(
+                      (sucursal) =>
+                        sucursal.activo &&
+                        sucursal.telefono_valido &&
+                        sucursal.mostrar_whatsapp_catalogo
+                    );
+                    const redListaParaMostrarse = esWhatsapp
+                      ? tieneSucursalWhatsappVisible
+                      : tieneUrl;
 
                     return (
                       <article
@@ -967,43 +1048,54 @@ export default function CatalogoAdmin() {
                           </button>
                         </div>
 
-                        <label className="block mt-4">
-                          <span className="text-xs font-black uppercase tracking-wide text-slate-500">
-                            Enlace público
-                          </span>
-                          <div className="relative mt-1.5">
-                            <Globe2
-                              size={18}
-                              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
-                            />
-                            <input
-                              type="url"
-                              value={red.url || ''}
-                              onChange={(e) =>
-                                actualizarRedSocialLocal(
-                                  red.id_red_social,
-                                  'url',
-                                  e.target.value
-                                )
-                              }
-                              disabled={guardandoRedes}
-                              placeholder={configuracion.placeholder}
-                              className="w-full pl-10 pr-11 py-3 rounded-2xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 text-sm font-semibold text-slate-700 disabled:bg-slate-100 disabled:cursor-not-allowed"
-                            />
-
-                            {tieneUrl && (
-                              <a
-                                href={red.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-xl bg-sky-50 text-sky-700 hover:bg-sky-100 flex items-center justify-center transition"
-                                title="Abrir enlace"
-                              >
-                                <ExternalLink size={16} />
-                              </a>
-                            )}
+                        {red.clave === 'WHATSAPP' ? (
+                          <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3">
+                            <p className="text-sm font-black text-emerald-800">
+                              Enlace dinámico por sucursal
+                            </p>
+                            <p className="mt-1 text-xs font-semibold leading-relaxed text-emerald-700">
+                              El catálogo generará los enlaces usando el teléfono de cada sucursal habilitada en la sección inferior.
+                            </p>
                           </div>
-                        </label>
+                        ) : (
+                          <label className="block mt-4">
+                            <span className="text-xs font-black uppercase tracking-wide text-slate-500">
+                              Enlace público
+                            </span>
+                            <div className="relative mt-1.5">
+                              <Globe2
+                                size={18}
+                                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
+                              />
+                              <input
+                                type="url"
+                                value={red.url || ''}
+                                onChange={(e) =>
+                                  actualizarRedSocialLocal(
+                                    red.id_red_social,
+                                    'url',
+                                    e.target.value
+                                  )
+                                }
+                                disabled={guardandoRedes}
+                                placeholder={configuracion.placeholder}
+                                className="w-full pl-10 pr-11 py-3 rounded-2xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 text-sm font-semibold text-slate-700 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                              />
+
+                              {tieneUrl && (
+                                <a
+                                  href={red.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-xl bg-sky-50 text-sky-700 hover:bg-sky-100 flex items-center justify-center transition"
+                                  title="Abrir enlace"
+                                >
+                                  <ExternalLink size={16} />
+                                </a>
+                              )}
+                            </div>
+                          </label>
+                        )}
 
                         <div className="mt-4 flex items-end justify-between gap-3">
                           <label className="block w-28">
@@ -1029,8 +1121,10 @@ export default function CatalogoAdmin() {
 
                           <div className="text-right">
                             <p className="text-xs font-black text-slate-500">Estado público</p>
-                            <p className={`mt-1 text-sm font-black ${red.activo && tieneUrl ? 'text-emerald-700' : 'text-slate-400'}`}>
-                              {red.activo && tieneUrl ? 'Se mostrará' : 'No se mostrará'}
+                            <p className={`mt-1 text-sm font-black ${red.activo && redListaParaMostrarse ? 'text-emerald-700' : 'text-slate-400'}`}>
+                              {red.activo && redListaParaMostrarse
+                                ? 'Se mostrará'
+                                : 'No se mostrará'}
                             </p>
                           </div>
                         </div>
@@ -1040,8 +1134,124 @@ export default function CatalogoAdmin() {
                 </div>
               )}
 
-              <div className="mt-6 flex flex-col sm:flex-row justify-end gap-3 border-t border-slate-100 pt-5">
-                <button
+              {redesSociales.some((red) => red.clave === 'WHATSAPP') && (
+                <section className="mt-5 rounded-[1.75rem] border border-emerald-100 bg-emerald-50/40 p-4 lg:p-5">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-600/20">
+                        <MessageCircle size={21} />
+                      </div>
+                      <div>
+                        <h3 className="font-black text-slate-900">
+                          Sucursales disponibles para WhatsApp
+                        </h3>
+                        <p className="mt-1 text-sm font-semibold leading-relaxed text-slate-600">
+                          Activa las sucursales que podrán elegir los clientes. El enlace se genera con el teléfono registrado en cada sucursal.
+                        </p>
+                      </div>
+                    </div>
+
+                    <span className="inline-flex w-fit items-center rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-black text-emerald-700">
+                      {sucursalesWhatsapp.filter((sucursal) => sucursal.mostrar_whatsapp_catalogo).length} visible(s)
+                    </span>
+                  </div>
+
+                  {cargandoSucursalesWhatsapp ? (
+                    <div className="py-10 flex flex-col items-center justify-center text-slate-500">
+                      <Loader2 size={30} className="animate-spin text-emerald-600" />
+                      <p className="mt-3 text-sm font-bold">Cargando sucursales...</p>
+                    </div>
+                  ) : sucursalesWhatsapp.length === 0 ? (
+                    <div className="mt-4 rounded-2xl border border-dashed border-emerald-200 bg-white/80 px-4 py-7 text-center text-sm font-semibold text-slate-500">
+                      No hay sucursales registradas para configurar.
+                    </div>
+                  ) : (
+                    <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+                      {sucursalesWhatsapp.map((sucursal) => {
+                        const puedeMostrarse = Boolean(
+                          sucursal.activo && sucursal.telefono_valido
+                        );
+                        const estaVisible = Boolean(
+                          sucursal.mostrar_whatsapp_catalogo
+                        );
+
+                        return (
+                          <article
+                            key={sucursal.id_sucursal}
+                            className={`rounded-2xl border p-4 transition ${
+                              estaVisible
+                                ? 'border-emerald-200 bg-white shadow-sm'
+                                : 'border-emerald-100 bg-white/70'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="font-black text-slate-900">
+                                  {sucursal.nombre}
+                                </p>
+                                <p className="mt-0.5 text-xs font-bold text-slate-500">
+                                  {sucursal.clave || 'Sin clave'}
+                                </p>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  actualizarSucursalWhatsappLocal(
+                                    sucursal.id_sucursal,
+                                    !estaVisible
+                                  )
+                                }
+                                disabled={guardandoRedes || !puedeMostrarse}
+                                className={`inline-flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-xs font-black transition disabled:cursor-not-allowed disabled:opacity-55 ${
+                                  estaVisible
+                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                                    : 'border-slate-200 bg-slate-100 text-slate-500 hover:bg-slate-200'
+                                }`}
+                              >
+                                {estaVisible ? <CheckCircle2 size={16} /> : <EyeOff size={16} />}
+                                {estaVisible ? 'Visible' : 'Oculto'}
+                              </button>
+                            </div>
+
+                            <div className="mt-3 space-y-2 text-sm">
+                              <div className="flex items-start gap-2 text-slate-600">
+                                <MapPin size={16} className="mt-0.5 shrink-0 text-sky-600" />
+                                <span className="whitespace-pre-line font-semibold">
+                                  {sucursal.direccion || 'Sin dirección capturada'}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-2 text-slate-600">
+                                <Phone size={16} className="shrink-0 text-emerald-600" />
+                                <span className="font-semibold">
+                                  {sucursal.telefono || 'Sin teléfono capturado'}
+                                </span>
+                              </div>
+                            </div>
+
+                            {!sucursal.activo ? (
+                              <p className="mt-3 rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-500">
+                                Esta sucursal está inactiva y no puede mostrarse.
+                              </p>
+                            ) : !sucursal.telefono_valido ? (
+                              <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs font-bold text-amber-700">
+                                Captura un teléfono mexicano válido de 10 dígitos en la sucursal para poder habilitarla.
+                              </p>
+                            ) : (
+                              <p className="mt-3 text-xs font-bold text-emerald-700">
+                                El cliente verá esta sucursal en el selector de WhatsApp.
+                              </p>
+                            )}
+                          </article>
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
+              )}
+
+              <div className="mt-6 flex flex-col sm:flex-row justify-end gap-3 border-t border-slate-100 pt-5">                <button
                   type="button"
                   onClick={cerrarModalRedes}
                   disabled={guardandoRedes}
