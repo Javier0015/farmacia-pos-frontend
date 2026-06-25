@@ -21,6 +21,8 @@ import api from '../../api/axios';
 import ProductoCatalogoCard from '../../components/catalogo/ProductoCatalogoCard';
 import ProductoCatalogoModal from '../../components/catalogo/ProductoCatalogoModal';
 import logoFarmacia from '../../assets/logoShaddai.png';
+import logoFarmaciaCompleto from '../../assets/logoCompleto-sinFondo.png';
+
 
 const CONFIGURACION_REDES_SOCIALES = {
   FACEBOOK: {
@@ -714,12 +716,12 @@ export default function CatalogoPublico() {
                   <div className="absolute -bottom-24 -left-20 h-48 w-48 rounded-full bg-sky-100" />
 
                   <div className="relative flex min-h-[260px] flex-col items-center justify-center text-center">
-                    <div className="relative flex h-32 w-32 items-center justify-center rounded-[2.7rem] border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-cyan-50 shadow-inner">
+                    <div className="relative flex h-32 w-60 items-center justify-center rounded-[2.7rem] border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-cyan-50 shadow-inner">
                       <div className="absolute inset-3 rounded-[2.2rem] bg-white shadow-lg" />
                       <img
-                        src={logoFarmacia}
+                        src={logoFarmaciaCompleto}
                         alt="Logo Farmacias Shaddai"
-                        className="relative h-24 w-24 object-contain drop-shadow-sm"
+                        className="relative h-60 w-50 object-contain drop-shadow-sm"
                       />
                     </div>
 
