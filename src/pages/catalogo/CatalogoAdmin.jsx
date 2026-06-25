@@ -23,7 +23,7 @@ import {
   ExternalLink,
   CheckCircle2,
   Loader2,
-   Phone,
+  Phone,
 } from 'lucide-react';
 import api from '../../api/axios';
 
@@ -315,7 +315,7 @@ export default function CatalogoAdmin() {
         if (!data?.ok) {
           throw new Error(
             data?.mensaje ||
-              `No se pudo actualizar la sucursal ${sucursal.nombre}.`
+            `No se pudo actualizar la sucursal ${sucursal.nombre}.`
           );
         }
       }
@@ -619,15 +619,15 @@ export default function CatalogoAdmin() {
     }
   };
 
-return (
-  <div className="p-4 lg:p-6 space-y-6">
-    <style>
-      {`
+  return (
+    <div className="p-4 lg:p-6 space-y-6">
+      <style>
+        {`
         .swal2-container {
           z-index: 10050 !important;
         }
       `}
-    </style>
+      </style>
 
       {/* Header */}
       <section className="bg-gradient-to-br from-sky-700 via-sky-600 to-cyan-500 rounded-[2rem] p-6 lg:p-8 text-white shadow-sm overflow-hidden relative">
@@ -978,7 +978,7 @@ return (
                   <p className="mt-3 font-black text-slate-700">
                     No hay redes sociales configuradas.
                   </p>
-                 
+
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -999,11 +999,10 @@ return (
                     return (
                       <article
                         key={red.id_red_social}
-                        className={`rounded-3xl border p-4 transition ${
-                          red.activo
+                        className={`rounded-3xl border p-4 transition ${red.activo
                             ? 'border-sky-200 bg-sky-50/40'
                             : 'border-slate-200 bg-white'
-                        }`}
+                          }`}
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex items-center gap-3 min-w-0">
@@ -1037,11 +1036,10 @@ return (
                               )
                             }
                             disabled={guardandoRedes}
-                            className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-black transition disabled:opacity-60 ${
-                              red.activo
+                            className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-black transition disabled:opacity-60 ${red.activo
                                 ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
                                 : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'
-                            }`}
+                              }`}
                           >
                             {red.activo ? <CheckCircle2 size={16} /> : <EyeOff size={16} />}
                             {red.activo ? 'Visible' : 'Oculto'}
@@ -1175,14 +1173,14 @@ return (
                           sucursal.mostrar_whatsapp_catalogo
                         );
 
+
                         return (
                           <article
                             key={sucursal.id_sucursal}
-                            className={`rounded-2xl border p-4 transition ${
-                              estaVisible
+                            className={`rounded-2xl border p-4 transition ${estaVisible
                                 ? 'border-emerald-200 bg-white shadow-sm'
                                 : 'border-emerald-100 bg-white/70'
-                            }`}
+                              }`}
                           >
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
@@ -1203,11 +1201,10 @@ return (
                                   )
                                 }
                                 disabled={guardandoRedes || !puedeMostrarse}
-                                className={`inline-flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-xs font-black transition disabled:cursor-not-allowed disabled:opacity-55 ${
-                                  estaVisible
+                                className={`inline-flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-xs font-black transition disabled:cursor-not-allowed disabled:opacity-55 ${estaVisible
                                     ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
                                     : 'border-slate-200 bg-slate-100 text-slate-500 hover:bg-slate-200'
-                                }`}
+                                  }`}
                               >
                                 {estaVisible ? <CheckCircle2 size={16} /> : <EyeOff size={16} />}
                                 {estaVisible ? 'Visible' : 'Oculto'}
@@ -1221,6 +1218,22 @@ return (
                                   {sucursal.direccion || 'Sin dirección capturada'}
                                 </span>
                               </div>
+
+                              {sucursal.url_google_maps ? (
+                                <a
+                                  href={sucursal.url_google_maps}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="mt-3 inline-flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-black text-sky-700 hover:bg-sky-100"
+                                >
+                                  <MapPin size={15} />
+                                  Ver ubicación configurada
+                                </a>
+                              ) : (
+                                <p className="mt-3 text-xs font-bold text-slate-400">
+                                  Sin ubicación de Google Maps.
+                                </p>
+                              )}
 
                               <div className="flex items-center gap-2 text-slate-600">
                                 <Phone size={16} className="shrink-0 text-emerald-600" />
@@ -1252,13 +1265,13 @@ return (
               )}
 
               <div className="mt-6 flex flex-col sm:flex-row justify-end gap-3 border-t border-slate-100 pt-5">                <button
-                  type="button"
-                  onClick={cerrarModalRedes}
-                  disabled={guardandoRedes}
-                  className="px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-black transition disabled:opacity-60"
-                >
-                  Cerrar
-                </button>
+                type="button"
+                onClick={cerrarModalRedes}
+                disabled={guardandoRedes}
+                className="px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-black transition disabled:opacity-60"
+              >
+                Cerrar
+              </button>
 
                 <button
                   type="button"
@@ -1357,13 +1370,12 @@ return (
                               type="button"
                               disabled={producto.ya_en_catalogo}
                               onClick={() => seleccionarProducto(producto)}
-                              className={`w-full text-left rounded-2xl border p-4 transition ${
-                                seleccionado
+                              className={`w-full text-left rounded-2xl border p-4 transition ${seleccionado
                                   ? 'border-sky-400 bg-sky-50'
                                   : producto.ya_en_catalogo
                                     ? 'border-slate-200 bg-slate-100 opacity-60 cursor-not-allowed'
                                     : 'border-slate-200 bg-white hover:border-sky-300 hover:bg-sky-50'
-                              }`}
+                                }`}
                             >
                               <div className="flex items-start justify-between gap-3">
                                 <div>
@@ -1551,11 +1563,10 @@ return (
                     <button
                       type="button"
                       onClick={() => manejarCambio('activo', !formulario.activo)}
-                      className={`rounded-2xl border px-4 py-3 font-black flex items-center justify-center gap-2 transition ${
-                        formulario.activo
+                      className={`rounded-2xl border px-4 py-3 font-black flex items-center justify-center gap-2 transition ${formulario.activo
                           ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                           : 'bg-slate-100 text-slate-500 border-slate-200'
-                      }`}
+                        }`}
                     >
                       {formulario.activo ? <Eye size={18} /> : <EyeOff size={18} />}
                       {formulario.activo ? 'Visible' : 'Oculto'}
@@ -1566,11 +1577,10 @@ return (
                       onClick={() =>
                         manejarCambio('destacado', !formulario.destacado)
                       }
-                      className={`rounded-2xl border px-4 py-3 font-black flex items-center justify-center gap-2 transition ${
-                        formulario.destacado
+                      className={`rounded-2xl border px-4 py-3 font-black flex items-center justify-center gap-2 transition ${formulario.destacado
                           ? 'bg-amber-50 text-amber-700 border-amber-200'
                           : 'bg-slate-100 text-slate-500 border-slate-200'
-                      }`}
+                        }`}
                     >
                       {formulario.destacado ? (
                         <Star size={18} />
@@ -1585,11 +1595,10 @@ return (
                       onClick={() =>
                         manejarCambio('mostrar_stock', !formulario.mostrar_stock)
                       }
-                      className={`rounded-2xl border px-4 py-3 font-black flex items-center justify-center gap-2 transition ${
-                        formulario.mostrar_stock
+                      className={`rounded-2xl border px-4 py-3 font-black flex items-center justify-center gap-2 transition ${formulario.mostrar_stock
                           ? 'bg-sky-50 text-sky-700 border-sky-200'
                           : 'bg-slate-100 text-slate-500 border-slate-200'
-                      }`}
+                        }`}
                     >
                       <Package size={18} />
                       Disponibilidad

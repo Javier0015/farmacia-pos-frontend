@@ -23,6 +23,7 @@ const formInicial = {
   clave: '',
   direccion: '',
   telefono: '',
+  url_google_maps: '',
   correo: '',
   responsable: '',
   activo: true,
@@ -113,6 +114,7 @@ export default function Sucursales() {
       clave: sucursal.clave || '',
       direccion: sucursal.direccion || '',
       telefono: sucursal.telefono || '',
+      url_google_maps: sucursal.url_google_maps || '',
       correo: sucursal.correo || '',
       responsable: sucursal.responsable || '',
       activo: Boolean(sucursal.activo),
@@ -185,6 +187,7 @@ export default function Sucursales() {
         clave: form.clave.trim().toUpperCase(),
         direccion: form.direccion.trim() || null,
         telefono: form.telefono.trim() || null,
+        url_google_maps: form.url_google_maps.trim() || null,
         correo: form.correo.trim() || null,
         responsable: form.responsable.trim() || null,
         activo: form.activo,
@@ -471,11 +474,10 @@ export default function Sucursales() {
 
                     <td className="px-5 py-4 text-center">
                       <span
-                        className={`text-xs font-bold px-3 py-1 rounded-full ${
-                          sucursal.activo
-                            ? 'bg-sky-100 text-sky-700'
-                            : 'bg-slate-200 text-slate-600'
-                        }`}
+                        className={`text-xs font-bold px-3 py-1 rounded-full ${sucursal.activo
+                          ? 'bg-sky-100 text-sky-700'
+                          : 'bg-slate-200 text-slate-600'
+                          }`}
                       >
                         {sucursal.activo ? 'Activa' : 'Inactiva'}
                       </span>
@@ -659,6 +661,44 @@ export default function Sucursales() {
                   </div>
                 </div>
 
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Ubicación en Google Maps
+                  </label>
+
+                  <div className="relative">
+                    <MapPin
+                      className="absolute left-4 top-3.5 text-slate-400"
+                      size={20}
+                    />
+
+                    <input
+                      type="url"
+                      name="url_google_maps"
+                      value={form.url_google_maps}
+                      onChange={handleChange}
+                      className="w-full pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                      placeholder="https://maps.app.goo.gl/..."
+                    />
+                  </div>
+
+                  <p className="mt-1 text-xs text-slate-500">
+                    Abre Google Maps, selecciona “Compartir” y pega aquí el enlace de la sucursal.
+                  </p>
+                </div>
+
+                {form.url_google_maps?.trim() && (
+                  <a
+                    href={form.url_google_maps}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-sky-700 hover:text-sky-900"
+                  >
+                    <MapPin size={13} />
+                    Abrir ubicación en Google Maps
+                  </a>
+                )}
+
                 {modoEdicion && (
                   <div className="md:col-span-2">
                     <label className="flex items-center gap-3 rounded-2xl border border-slate-200 p-4 cursor-pointer">
@@ -695,8 +735,8 @@ export default function Sucursales() {
                   {guardando
                     ? 'Guardando...'
                     : modoEdicion
-                    ? 'Actualizar sucursal'
-                    : 'Guardar sucursal'}
+                      ? 'Actualizar sucursal'
+                      : 'Guardar sucursal'}
                 </button>
               </div>
             </form>

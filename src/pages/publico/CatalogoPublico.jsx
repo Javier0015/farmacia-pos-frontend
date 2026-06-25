@@ -211,7 +211,7 @@ export default function CatalogoPublico() {
       setSucursalesWhatsapp([]);
       setErrorSucursalesWhatsapp(
         error.response?.data?.mensaje ||
-          'No se pudieron cargar las sucursales para WhatsApp.'
+        'No se pudieron cargar las sucursales para WhatsApp.'
       );
     } finally {
       setCargandoSucursalesWhatsapp(false);
@@ -851,9 +851,8 @@ export default function CatalogoPublico() {
 
         {/* Filtros flotantes */}
         <section
-          className={`${redesVisibles.length > 0 ? 'mt-5' : '-mt-20'} relative ${
-            mostrarSugerencias ? 'z-40' : 'z-10'
-          } catalogo-fade-up`}
+          className={`${redesVisibles.length > 0 ? 'mt-5' : '-mt-20'} relative ${mostrarSugerencias ? 'z-40' : 'z-10'
+            } catalogo-fade-up`}
         >
           <div className="bg-white/90 backdrop-blur-xl rounded-[2rem] border border-white shadow-2xl shadow-sky-900/10 p-5 lg:p-6">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-5">
@@ -959,11 +958,10 @@ export default function CatalogoPublico() {
                                 type="button"
                                 onMouseDown={(event) => event.preventDefault()}
                                 onClick={() => seleccionarSugerencia(producto)}
-                                className={`flex w-full items-center gap-3 px-4 py-3 text-left transition ${
-                                  indiceSugerencia === indice
+                                className={`flex w-full items-center gap-3 px-4 py-3 text-left transition ${indiceSugerencia === indice
                                     ? 'bg-sky-50'
                                     : 'hover:bg-slate-50'
-                                }`}
+                                  }`}
                               >
                                 <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-100 bg-sky-50 text-sky-600">
                                   {producto.imagen_url ? (
@@ -1231,16 +1229,31 @@ export default function CatalogoPublico() {
                         </div>
                       </div>
 
-                      <a
-                        href={sucursal.url_whatsapp}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 font-black text-white shadow-lg shadow-emerald-600/20 transition hover:-translate-y-0.5 hover:bg-emerald-700"
-                      >
-                        <MessageCircle size={19} />
-                        Abrir WhatsApp
-                        <ArrowUpRight size={17} />
-                      </a>
+                      <div className="mt-5 space-y-3">
+                        <a
+                          href={sucursal.url_whatsapp}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 font-black text-white shadow-lg shadow-emerald-600/20 transition hover:-translate-y-0.5 hover:bg-emerald-700"
+                        >
+                          <MessageCircle size={19} />
+                          Abrir WhatsApp
+                          <ArrowUpRight size={17} />
+                        </a>
+
+                        {sucursal.url_google_maps && (
+                          <a
+                            href={sucursal.url_google_maps}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-sky-200 bg-white px-4 py-3 font-black text-sky-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-sky-50"
+                          >
+                            <MapPin size={19} />
+                            Ver ubicación
+                            <ArrowUpRight size={17} />
+                          </a>
+                        )}
+                      </div>
                     </article>
                   ))}
                 </div>
