@@ -87,7 +87,7 @@ const TIPOS_ATENCION_INFO = {
     value: 'CONSULTA_MEDICA',
     label: 'Consulta médica',
     titulo: 'Atención médica',
-    descripcion: 'Primero documenta la consulta mediante una nota médica. Después puedes generar receta o solicitud de laboratorio si aplica.',
+    descripcion: 'Registra la consulta mediante una nota médica. Puedes continuar con receta, laboratorio y cierre de atención; si falta la nota quedará como pendiente.',
     siguientePaso: 'Crear nota médica de la consulta',
     badgeClass: 'bg-sky-100 text-sky-700 border-sky-200',
     panelClass: 'border-sky-200 bg-sky-50 text-sky-800',
@@ -267,17 +267,13 @@ export default function DoctorShaddaiRecetas() {
 
   const tipoNotaSugerido = notasPreviasDelExpediente.length > 0 ? 'NOTA_EVOLUCION' : 'NOTA_INICIAL';
   const tipoNotaInfo = obtenerInfoTipoNota(tipoNotaSugerido);
-  const recetaHabilitadaPorTipo =
-    !mostrarFlujoAtencion ||
-    tipoAtencionActual.value === 'SOLO_RECETA' ||
-    tipoAtencionActual.value === 'SERVICIO_RAPIDO' ||
-    tipoAtencionActual.value === 'LABORATORIO' ||
-    (tipoAtencionActual.value === 'CONSULTA_MEDICA' && notaMedicaGuardada);
-
-  const laboratorioHabilitadoPorTipo =
-    !mostrarFlujoAtencion ||
-    tipoAtencionActual.value === 'LABORATORIO' ||
-    (tipoAtencionActual.value === 'CONSULTA_MEDICA' && notaMedicaGuardada);
+  /*
+   * La nota médica se recomienda para la consulta, pero no bloquea el resto
+   * de la atención. Los servicios rápidos, recetas y laboratorio no requieren
+   * nota médica para continuar.
+   */
+  const notaMedicaPendiente =
+    requiereNotaMedica && !notaMedicaGuardada;
 
   const [modalImprimirNotaAbierto, setModalImprimirNotaAbierto] = useState(false);
   const [notaParaImprimir, setNotaParaImprimir] = useState(null);
@@ -1146,28 +1142,6 @@ export default function DoctorShaddaiRecetas() {
       return false;
     }
 
-    if (requiereNotaMedica && !notaMedicaGuardada) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Nota médica requerida',
-        text:
-          'Esta atención está marcada como consulta médica. Primero debes guardar la nota médica antes de generar receta.',
-        confirmButtonColor: '#0284c7',
-      });
-
-      return false;
-    }
-
-    if (mostrarFlujoAtencion && !recetaHabilitadaPorTipo) {
-      Swal.fire({
-        icon: 'info',
-        title: 'Receta no es el flujo principal',
-        text: `Esta atención está marcada como ${tipoAtencionActual.label}. El siguiente paso recomendado es: ${tipoAtencionActual.siguientePaso}.`,
-      });
-
-      return false;
-    }
-
     if (!expedienteSeleccionado?.id_expediente) {
       Swal.fire({
         icon: 'warning',
@@ -1472,25 +1446,27 @@ export default function DoctorShaddaiRecetas() {
   const finalizarAtencionDesdeFila = async () => {
     if (!idFilaUrl) return;
 
-    if (requiereNotaMedica && !notaMedicaGuardada) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Nota médica pendiente',
-        text: 'No puedes finalizar una consulta médica sin guardar primero la nota médica.',
-        confirmButtonColor: '#0284c7',
-      });
-
-      return;
-    }
+    const notaQuedaraPendiente = notaMedicaPendiente;
 
     const result = await Swal.fire({
-      icon: 'question',
-      title: 'Finalizar atención',
-      text: '¿Deseas marcar esta atención como finalizada?',
+      icon: notaQuedaraPendiente ? 'warning' : 'question',
+      title: notaQuedaraPendiente
+        ? 'Finalizar con nota médica pendiente'
+        : 'Finalizar atención',
+      html: notaQuedaraPendiente
+        ? `
+          <div style="text-align:left">
+            <p>La consulta se puede finalizar, pero quedará marcada con una nota médica pendiente.</p>
+            <p style="margin-top:8px">Podrás completarla después desde el expediente o desde el historial de notas.</p>
+          </div>
+        `
+        : '¿Deseas marcar esta atención como finalizada?',
       showCancelButton: true,
-      confirmButtonText: 'Sí, finalizar',
+      confirmButtonText: notaQuedaraPendiente
+        ? 'Finalizar y dejar pendiente'
+        : 'Sí, finalizar',
       cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#16a34a',
+      confirmButtonColor: notaQuedaraPendiente ? '#d97706' : '#16a34a',
     });
 
     if (!result.isConfirmed) return;
@@ -1504,9 +1480,13 @@ export default function DoctorShaddaiRecetas() {
 
       await Swal.fire({
         icon: 'success',
-        title: 'Atención finalizada',
-        text: 'Regresando a la fila de espera...',
-        timer: 1400,
+        title: notaQuedaraPendiente
+          ? 'Atención finalizada con nota pendiente'
+          : 'Atención finalizada',
+        text: notaQuedaraPendiente
+          ? 'La nota médica podrá completarse posteriormente desde el expediente.'
+          : 'Regresando a la fila de espera...',
+        timer: 1800,
         showConfirmButton: false,
       });
 
@@ -1868,6 +1848,31 @@ export default function DoctorShaddaiRecetas() {
           </section>
         )}
 
+        {notaMedicaPendiente && (
+          <section className="rounded-3xl border border-amber-200 bg-amber-50 p-5 text-amber-900">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <AlertTriangle size={24} className="mt-0.5 shrink-0 text-amber-600" />
+                <div>
+                  <p className="font-black">Nota médica pendiente</p>
+                  <p className="mt-1 text-sm font-medium leading-relaxed">
+                    Puedes continuar con receta, laboratorio y finalizar la atención.
+                    Esta consulta quedará identificada para completar la nota médica posteriormente.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={abrirNotaMedicaPendiente}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-amber-600 px-5 py-3 text-sm font-black text-white transition hover:bg-amber-700"
+              >
+                <ClipboardPlus size={18} />
+                Crear nota ahora
+              </button>
+            </div>
+          </section>
+        )}
 
         <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
           <div className="space-y-6">
@@ -2614,7 +2619,7 @@ export default function DoctorShaddaiRecetas() {
                     <button
                       type="button"
                       onClick={enviarReceta}
-                      disabled={enviando || cargandoPerfil || !perfilDoctorCompleto || !recetaHabilitadaPorTipo}
+                      disabled={enviando || cargandoPerfil || !perfilDoctorCompleto}
                       className="inline-flex items-center justify-center gap-2 rounded-2xl bg-sky-700 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-sky-900/20 transition hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {enviando || cargandoPerfil ? (
@@ -2628,8 +2633,8 @@ export default function DoctorShaddaiRecetas() {
                           ? 'Completa perfil'
                           : enviando
                             ? 'Generando...'
-                            : requiereNotaMedica && !notaMedicaGuardada
-                              ? 'Nota médica pendiente'
+                            : notaMedicaPendiente
+                              ? 'Generar receta · nota pendiente'
                               : 'Generar receta'}
                     </button>
                   </div>

@@ -210,6 +210,8 @@ export default function POS() {
   const { usuario } = useAuth();
   const puedeCambiarSucursal = esSuperAdmin(usuario);
 
+  const puedeCambiarCaja = esSuperAdmin(usuario);
+
   const [sucursales, setSucursales] = useState([]);
   const [cajas, setCajas] = useState([]);
   const [inventario, setInventario] = useState([]);
@@ -666,17 +668,52 @@ export default function POS() {
     if (!idSucursal) return;
 
     try {
-      const { data } = await api.get(`/caja/cajas?sucursal=${idSucursal}`);
+      const { data } = await api.get(
+        `/caja/cajas?sucursal=${idSucursal}`
+      );
+
       if (data.ok) {
-        const cajasActivas = (data.cajas || []).filter((c) => c.activo);
+        const cajasActivas = (data.cajas || []).filter(
+          (caja) => caja.activo
+        );
+
         setCajas(cajasActivas);
-        if (!idCaja || !cajasActivas.some((c) => Number(c.id_caja) === Number(idCaja))) {
-          setIdCaja(cajasActivas[0]?.id_caja || '');
+
+        // El administrador conserva su selección si sigue disponible.
+        if (puedeCambiarCaja) {
+          setIdCaja((cajaAnterior) => {
+            const sigueDisponible = cajasActivas.some(
+              (caja) =>
+                Number(caja.id_caja) === Number(cajaAnterior)
+            );
+
+            return sigueDisponible
+              ? cajaAnterior
+              : String(cajasActivas[0]?.id_caja || '');
+          });
+
+          return;
         }
+
+        /*
+         * Para cajeros el backend devolverá solamente su caja asignada.
+         * Se selecciona automáticamente y no podrán cambiarla.
+         */
+        setIdCaja(String(cajasActivas[0]?.id_caja || ''));
       }
     } catch (error) {
       console.error(error);
-      Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudieron cargar las cajas.' });
+
+      setCajas([]);
+      setIdCaja('');
+
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text:
+          error.response?.data?.mensaje ||
+          'No se pudieron cargar las cajas.',
+      });
     }
   };
 
@@ -1351,6 +1388,11 @@ export default function POS() {
     setProductoSeleccionadoLotes(null);
     setLotesProducto([]);
     setContextoLoteReceta(null);
+
+    // Limpia el buscador únicamente después de agregar correctamente.
+    setBuscar('');
+    setSugerenciasProductos([]);
+    setMostrandoSugerenciasProductos(false);
 
     Swal.fire({
       icon: 'success',
@@ -2944,21 +2986,39 @@ export default function POS() {
 
           <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
             <div className="mb-3 flex items-center gap-2">
-              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-900 text-xs font-black text-white">2</span>
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-900 text-xs font-black text-white">
+                2
+              </span>
               <p className="text-sm font-black text-slate-800">Caja</p>
             </div>
+
             <select
               value={idCaja}
               onChange={(e) => setIdCaja(e.target.value)}
-              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-sky-500"
+              disabled={!puedeCambiarCaja || cajas.length === 0}
+              className={`w-full rounded-2xl border px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-sky-500 ${puedeCambiarCaja
+                ? 'border-slate-200 bg-white text-slate-700'
+                : 'border-slate-200 bg-slate-100 text-slate-600 cursor-not-allowed'
+                }`}
             >
-              <option value="">Selecciona caja</option>
+              <option value="">
+                {cajas.length === 0
+                  ? 'No tienes una caja asignada'
+                  : 'Selecciona caja'}
+              </option>
+
               {cajas.map((caja) => (
                 <option key={caja.id_caja} value={caja.id_caja}>
                   {caja.nombre}
                 </option>
               ))}
             </select>
+
+            {!puedeCambiarCaja && (
+              <p className="mt-2 text-xs font-medium text-slate-500">
+                Esta caja está asignada a tu usuario.
+              </p>
+            )}
           </div>
 
           <div className={`rounded-3xl border p-4 ${sesionAbierta ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-50'}`}>
@@ -3766,13 +3826,13 @@ function CarritoPOS({
             )}
 
             <div className={`mt-3 rounded-2xl border p-3 ${puedeEnviarTicketDigital
-                ? 'border-sky-200 bg-sky-50 text-sky-950'
-                : 'border-amber-200 bg-amber-50 text-amber-950'
+              ? 'border-sky-200 bg-sky-50 text-sky-950'
+              : 'border-amber-200 bg-amber-50 text-amber-950'
               }`}>
               <div className="flex items-start gap-2.5">
                 <div className={`mt-0.5 rounded-xl p-2 ${puedeEnviarTicketDigital
-                    ? 'bg-white text-sky-700'
-                    : 'bg-white text-amber-700'
+                  ? 'bg-white text-sky-700'
+                  : 'bg-white text-amber-700'
                   }`}>
                   <Mail size={16} />
                 </div>

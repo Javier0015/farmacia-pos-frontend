@@ -11,6 +11,7 @@ import {
   Save,
   Store,
   CheckCircle,
+  UserRound,
 } from 'lucide-react';
 import api from '../../api/axios';
 
@@ -18,17 +19,20 @@ const formInicial = {
   id_sucursal: '',
   nombre: '',
   descripcion: '',
+  id_usuario_asignado: '',
   activo: true,
 };
 
 export default function Cajas() {
   const [cajas, setCajas] = useState([]);
   const [sucursales, setSucursales] = useState([]);
+  const [cajeros, setCajeros] = useState([]);
 
   const [idSucursalFiltro, setIdSucursalFiltro] = useState('');
   const [buscar, setBuscar] = useState('');
 
   const [cargando, setCargando] = useState(false);
+  const [cargandoCajeros, setCargandoCajeros] = useState(false);
   const [guardando, setGuardando] = useState(false);
 
   const [modalAbierto, setModalAbierto] = useState(false);
@@ -63,10 +67,11 @@ export default function Cajas() {
 
       if (data.ok) {
         const activas = (data.sucursales || []).filter((s) => s.activo);
+
         setSucursales(activas);
 
         if (!idSucursalFiltro && activas.length > 0) {
-          setIdSucursalFiltro(activas[0].id_sucursal);
+          setIdSucursalFiltro(String(activas[0].id_sucursal));
         }
       }
     } catch (error) {
@@ -77,6 +82,39 @@ export default function Cajas() {
         title: 'Error',
         text: 'No se pudieron cargar las sucursales.',
       });
+    }
+  };
+
+  const cargarCajeros = async (idSucursal, idCaja = '') => {
+    try {
+      if (!idSucursal) {
+        setCajeros([]);
+        return;
+      }
+
+      setCargandoCajeros(true);
+
+      const params = new URLSearchParams();
+      params.append('sucursal', idSucursal);
+
+      if (idCaja) {
+        params.append('id_caja', idCaja);
+      }
+
+      const { data } = await api.get(
+        `/admin/cajas/cajeros?${params.toString()}`
+      );
+
+      if (data.ok) {
+        setCajeros(data.cajeros || []);
+      } else {
+        setCajeros([]);
+      }
+    } catch (error) {
+      console.error('Error al cargar cajeros:', error);
+      setCajeros([]);
+    } finally {
+      setCargandoCajeros(false);
     }
   };
 
@@ -124,14 +162,28 @@ export default function Cajas() {
     }
   }, [idSucursalFiltro]);
 
-  const abrirNuevo = () => {
-    setForm({
-      ...formInicial,
-      id_sucursal: idSucursalFiltro || sucursales[0]?.id_sucursal || '',
-    });
+  useEffect(() => {
+    if (!modalAbierto || !form.id_sucursal) {
+      return;
+    }
 
+    cargarCajeros(
+      form.id_sucursal,
+      cajaEditando?.id_caja || ''
+    );
+  }, [modalAbierto, form.id_sucursal, cajaEditando?.id_caja]);
+
+  const abrirNuevo = () => {
     setModoEdicion(false);
     setCajaEditando(null);
+
+    setForm({
+      ...formInicial,
+      id_sucursal:
+        idSucursalFiltro ||
+        String(sucursales[0]?.id_sucursal || ''),
+    });
+
     setModalAbierto(true);
   };
 
@@ -140,9 +192,10 @@ export default function Cajas() {
     setModoEdicion(true);
 
     setForm({
-      id_sucursal: caja.id_sucursal || '',
+      id_sucursal: String(caja.id_sucursal || ''),
       nombre: caja.nombre || '',
       descripcion: caja.descripcion || '',
+      id_usuario_asignado: String(caja.id_usuario_asignado || ''),
       activo: Boolean(caja.activo),
     });
 
@@ -153,16 +206,23 @@ export default function Cajas() {
     setModalAbierto(false);
     setModoEdicion(false);
     setCajaEditando(null);
+    setCajeros([]);
     setForm(formInicial);
   };
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
 
-    setForm({
-      ...form,
+    setForm((prev) => ({
+      ...prev,
       [name]: type === 'checkbox' ? checked : value,
-    });
+
+      ...(name === 'id_sucursal'
+        ? {
+            id_usuario_asignado: '',
+          }
+        : {}),
+    }));
   };
 
   const validarForm = () => {
@@ -172,6 +232,7 @@ export default function Cajas() {
         title: 'Sucursal obligatoria',
         text: 'Selecciona una sucursal para la caja.',
       });
+
       return false;
     }
 
@@ -181,6 +242,7 @@ export default function Cajas() {
         title: 'Nombre obligatorio',
         text: 'Ingresa el nombre de la caja.',
       });
+
       return false;
     }
 
@@ -199,13 +261,19 @@ export default function Cajas() {
         id_sucursal: Number(form.id_sucursal),
         nombre: form.nombre.trim(),
         descripcion: form.descripcion.trim() || null,
+        id_usuario_asignado: form.id_usuario_asignado
+          ? Number(form.id_usuario_asignado)
+          : null,
         activo: form.activo,
       };
 
       let respuesta;
 
       if (modoEdicion) {
-        respuesta = await api.put(`/admin/cajas/${cajaEditando.id_caja}`, payload);
+        respuesta = await api.put(
+          `/admin/cajas/${cajaEditando.id_caja}`,
+          payload
+        );
       } else {
         respuesta = await api.post('/admin/cajas', payload);
       }
@@ -291,7 +359,7 @@ export default function Cajas() {
                 Administración de cajas
               </h1>
               <p className="text-sm sm:text-base text-slate-500 leading-relaxed">
-                Crea y administra las cajas disponibles por sucursal.
+                Crea, administra y asigna cajeros a las cajas por sucursal.
               </p>
             </div>
           </div>
@@ -310,6 +378,7 @@ export default function Cajas() {
             <label className="block text-sm font-bold text-slate-700 mb-2">
               Sucursal
             </label>
+
             <select
               value={idSucursalFiltro}
               onChange={(e) => setIdSucursalFiltro(e.target.value)}
@@ -320,7 +389,10 @@ export default function Cajas() {
               )}
 
               {sucursales.map((sucursal) => (
-                <option key={sucursal.id_sucursal} value={sucursal.id_sucursal}>
+                <option
+                  key={sucursal.id_sucursal}
+                  value={sucursal.id_sucursal}
+                >
                   {sucursal.nombre}
                 </option>
               ))}
@@ -331,12 +403,14 @@ export default function Cajas() {
             <label className="block text-sm font-bold text-slate-700 mb-2">
               Buscar
             </label>
+
             <div className="flex flex-col sm:flex-row gap-3">
               <div className="relative flex-1 min-w-0">
                 <Search
                   className="absolute left-4 top-3.5 text-slate-400"
                   size={20}
                 />
+
                 <input
                   value={buscar}
                   onChange={(e) => setBuscar(e.target.value)}
@@ -344,7 +418,7 @@ export default function Cajas() {
                     if (e.key === 'Enter') cargarCajas();
                   }}
                   className="w-full min-w-0 pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
-                  placeholder="Buscar por caja, descripción o sucursal..."
+                  placeholder="Buscar por caja, cajero, descripción o sucursal..."
                 />
               </div>
 
@@ -352,7 +426,10 @@ export default function Cajas() {
                 onClick={cargarCajas}
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition"
               >
-                <RefreshCw size={19} className={cargando ? 'animate-spin' : ''} />
+                <RefreshCw
+                  size={19}
+                  className={cargando ? 'animate-spin' : ''}
+                />
                 Buscar
               </button>
             </div>
@@ -365,7 +442,9 @@ export default function Cajas() {
           <div className="w-12 h-12 rounded-2xl bg-sky-50 text-sky-700 flex items-center justify-center">
             <Wallet size={24} />
           </div>
+
           <p className="text-sm text-slate-500 mt-5">Total cajas</p>
+
           <h3 className="text-3xl font-bold text-slate-800 mt-1">
             {resumen.total}
           </h3>
@@ -375,7 +454,9 @@ export default function Cajas() {
           <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-700 flex items-center justify-center">
             <CheckCircle size={24} />
           </div>
+
           <p className="text-sm text-slate-500 mt-5">Activas</p>
+
           <h3 className="text-3xl font-bold text-sky-700 mt-1">
             {resumen.activas}
           </h3>
@@ -385,7 +466,9 @@ export default function Cajas() {
           <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center">
             <X size={24} />
           </div>
+
           <p className="text-sm text-slate-500 mt-5">Inactivas</p>
+
           <h3 className="text-3xl font-bold text-slate-800 mt-1">
             {resumen.inactivas}
           </h3>
@@ -397,8 +480,9 @@ export default function Cajas() {
           <h2 className="text-lg sm:text-xl font-bold text-slate-800">
             Listado de cajas
           </h2>
+
           <p className="text-sm text-slate-500">
-            Consulta, edita o desactiva cajas por sucursal.
+            Consulta, edita, desactiva y asigna cajeros.
           </p>
         </div>
 
@@ -422,6 +506,7 @@ export default function Cajas() {
                     <p className="font-bold text-slate-800 break-words">
                       {caja.nombre}
                     </p>
+
                     <p className="text-xs text-slate-400 mt-1">
                       ID #{caja.id_caja}
                     </p>
@@ -443,9 +528,11 @@ export default function Cajas() {
                     <Store size={15} />
                     Sucursal
                   </p>
+
                   <p className="font-bold text-slate-800 mt-1 break-words">
                     {caja.sucursal}
                   </p>
+
                   <p className="text-xs text-slate-500 break-words">
                     {caja.clave_sucursal || 'Sin clave'}
                   </p>
@@ -453,7 +540,19 @@ export default function Cajas() {
 
                 <div className="mt-3 grid grid-cols-1 gap-3 text-sm">
                   <div className="rounded-2xl bg-slate-50 p-3">
+                    <p className="text-xs text-slate-500 flex items-center gap-1">
+                      <UserRound size={14} />
+                      Cajero asignado
+                    </p>
+
+                    <p className="font-semibold text-slate-700 break-words mt-1">
+                      {caja.cajero_asignado || 'Sin asignar'}
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl bg-slate-50 p-3">
                     <p className="text-xs text-slate-500">Descripción</p>
+
                     <p className="font-semibold text-slate-700 break-words">
                       {caja.descripcion || '—'}
                     </p>
@@ -461,6 +560,7 @@ export default function Cajas() {
 
                   <div className="rounded-2xl bg-slate-50 p-3">
                     <p className="text-xs text-slate-500">Fecha alta</p>
+
                     <p className="font-semibold text-slate-700">
                       {formatoFecha(caja.fecha_creacion)}
                     </p>
@@ -471,7 +571,6 @@ export default function Cajas() {
                   <button
                     onClick={() => abrirEditar(caja)}
                     className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold transition"
-                    title="Editar"
                   >
                     <Pencil size={18} />
                     Editar
@@ -481,7 +580,6 @@ export default function Cajas() {
                     onClick={() => desactivarCaja(caja)}
                     disabled={!caja.activo}
                     className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-red-50 text-red-700 hover:bg-red-100 font-bold transition disabled:opacity-40"
-                    title="Desactivar"
                   >
                     <Trash2 size={18} />
                     Desactivar
@@ -493,24 +591,33 @@ export default function Cajas() {
         </div>
 
         <div className="hidden md:block overflow-x-auto">
-          <table className="w-full min-w-[1000px]">
+          <table className="w-full min-w-[1120px]">
             <thead className="bg-slate-50 border-b border-slate-100">
               <tr>
                 <th className="px-5 py-4 text-left text-xs font-bold text-slate-500 uppercase">
                   Caja
                 </th>
+
                 <th className="px-5 py-4 text-left text-xs font-bold text-slate-500 uppercase">
                   Sucursal
                 </th>
+
+                <th className="px-5 py-4 text-left text-xs font-bold text-slate-500 uppercase">
+                  Cajero asignado
+                </th>
+
                 <th className="px-5 py-4 text-left text-xs font-bold text-slate-500 uppercase">
                   Descripción
                 </th>
+
                 <th className="px-5 py-4 text-center text-xs font-bold text-slate-500 uppercase">
                   Estado
                 </th>
+
                 <th className="px-5 py-4 text-left text-xs font-bold text-slate-500 uppercase">
                   Fecha alta
                 </th>
+
                 <th className="px-5 py-4 text-center text-xs font-bold text-slate-500 uppercase sticky right-0 bg-slate-50 shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.45)] z-10">
                   Acciones
                 </th>
@@ -520,13 +627,19 @@ export default function Cajas() {
             <tbody className="divide-y divide-slate-100">
               {cargando ? (
                 <tr>
-                  <td colSpan="6" className="px-5 py-10 text-center text-slate-500">
+                  <td
+                    colSpan="7"
+                    className="px-5 py-10 text-center text-slate-500"
+                  >
                     Cargando cajas...
                   </td>
                 </tr>
               ) : cajas.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="px-5 py-10 text-center text-slate-500">
+                  <td
+                    colSpan="7"
+                    className="px-5 py-10 text-center text-slate-500"
+                  >
                     No hay cajas registradas para esta sucursal.
                   </td>
                 </tr>
@@ -537,6 +650,7 @@ export default function Cajas() {
                       <p className="font-bold text-slate-800">
                         {caja.nombre}
                       </p>
+
                       <p className="text-xs text-slate-400 mt-1">
                         ID #{caja.id_caja}
                       </p>
@@ -544,15 +658,33 @@ export default function Cajas() {
 
                     <td className="px-5 py-4">
                       <div className="flex items-start gap-2">
-                        <Store size={17} className="text-slate-400 mt-0.5 shrink-0" />
+                        <Store
+                          size={17}
+                          className="text-slate-400 mt-0.5 shrink-0"
+                        />
+
                         <div className="min-w-0">
                           <p className="font-semibold text-slate-800">
                             {caja.sucursal}
                           </p>
+
                           <p className="text-xs text-slate-500">
-                            {caja.clave_sucursal}
+                            {caja.clave_sucursal || 'Sin clave'}
                           </p>
                         </div>
+                      </div>
+                    </td>
+
+                    <td className="px-5 py-4">
+                      <div className="flex items-center gap-2">
+                        <UserRound
+                          size={17}
+                          className="text-slate-400 shrink-0"
+                        />
+
+                        <span className="text-sm font-semibold text-slate-700">
+                          {caja.cajero_asignado || 'Sin asignar'}
+                        </span>
                       </div>
                     </td>
 
@@ -617,8 +749,9 @@ export default function Cajas() {
                 <h2 className="text-lg sm:text-xl font-bold text-slate-800">
                   {modoEdicion ? 'Editar caja' : 'Nueva caja'}
                 </h2>
+
                 <p className="text-sm text-slate-500">
-                  Define el nombre de la caja y su sucursal.
+                  Define la sucursal, datos de la caja y cajero asignado.
                 </p>
               </div>
 
@@ -636,6 +769,7 @@ export default function Cajas() {
                   <label className="block text-sm font-bold text-slate-700 mb-2">
                     Sucursal *
                   </label>
+
                   <select
                     name="id_sucursal"
                     value={form.id_sucursal}
@@ -643,8 +777,12 @@ export default function Cajas() {
                     className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
                   >
                     <option value="">Selecciona sucursal</option>
+
                     {sucursales.map((sucursal) => (
-                      <option key={sucursal.id_sucursal} value={sucursal.id_sucursal}>
+                      <option
+                        key={sucursal.id_sucursal}
+                        value={sucursal.id_sucursal}
+                      >
                         {sucursal.nombre}
                       </option>
                     ))}
@@ -655,6 +793,7 @@ export default function Cajas() {
                   <label className="block text-sm font-bold text-slate-700 mb-2">
                     Nombre de caja *
                   </label>
+
                   <input
                     name="nombre"
                     value={form.nombre}
@@ -666,8 +805,42 @@ export default function Cajas() {
 
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Cajero asignado
+                  </label>
+
+                  <select
+                    name="id_usuario_asignado"
+                    value={form.id_usuario_asignado}
+                    onChange={handleChange}
+                    disabled={!form.id_sucursal || cargandoCajeros}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white disabled:bg-slate-100 disabled:text-slate-400"
+                  >
+                    <option value="">
+                      {cargandoCajeros
+                        ? 'Cargando cajeros...'
+                        : 'Sin cajero asignado'}
+                    </option>
+
+                    {cajeros.map((cajero) => (
+                      <option
+                        key={cajero.id_usuario}
+                        value={cajero.id_usuario}
+                      >
+                        {cajero.nombre}
+                      </option>
+                    ))}
+                  </select>
+
+                  <p className="text-xs text-slate-500 mt-2">
+                    Cada cajero solo puede estar asignado a una caja activa.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
                     Descripción
                   </label>
+
                   <textarea
                     name="descripcion"
                     value={form.descripcion}
@@ -687,6 +860,7 @@ export default function Cajas() {
                       onChange={handleChange}
                       className="w-5 h-5 accent-sky-700 shrink-0"
                     />
+
                     <span className="font-semibold text-slate-700">
                       Caja activa
                     </span>
@@ -709,6 +883,7 @@ export default function Cajas() {
                   className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold transition disabled:opacity-60"
                 >
                   <Save size={19} />
+
                   {guardando
                     ? 'Guardando...'
                     : modoEdicion

@@ -851,6 +851,8 @@ export default function Caja() {
 
   const puedeCambiarSucursal = esSuperAdmin(usuario);
 
+  const puedeCambiarCaja = esSuperAdmin(usuario);
+
   const [sucursales, setSucursales] = useState([]);
   const [cajas, setCajas] = useState([]);
   const [movimientos, setMovimientos] = useState([]);
@@ -977,26 +979,45 @@ export default function Caja() {
     try {
       setCargando(true);
 
-      const { data } = await api.get(`/caja/cajas?sucursal=${idSucursal}`);
+      const { data } = await api.get(
+        `/caja/cajas?sucursal=${idSucursal}`
+      );
 
       if (data.ok) {
         const cajasActivas = (data.cajas || []).filter((c) => c.activo);
+
         setCajas(cajasActivas);
 
-        if (
-          !idCaja ||
-          !cajasActivas.some((c) => Number(c.id_caja) === Number(idCaja))
-        ) {
-          setIdCaja(cajasActivas[0]?.id_caja || '');
+        if (puedeCambiarCaja) {
+          setIdCaja((cajaAnterior) => {
+            const cajaSigueDisponible = cajasActivas.some(
+              (caja) =>
+                Number(caja.id_caja) === Number(cajaAnterior)
+            );
+
+            return cajaSigueDisponible
+              ? cajaAnterior
+              : String(cajasActivas[0]?.id_caja || '');
+          });
+
+          return;
         }
+
+        // Para cajeros: el backend solo devolverá su caja asignada.
+        setIdCaja(String(cajasActivas[0]?.id_caja || ''));
       }
     } catch (error) {
       console.error(error);
 
+      setCajas([]);
+      setIdCaja('');
+
       Swal.fire({
         icon: 'error',
         title: 'Error',
-        text: 'No se pudieron cargar las cajas.',
+        text:
+          error.response?.data?.mensaje ||
+          'No se pudieron cargar las cajas.',
       });
     } finally {
       setCargando(false);
@@ -1652,18 +1673,34 @@ export default function Caja() {
             <label className="block text-sm font-bold text-slate-700 mb-2">
               Caja
             </label>
+
             <select
               value={idCaja}
               onChange={(e) => setIdCaja(e.target.value)}
-              className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
+              disabled={!puedeCambiarCaja || cajas.length === 0}
+              className={`w-full min-w-0 px-4 py-3 rounded-2xl border focus:outline-none focus:ring-2 focus:ring-sky-500 ${puedeCambiarCaja
+                  ? 'border-slate-200 bg-white'
+                  : 'border-slate-200 bg-slate-50 text-slate-700 font-semibold cursor-not-allowed'
+                }`}
             >
-              <option value="">Selecciona caja</option>
+              <option value="">
+                {cajas.length === 0
+                  ? 'No tienes una caja asignada'
+                  : 'Selecciona caja'}
+              </option>
+
               {cajas.map((caja) => (
                 <option key={caja.id_caja} value={caja.id_caja}>
                   {caja.nombre}
                 </option>
               ))}
             </select>
+
+            {!puedeCambiarCaja && (
+              <p className="text-xs text-slate-500 mt-2">
+                Esta caja está asignada a tu usuario.
+              </p>
+            )}
           </div>
         </div>
       </section>

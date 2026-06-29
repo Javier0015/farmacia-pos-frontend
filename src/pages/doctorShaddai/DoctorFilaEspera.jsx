@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   XCircle,
   AlertCircle,
+  AlertTriangle,
   PlayCircle,
   ClipboardList,
   Timer,
@@ -34,6 +35,8 @@ import ConsentimientoInformadoImprimible from '../../components/doctores/Consent
 import HojaReferenciaContrarreferenciaImprimible from '../../components/doctores/HojaReferenciaContrarreferenciaImprimible';
 import HojaViolenciaLesionImprimible from '../../components/doctores/HojaViolenciaLesionImprimible';
 import NotaMedicaImprimible from '../../components/doctores/NotaMedicaImprimible';
+import ModalNotaMedica from '../../components/doctores/ModalNotaMedica';
+import { notasMedicasService } from '../../services/notasMedicasService';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import CertificadoMedicoImprimible from '../../components/doctores/CertificadoMedicoImprimible';
@@ -83,6 +86,51 @@ const tipoAtencionStyles = {
     className: 'bg-orange-100 text-orange-700 border-orange-200',
     accion: 'Solicitud de laboratorio',
   },
+};
+
+const estadoNotaMedicaStyles = {
+  PENDIENTE: {
+    label: 'Nota médica pendiente',
+    className: 'border-red-200 bg-red-100 text-red-700',
+    cardClass: 'border-l-4 border-l-red-500 bg-red-50/70 hover:bg-red-50',
+  },
+  COMPLETA: {
+    label: 'Nota médica completa',
+    className: 'border-emerald-200 bg-emerald-100 text-emerald-700',
+    cardClass: '',
+  },
+  NO_APLICA: {
+    label: 'No aplica',
+    className: 'border-slate-200 bg-slate-100 text-slate-600',
+    cardClass: '',
+  },
+};
+
+const obtenerEstadoNotaMedica = (paciente) => {
+  const estado = String(paciente?.estado_nota_medica || '')
+    .trim()
+    .toUpperCase();
+
+  if (estadoNotaMedicaStyles[estado]) {
+    return estadoNotaMedicaStyles[estado];
+  }
+
+  const esConsulta = String(paciente?.tipo_atencion || '')
+    .trim()
+    .toUpperCase() === 'CONSULTA_MEDICA';
+
+  return esConsulta
+    ? estadoNotaMedicaStyles.PENDIENTE
+    : estadoNotaMedicaStyles.NO_APLICA;
+};
+
+const tieneNotaMedicaPendiente = (paciente) => {
+  return (
+    String(paciente?.tipo_atencion || '').trim().toUpperCase() ===
+      'CONSULTA_MEDICA' &&
+    String(paciente?.estado_nota_medica || '').trim().toUpperCase() ===
+      'PENDIENTE'
+  );
 };
 
 const tipoDocumentoStyles = {
@@ -382,6 +430,12 @@ const DoctorFilaEspera = () => {
   const [documentosAtencion, setDocumentosAtencion] = useState([]);
   const [cargandoDocumentos, setCargandoDocumentos] = useState(false);
   const [documentoSeleccionado, setDocumentoSeleccionado] = useState(null);
+
+  const [modalNotaPendienteAbierto, setModalNotaPendienteAbierto] = useState(false);
+  const [pacienteNotaPendiente, setPacienteNotaPendiente] = useState(null);
+  const [expedienteNotaPendiente, setExpedienteNotaPendiente] = useState(null);
+  const [notasPreviasNotaPendiente, setNotasPreviasNotaPendiente] = useState([]);
+  const [cargandoNotaPendiente, setCargandoNotaPendiente] = useState(false);
 
   const rolUsuario = usuario?.rol || usuario?.nombre_rol || '';
   const esSuperAdmin = rolUsuario === 'SUPER_ADMIN';
@@ -833,6 +887,107 @@ const DoctorFilaEspera = () => {
         tipoAtencion: 'CONSULTA_MEDICA',
       })
     );
+  };
+
+  const cerrarModalNotaPendiente = () => {
+    if (cargandoNotaPendiente) return;
+
+    setModalNotaPendienteAbierto(false);
+    setPacienteNotaPendiente(null);
+    setExpedienteNotaPendiente(null);
+    setNotasPreviasNotaPendiente([]);
+  };
+
+  const abrirModalNotaPendiente = async (paciente) => {
+    if (!tieneNotaMedicaPendiente(paciente)) return;
+
+    if (!paciente?.id_expediente) {
+      await Swal.fire({
+        icon: 'warning',
+        title: 'Expediente requerido',
+        text:
+          'No se puede completar la nota porque esta atención no tiene un expediente clínico vinculado.',
+      });
+      return;
+    }
+
+    try {
+      setCargandoNotaPendiente(true);
+
+      const [respuestaExpediente, respuestaNotas] = await Promise.all([
+        api.get(`/doctor-shaddai/expedientes/${paciente.id_expediente}`),
+        notasMedicasService.listarNotasPorExpediente(paciente.id_expediente),
+      ]);
+
+      if (
+        !respuestaExpediente.data?.ok ||
+        !respuestaExpediente.data?.expediente
+      ) {
+        throw new Error(
+          respuestaExpediente.data?.mensaje ||
+            'No se pudo cargar el expediente clínico.'
+        );
+      }
+
+      const expediente = respuestaExpediente.data.expediente;
+      const notasPrevias = respuestaNotas?.ok
+        ? respuestaNotas.notas || []
+        : [];
+
+      setExpedienteNotaPendiente(expediente);
+      setNotasPreviasNotaPendiente(notasPrevias);
+      setPacienteNotaPendiente({
+        ...paciente,
+        nombre_paciente:
+          [
+            expediente.nombre_paciente,
+            expediente.primer_apellido,
+            expediente.segundo_apellido,
+          ]
+            .filter(Boolean)
+            .join(' ') || paciente.nombre_paciente || '',
+        telefono: expediente.telefono || paciente.telefono || '',
+        edad: expediente.edad || paciente.edad || '',
+        sexo: expediente.sexo || paciente.sexo || '',
+        diagnostico: paciente.diagnostico || paciente.motivo || '',
+        observaciones:
+          paciente.observaciones ||
+          expediente.observaciones_generales ||
+          '',
+      });
+
+      setModalNotaPendienteAbierto(true);
+    } catch (error) {
+      console.error('Error al preparar nota médica pendiente:', error);
+
+      Swal.fire({
+        icon: 'error',
+        title: 'No se pudo abrir la nota médica',
+        text:
+          error.response?.data?.mensaje ||
+          error.message ||
+          'No se pudo cargar la información necesaria para completar la nota.',
+      });
+    } finally {
+      setCargandoNotaPendiente(false);
+    }
+  };
+
+  const manejarNotaPendienteGuardada = async (nota) => {
+    cerrarModalNotaPendiente();
+
+    await cargarDatos();
+
+    Swal.fire({
+      icon: 'success',
+      title: 'Nota médica completada',
+      html: `
+        <p>La atención quedó actualizada como <strong>nota médica completa</strong>.</p>
+        <p class="mt-2"><strong>Folio:</strong> NOTA-${nota?.id_nota || 'N/A'}</p>
+      `,
+      timer: 1800,
+      showConfirmButton: false,
+    });
   };
 
   const registrarServicioRapido = (paciente) => {
@@ -5173,7 +5328,7 @@ const DoctorFilaEspera = () => {
 
     const texto = `${item.nombre_paciente || ''} ${item.telefono || ''} ${item.motivo || ''
       } ${item.estatus || ''} ${item.doctor_nombre || ''} ${item.sucursal_nombre || ''
-      } ${item.id_expediente || ''} ${tipoAtencion.label} ${tipoAtencion.accion
+      } ${item.id_expediente || ''} ${item.estado_nota_medica || ''} ${tipoAtencion.label} ${tipoAtencion.accion
       }`.toLowerCase();
 
     return texto.includes(busqueda.toLowerCase());
@@ -5188,6 +5343,10 @@ const DoctorFilaEspera = () => {
   ).length;
 
   const totalHistorico = historico.length;
+
+  const totalNotasPendientes = historico.filter((item) =>
+    tieneNotaMedicaPendiente(item)
+  ).length;
 
   const totalConsultas = fila.filter(
     (item) => item.tipo_atencion === 'CONSULTA_MEDICA'
@@ -5289,6 +5448,13 @@ const DoctorFilaEspera = () => {
                     <p className="mt-2 text-3xl font-bold text-green-800">
                       {totalHistorico}
                     </p>
+
+                    {totalNotasPendientes > 0 && (
+                      <p className="mt-2 inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-100 px-2 py-1 text-xs font-black text-red-700">
+                        <AlertTriangle size={13} />
+                        {totalNotasPendientes} nota(s) pendiente(s)
+                      </p>
+                    )}
                   </div>
                   <ClipboardList className="text-green-700" size={32} />
                 </div>
@@ -5367,20 +5533,31 @@ const DoctorFilaEspera = () => {
                     const enAtencion = paciente.estatus === 'EN_ATENCION';
                     const enEspera = paciente.estatus === 'EN_ESPERA';
                     const tieneExpediente = Boolean(paciente.id_expediente);
+                    const notaPendiente =
+                      tab === 'historico' && tieneNotaMedicaPendiente(paciente);
+                    const estadoNota = obtenerEstadoNotaMedica(paciente);
 
                     return (
                       <div
                         key={paciente.id_fila}
-                        className={`p-4 transition hover:bg-slate-50 ${enAtencion ? 'bg-blue-50/40' : ''
-                          }`}
+                        className={`p-4 transition ${
+                          notaPendiente
+                            ? estadoNota.cardClass
+                            : enAtencion
+                              ? 'bg-blue-50/40 hover:bg-blue-50/60'
+                              : 'hover:bg-slate-50'
+                        }`}
                       >
                         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                           <div className="flex gap-4">
                             <div
-                              className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${enAtencion
-                                ? 'bg-blue-100 text-blue-700'
-                                : 'bg-slate-100 text-slate-600'
-                                }`}
+                              className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${
+                                 notaPendiente
+                                   ? 'bg-red-100 text-red-700'
+                                   : enAtencion
+                                     ? 'bg-blue-100 text-blue-700'
+                                     : 'bg-slate-100 text-slate-600'
+                                 }`}
                             >
                               <User size={24} />
                             </div>
@@ -5402,6 +5579,13 @@ const DoctorFilaEspera = () => {
                                 >
                                   {tipoAtencion.label}
                                 </span>
+
+                                {notaPendiente && (
+                                  <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-100 px-2.5 py-1 text-xs font-black text-red-700">
+                                    <AlertTriangle size={13} />
+                                    Nota médica pendiente
+                                  </span>
+                                )}
 
                                 {tieneExpediente ? (
                                   <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
@@ -5455,6 +5639,13 @@ const DoctorFilaEspera = () => {
                                   Acción sugerida: {tipoAtencion.accion}
                                 </p>
 
+                                {notaPendiente && (
+                                  <p className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold leading-relaxed text-red-700">
+                                    <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+                                    Esta consulta finalizó sin nota médica. Complétala para cerrar su documentación clínica.
+                                  </p>
+                                )}
+
                                 {paciente.sucursal_nombre && (
                                   <p className="flex items-center gap-2 text-xs font-semibold text-slate-400">
                                     <Store size={14} />
@@ -5479,6 +5670,22 @@ const DoctorFilaEspera = () => {
                             >
                               Ver detalle
                             </button>
+
+                            {tab === 'historico' && notaPendiente && tieneExpediente && (
+                              <button
+                                type="button"
+                                onClick={() => abrirModalNotaPendiente(paciente)}
+                                disabled={cargandoNotaPendiente}
+                                className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-black text-white shadow-sm transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                {cargandoNotaPendiente ? (
+                                  <RefreshCw size={16} className="animate-spin" />
+                                ) : (
+                                  <FilePlus2 size={16} />
+                                )}
+                                Completar nota
+                              </button>
+                            )}
 
                             {tab === 'historico' && tieneExpediente && (
                               <button
@@ -5614,6 +5821,33 @@ const DoctorFilaEspera = () => {
         )}
       </div>
 
+
+      <ModalNotaMedica
+        abierto={modalNotaPendienteAbierto}
+        onClose={cerrarModalNotaPendiente}
+        expediente={expedienteNotaPendiente}
+        paciente={pacienteNotaPendiente}
+        idFila={Number(pacienteNotaPendiente?.id_fila) || null}
+        idSucursal={
+          Number(
+            expedienteNotaPendiente?.id_sucursal ||
+              pacienteNotaPendiente?.id_sucursal ||
+              0
+          ) || null
+        }
+        tipoNota={
+          notasPreviasNotaPendiente.length > 0
+            ? 'NOTA_EVOLUCION'
+            : 'NOTA_INICIAL'
+        }
+        tipoNotaLabel={
+          notasPreviasNotaPendiente.length > 0
+            ? 'Nota de evolución'
+            : 'Nota médica inicial'
+        }
+        notasPrevias={notasPreviasNotaPendiente}
+        onGuardada={manejarNotaPendienteGuardada}
+      />
 
       {modalDocumentosAbierto && pacienteDocumentos && (
         <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">

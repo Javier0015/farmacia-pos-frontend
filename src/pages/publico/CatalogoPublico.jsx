@@ -20,6 +20,7 @@ import {
 import api from '../../api/axios';
 import ProductoCatalogoCard from '../../components/catalogo/ProductoCatalogoCard';
 import ProductoCatalogoModal from '../../components/catalogo/ProductoCatalogoModal';
+import SucursalesDisponiblesModal from '../../components/catalogo/SucursalesDisponiblesModal';
 import logoFarmacia from '../../assets/logoShaddai.png';
 import logoFarmaciaCompleto from '../../assets/logoCompleto-sinFondo.png';
 
@@ -160,6 +161,10 @@ export default function CatalogoPublico() {
   const [error, setError] = useState('');
 
   const [productoSeleccionado, setProductoSeleccionado] = useState(null);
+  const [
+    productoDisponibilidadSeleccionado,
+    setProductoDisponibilidadSeleccionado,
+  ] = useState(null);
   const [cargandoDetalle, setCargandoDetalle] = useState(false);
 
   const cargarCategorias = async () => {
@@ -1279,6 +1284,16 @@ export default function CatalogoPublico() {
         <ProductoCatalogoModal
           producto={productoSeleccionado}
           onCerrar={() => setProductoSeleccionado(null)}
+          onVerDisponibilidad={(producto) => {
+            setProductoDisponibilidadSeleccionado(producto);
+          }}
+        />
+      )}
+
+      {productoDisponibilidadSeleccionado && (
+        <SucursalesDisponiblesModal
+          producto={productoDisponibilidadSeleccionado}
+          onCerrar={() => setProductoDisponibilidadSeleccionado(null)}
         />
       )}
     </div>

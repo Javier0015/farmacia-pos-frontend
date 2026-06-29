@@ -250,6 +250,9 @@ function HojaReferencia({ datos = {}, expediente, paciente, perfilDoctor }) {
             className="rr-tratamiento"
           />
         </div>
+        <br />
+        <br />
+        <br />
 
         <footer className="rr-footer">
           <div className="rr-sign">
@@ -351,12 +354,19 @@ function HojaContrarreferencia({ datos = {}, expediente }) {
         </section>
 
         <footer className="rr-footer">
+          
           <div className="rr-sign">
+        <br />
+        <br />
+
             <div className="rr-line" />
             <div>Nombre, firma y cédula profesional del médico tratante</div>
           </div>
 
           <div className="rr-sign">
+        <br />
+        <br />
+
             <div className="rr-line" />
             <div>Nombre y firma del paciente y familiar responsable</div>
           </div>
@@ -624,14 +634,14 @@ export default function HojaReferenciaContrarreferenciaImprimible({
             );
           }
 
-          #hoja-referencia-contrarreferencia .rr-footer {
-            display: grid;
-            grid-template-columns: 1fr 1fr 130px;
-            gap: 10px;
-            margin-top: 6px !important;
-            align-items: end;
-            flex: 0 0 auto;
-          }
+#hoja-referencia-contrarreferencia .rr-footer {
+  display: grid;
+  grid-template-columns: 1fr 1fr 130px;
+  gap: 10px;
+  margin-top: 6px !important;
+  align-items: start; /* antes: end */
+  flex: 0 0 auto;
+}
 
           #hoja-referencia-contrarreferencia .rr-sign {
             text-align: center;
