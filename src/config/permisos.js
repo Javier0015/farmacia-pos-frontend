@@ -37,7 +37,7 @@ export const permisosPorRol = {
     'tarjetas-puntos',
     'recetas-admin',
     'fila-espera',
-    'productos',
+   /* 'productos',*/
     'inventario',
     'categorias',
     'proveedores',
