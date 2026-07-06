@@ -71,6 +71,16 @@ const obtenerEspecialidadDoctor = (nota = {}, perfilDoctor = {}) => {
   return nota.especialidad || perfilDoctor?.especialidad || 'N/A';
 };
 
+const obtenerTelefonoDoctor = (nota = {}, perfilDoctor = {}) => {
+  return (
+    nota.doctor_telefono ||
+    nota.telefono_doctor ||
+    perfilDoctor?.telefono ||
+    perfilDoctor?.doctor_telefono ||
+    'N/A'
+  );
+};
+
 const limpiarValor = (valor) => {
   if (valor === undefined || valor === null || valor === '') return 'N/A';
   return valor;
@@ -130,6 +140,8 @@ export default function NotaMedicaImprimible({
   const nombreDoctor = obtenerNombreDoctor(notaFinal, perfilDoctor);
   const cedulaDoctor = obtenerCedulaDoctor(notaFinal, perfilDoctor);
   const especialidadDoctor = obtenerEspecialidadDoctor(notaFinal, perfilDoctor);
+
+  const telefonoDoctor = obtenerTelefonoDoctor(notaFinal, perfilDoctor);
 
   const expedienteId =
     notaFinal.id_expediente ||
@@ -463,6 +475,9 @@ export default function NotaMedicaImprimible({
 
               <p className="font-semibold text-slate-700">
                 Cédula profesional: {cedulaDoctor}
+              </p>
+              <p className="font-semibold text-slate-700">
+                Teléfono: {telefonoDoctor}
               </p>
             </div>
 

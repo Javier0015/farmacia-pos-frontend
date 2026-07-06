@@ -58,6 +58,7 @@ export const permisosPorRol = {
     'doctor-shaddai-recetas',
     'doctor-shaddai-fila-espera',
     /*'doctor-shaddai-laboratorio',*/
+      'stock-sucursales',
   ],
 };
 

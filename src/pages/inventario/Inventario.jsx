@@ -466,7 +466,7 @@ export default function Inventario() {
     texto = null,
     idProducto = undefined,
   } = {}) => {
-    if (!idSucursal) return;
+    if (!idSucursal) return false;
 
     try {
       setCargando(true);
@@ -479,11 +479,6 @@ export default function Inventario() {
         idProducto !== undefined ? idProducto : idProductoBusqueda ?? ''
       ).trim();
 
-      /*
-       * Cuando se selecciona una sugerencia enviamos id_producto, para que
-       * la tabla muestre exactamente el producto elegido. La búsqueda manual
-       * conserva el filtro ILIKE del controlador.
-       */
       if (productoSeleccionado) {
         params.append('id_producto', productoSeleccionado);
       } else if (textoBusqueda) {
@@ -494,7 +489,10 @@ export default function Inventario() {
 
       if (data.ok) {
         setInventario(data.inventario || []);
+        return true;
       }
+
+      return false;
     } catch (error) {
       console.error(error);
 
@@ -505,6 +503,8 @@ export default function Inventario() {
           error.response?.data?.mensaje ||
           'No se pudo cargar el inventario.',
       });
+
+      return false;
     } finally {
       setCargando(false);
     }
@@ -558,15 +558,23 @@ export default function Inventario() {
     }
   };
 
-  const seleccionarSugerenciaInventario = async (item) => {
+  const limpiarSoloBusquedaInventario = () => {
+    solicitudSugerenciasInventarioRef.current += 1;
+
+    setBuscar('');
+    setIdProductoBusqueda('');
+    setSugerenciasInventario([]);
+    setMostrandoSugerenciasInventario(false);
+    setCargandoSugerenciasInventario(false);
+    setIndiceSugerenciaInventario(-1);
+  };
+
+  const seleccionarSugerenciaInventario = (item) => {
     if (!item?.id_producto) return;
 
     const nombreProducto = item.producto || item.nombre || '';
 
-    /*
-     * Evita que el useEffect vuelva a abrir sugerencias inmediatamente
-     * después de colocar el nombre elegido en el input.
-     */
+    // Evita que al colocar el texto vuelva a abrir sugerencias.
     ignorarSiguienteSugerenciaRef.current = true;
 
     setBuscar(nombreProducto);
@@ -576,22 +584,41 @@ export default function Inventario() {
     setCargandoSugerenciasInventario(false);
     setIndiceSugerenciaInventario(-1);
 
-    await cargarInventario({
-      texto: nombreProducto,
-      idProducto: item.id_producto,
-    });
+    // Ya no se consulta aquí.
   };
 
-  const buscarInventarioYMovimientos = async () => {
+  const buscarInventarioYMovimientos = async ({
+    itemSeleccionado = null,
+  } = {}) => {
+    solicitudSugerenciasInventarioRef.current += 1;
+
+    const nombreProducto = itemSeleccionado
+      ? itemSeleccionado.producto || itemSeleccionado.nombre || ''
+      : buscar;
+
+    const idProducto = itemSeleccionado
+      ? itemSeleccionado.id_producto
+      : idProductoBusqueda;
+
     setMostrandoSugerenciasInventario(false);
     setIndiceSugerenciaInventario(-1);
+    setSugerenciasInventario([]);
+    setCargandoSugerenciasInventario(false);
 
-    await cargarInventario();
+    const consultaExitosa = await cargarInventario({
+      texto: nombreProducto,
+      idProducto: idProducto || '',
+    });
 
     if (modalMovimientos) {
       await cargarMovimientos();
     }
+
+    if (consultaExitosa) {
+      limpiarSoloBusquedaInventario();
+    }
   };
+
 
   const cargarBajoStock = async () => {
     if (!idSucursal) return;
@@ -1510,32 +1537,21 @@ export default function Inventario() {
 
                     if (e.key === 'ArrowDown' && haySugerencias) {
                       e.preventDefault();
+
                       setIndiceSugerenciaInventario((indice) =>
-                        Math.min(
-                          indice + 1,
-                          sugerenciasInventario.length - 1
-                        )
+                        indice >= sugerenciasInventario.length - 1 ? 0 : indice + 1
                       );
+
                       return;
                     }
 
                     if (e.key === 'ArrowUp' && haySugerencias) {
                       e.preventDefault();
-                      setIndiceSugerenciaInventario((indice) =>
-                        Math.max(indice - 1, 0)
-                      );
-                      return;
-                    }
 
-                    if (
-                      e.key === 'Enter' &&
-                      haySugerencias &&
-                      indiceSugerenciaInventario >= 0
-                    ) {
-                      e.preventDefault();
-                      seleccionarSugerenciaInventario(
-                        sugerenciasInventario[indiceSugerenciaInventario]
+                      setIndiceSugerenciaInventario((indice) =>
+                        indice <= 0 ? sugerenciasInventario.length - 1 : indice - 1
                       );
+
                       return;
                     }
 
@@ -1546,7 +1562,14 @@ export default function Inventario() {
                     }
 
                     if (e.key === 'Enter') {
-                      buscarInventarioYMovimientos();
+                      e.preventDefault();
+
+                      const itemSeleccionado =
+                        haySugerencias && indiceSugerenciaInventario >= 0
+                          ? sugerenciasInventario[indiceSugerenciaInventario]
+                          : null;
+
+                      buscarInventarioYMovimientos({ itemSeleccionado });
                     }
                   }}
                   className="w-full min-w-0 pl-12 pr-12 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
@@ -1593,11 +1616,10 @@ export default function Inventario() {
                                   e.preventDefault();
                                   seleccionarSugerenciaInventario(item);
                                 }}
-                                className={`flex w-full items-start justify-between gap-4 px-4 py-3 text-left transition ${
-                                  seleccionado
-                                    ? 'bg-sky-50 text-sky-800'
-                                    : 'text-slate-700 hover:bg-slate-50'
-                                }`}
+                                className={`flex w-full items-start justify-between gap-4 px-4 py-3 text-left transition ${seleccionado
+                                  ? 'bg-sky-50 text-sky-800'
+                                  : 'text-slate-700 hover:bg-slate-50'
+                                  }`}
                               >
                                 <div className="min-w-0">
                                   <p className="truncate text-sm font-black">

@@ -483,6 +483,19 @@ export default function DoctorShaddaiRecetas() {
             solicitud?.medico?.especialidad ||
             perfilDoctor?.especialidad ||
             null,
+
+          telefono:
+            solicitud?.medico?.telefono ||
+            solicitud?.medico?.medico_telefono ||
+            solicitud?.medico?.doctor_telefono ||
+            perfilDoctor?.telefono ||
+            perfilDoctor?.medico_telefono ||
+            perfilDoctor?.doctor_telefono ||
+            perfilDoctor?.telefono_doctor ||
+            perfilDoctor?.telefono_contacto ||
+            perfilDoctor?.telefono_consultorio ||
+            perfilDoctor?.celular ||
+            null,
         },
 
         paciente: {
@@ -3000,9 +3013,19 @@ export default function DoctorShaddaiRecetas() {
           tipo_atencion: tipoAtencionActual.value,
         }}
         medico={{
+          ...(perfilDoctor || {}),
           nombre_completo: perfilDoctor?.nombre_completo || 'Doctor Shaddai',
           cedula_profesional: perfilDoctor?.cedula_profesional || 'N/A',
           especialidad: perfilDoctor?.especialidad || 'N/A',
+          telefono:
+            perfilDoctor?.telefono ||
+            perfilDoctor?.medico_telefono ||
+            perfilDoctor?.doctor_telefono ||
+            perfilDoctor?.telefono_doctor ||
+            perfilDoctor?.telefono_contacto ||
+            perfilDoctor?.telefono_consultorio ||
+            perfilDoctor?.celular ||
+            '',
         }}
         onGuardar={guardarSolicitudLaboratorio}
       />
@@ -3280,8 +3303,17 @@ function RecetaImprimible({ recetaGenerada, fechaActual, perfilDoctor }) {
   const detalles = recetaGenerada?.detalles || [];
   const receta = recetaGenerada?.receta || {};
   const expediente = recetaGenerada?.expediente || null;
-  const doctor = perfilDoctor || recetaGenerada?.doctor || {};
+  const doctor = {
+    ...(recetaGenerada?.doctor || {}),
+    ...(perfilDoctor || {}),
+  };
 
+  const telefonoDoctor =
+    doctor.telefono ||
+    doctor.doctor_telefono ||
+    recetaGenerada?.doctor?.telefono ||
+    recetaGenerada?.doctor?.doctor_telefono ||
+    '';
   const logoUniversidadUrl = obtenerUrlArchivo(
     doctor.logo_universidad_url ||
     recetaGenerada?.doctor?.logo_universidad_url ||
@@ -3457,6 +3489,10 @@ function RecetaImprimible({ recetaGenerada, fechaActual, perfilDoctor }) {
           </p>
           <p>
             <b>Cédula:</b> {textoSeguro(doctor.cedula_profesional)}
+          </p>
+          <p>
+            <b>Teléfono:</b>{' '}
+            {telefonoDoctor ? telefonoDoctor : 'No registrado'}
           </p>
           <p>
             <b>Consultorio:</b>{' '}

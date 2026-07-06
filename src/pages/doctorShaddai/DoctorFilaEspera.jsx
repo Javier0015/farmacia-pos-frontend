@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Stethoscope,
   Clock,
@@ -430,6 +430,7 @@ const DoctorFilaEspera = () => {
   const [documentosAtencion, setDocumentosAtencion] = useState([]);
   const [cargandoDocumentos, setCargandoDocumentos] = useState(false);
   const [documentoSeleccionado, setDocumentoSeleccionado] = useState(null);
+  const [perfilDoctorDocumentos, setPerfilDoctorDocumentos] = useState(null);
 
   const [modalNotaPendienteAbierto, setModalNotaPendienteAbierto] = useState(false);
   const [pacienteNotaPendiente, setPacienteNotaPendiente] = useState(null);
@@ -459,6 +460,21 @@ const DoctorFilaEspera = () => {
       idsSucursalesDoctor
     );
   }, [historicoOriginal, esSuperAdmin, idsSucursalesDoctor]);
+
+  const cargarPerfilDoctorDocumentos = async () => {
+    try {
+      const { data } = await api.get('/doctor-shaddai/mi-perfil');
+
+      setPerfilDoctorDocumentos(data?.perfil || null);
+    } catch (error) {
+      console.warn(
+        'No se pudo obtener el perfil médico para completar documentos:',
+        error
+      );
+
+      setPerfilDoctorDocumentos(null);
+    }
+  };
 
   const cargarDatos = async () => {
     try {
@@ -512,6 +528,7 @@ const DoctorFilaEspera = () => {
 
   useEffect(() => {
     cargarDatos();
+    cargarPerfilDoctorDocumentos();
 
     const intervalo = setInterval(() => {
       cargarDatos();
@@ -1651,7 +1668,34 @@ const DoctorFilaEspera = () => {
           receta.especialidad ||
           metadata.especialidad ||
           pacienteDocumentos?.doctor_especialidad ||
+          perfilDoctorDocumentos?.especialidad ||
           'Medicina general',
+        telefono: primerTexto(
+          receta.telefono_doctor,
+          receta.doctor_telefono,
+          receta.medico_telefono,
+          receta.telefono_medico,
+          receta.doctor?.telefono,
+          receta.doctor?.telefono_doctor,
+          receta.doctor?.doctor_telefono,
+          receta.doctor?.telefono_contacto,
+          receta.doctor?.telefono_consultorio,
+          metadata.telefono_doctor,
+          metadata.doctor_telefono,
+          metadata.medico_telefono,
+          metadata.telefono_medico,
+          metadata.doctor?.telefono,
+          metadata.doctor?.telefono_doctor,
+          metadata.doctor?.doctor_telefono,
+          metadata.doctor?.telefono_contacto,
+          metadata.doctor?.telefono_consultorio,
+          perfilDoctorDocumentos?.telefono,
+          perfilDoctorDocumentos?.telefono_contacto,
+          perfilDoctorDocumentos?.telefono_consultorio,
+          perfilDoctorDocumentos?.medico_telefono,
+          perfilDoctorDocumentos?.doctor_telefono,
+          perfilDoctorDocumentos?.celular
+        ) || 'No registrado',
         direccion_consultorio:
           receta.direccion_consultorio ||
           metadata.direccion_consultorio ||
@@ -1685,141 +1729,223 @@ const DoctorFilaEspera = () => {
     const metadata = normalizarMetadata(doc.metadata);
     const data = doc.data || {};
 
+    const solicitudGuardada =
+      metadata.solicitudLaboratorio ||
+      data.solicitudLaboratorio ||
+      {};
+
+    const pacienteGuardado =
+      solicitudGuardada.paciente ||
+      metadata.paciente ||
+      data.paciente ||
+      {};
+
     const medicoGuardado =
-      metadata.solicitudLaboratorio?.medico ||
-      data.solicitudLaboratorio?.medico ||
+      solicitudGuardada.medico ||
       metadata.medico ||
       data.medico ||
       metadata.doctor ||
       data.doctor ||
       {};
 
-    const estudios = Array.isArray(metadata.estudios)
-      ? metadata.estudios
-      : Array.isArray(data.estudios)
-        ? data.estudios
-        : [];
+    const estudios = Array.isArray(data.estudios)
+      ? data.estudios
+      : Array.isArray(solicitudGuardada.estudios)
+        ? solicitudGuardada.estudios
+        : Array.isArray(metadata.estudios)
+          ? metadata.estudios
+          : [];
 
     return {
-      folio:
-        data.folio ||
-        metadata.folio ||
-        doc.folio ||
-        'LAB-SIN-FOLIO',
+      folio: primerTexto(
+        data.folio,
+        solicitudGuardada.folio,
+        metadata.folio,
+        doc.folio
+      ) || 'LAB-SIN-FOLIO',
 
       fecha:
+        data.fecha_solicitud ||
         data.fecha ||
         data.fecha_creacion ||
+        solicitudGuardada.fecha_solicitud ||
+        solicitudGuardada.fecha ||
+        solicitudGuardada.fecha_creacion ||
         data.fecha_documento ||
         doc.fecha ||
         metadata.fecha ||
-        metadata.fecha_creacion,
+        metadata.fecha_creacion ||
+        null,
 
       paciente: {
-        nombre:
-          metadata.nombre_paciente ||
-          data.nombre_paciente ||
-          pacienteDocumentos?.nombre_paciente ||
-          'N/A',
+        nombre: primerTexto(
+          data.nombre_paciente,
+          solicitudGuardada.nombre_paciente,
+          pacienteGuardado.nombre,
+          pacienteGuardado.nombre_paciente,
+          metadata.nombre_paciente,
+          pacienteDocumentos?.nombre_paciente
+        ) || 'N/A',
 
-        expediente:
-          data.id_expediente ||
-          metadata.id_expediente ||
-          pacienteDocumentos?.id_expediente ||
-          'N/A',
+        expediente: primerTexto(
+          data.id_paciente_expediente,
+          data.id_expediente,
+          solicitudGuardada.id_paciente_expediente,
+          solicitudGuardada.id_expediente,
+          pacienteGuardado.expediente,
+          pacienteGuardado.id_expediente,
+          metadata.id_expediente,
+          pacienteDocumentos?.id_expediente
+        ) || 'N/A',
 
-        edad:
-          metadata.edad ||
-          metadata.edad_paciente ||
-          data.edad ||
-          pacienteDocumentos?.edad ||
-          'N/A',
+        edad: primerTexto(
+          data.edad_paciente,
+          data.edad,
+          solicitudGuardada.edad_paciente,
+          solicitudGuardada.edad,
+          pacienteGuardado.edad,
+          metadata.edad_paciente,
+          metadata.edad,
+          pacienteDocumentos?.edad
+        ) || 'N/A',
 
-        sexo:
-          metadata.sexo ||
-          metadata.sexo_paciente ||
-          data.sexo ||
-          pacienteDocumentos?.sexo ||
-          'N/A',
+        sexo: primerTexto(
+          data.sexo_paciente,
+          data.sexo,
+          solicitudGuardada.sexo_paciente,
+          solicitudGuardada.sexo,
+          pacienteGuardado.sexo,
+          metadata.sexo_paciente,
+          metadata.sexo,
+          pacienteDocumentos?.sexo
+        ) || 'N/A',
 
-        telefono:
-          metadata.telefono ||
-          metadata.telefono_paciente ||
-          data.telefono ||
-          pacienteDocumentos?.telefono ||
-          'N/A',
+        telefono: primerTexto(
+          data.telefono_paciente,
+          data.telefono,
+          solicitudGuardada.telefono_paciente,
+          solicitudGuardada.telefono,
+          pacienteGuardado.telefono,
+          metadata.telefono_paciente,
+          metadata.telefono,
+          pacienteDocumentos?.telefono
+        ) || 'N/A',
       },
 
       medico: {
-        nombre:
-          medicoGuardado.nombre_completo ||
-          medicoGuardado.nombre ||
-          metadata.medico_responsable ||
-          metadata.doctor_nombre_completo ||
-          data.medico_responsable ||
-          data.nombre_doctor ||
-          pacienteDocumentos?.doctor_nombre ||
-          'Doctor Shaddai',
+        nombre: primerTexto(
+          data.medico_nombre,
+          data.nombre_medico,
+          data.nombre_doctor,
+          data.doctor_nombre_completo,
+          solicitudGuardada.medico_nombre,
+          solicitudGuardada.nombre_medico,
+          medicoGuardado.nombre_completo,
+          medicoGuardado.nombre,
+          metadata.medico_responsable,
+          metadata.doctor_nombre_completo,
+          data.medico_responsable,
+          pacienteDocumentos?.doctor_nombre
+        ) || 'Doctor Shaddai',
 
-        cedula:
-          medicoGuardado.cedula_profesional ||
-          medicoGuardado.cedula ||
-          metadata.cedula_profesional ||
-          metadata.cedula ||
-          metadata.responsable_cedula ||
-          data.cedula_profesional ||
-          data.cedula ||
-          data.responsable_cedula ||
-          pacienteDocumentos?.cedula_profesional ||
-          'N/A',
+        cedula: primerTexto(
+          data.medico_cedula,
+          data.cedula_profesional,
+          data.doctor_cedula_profesional,
+          solicitudGuardada.medico_cedula,
+          solicitudGuardada.cedula_profesional,
+          medicoGuardado.cedula_profesional,
+          medicoGuardado.cedula,
+          metadata.cedula_profesional,
+          metadata.cedula,
+          metadata.responsable_cedula,
+          data.responsable_cedula,
+          pacienteDocumentos?.cedula_profesional
+        ) || 'N/A',
 
-        especialidad:
-          medicoGuardado.especialidad ||
-          metadata.especialidad ||
-          data.especialidad ||
-          pacienteDocumentos?.doctor_especialidad ||
-          'Medicina general',
+        especialidad: primerTexto(
+          data.medico_especialidad,
+          data.especialidad,
+          data.doctor_especialidad,
+          solicitudGuardada.medico_especialidad,
+          solicitudGuardada.especialidad,
+          medicoGuardado.especialidad,
+          metadata.especialidad,
+          pacienteDocumentos?.doctor_especialidad
+        ) || 'Medicina general',
 
-        logo_universidad_url:
-          medicoGuardado.logo_universidad_url ||
-          metadata.logo_universidad_url ||
-          metadata.logo_universidad ||
-          metadata.doctor_logo_universidad_url ||
-          data.logo_universidad_url ||
-          data.logo_universidad ||
-          data.doctor_logo_universidad_url ||
-          '',
+        telefono: primerTexto(
+          data.medico_telefono,
+          data.telefono_medico,
+          data.telefono_doctor,
+          data.doctor_telefono,
+          solicitudGuardada.medico_telefono,
+          solicitudGuardada.telefono_medico,
+          solicitudGuardada.telefono_doctor,
+          solicitudGuardada.doctor_telefono,
+          medicoGuardado.telefono,
+          medicoGuardado.medico_telefono,
+          medicoGuardado.telefono_medico,
+          medicoGuardado.doctor_telefono,
+          medicoGuardado.telefono_contacto,
+          medicoGuardado.telefono_consultorio,
+          medicoGuardado.celular,
+          metadata.medico_telefono,
+          metadata.telefono_medico,
+          metadata.telefono_doctor,
+          metadata.doctor_telefono,
+          metadata.telefono_contacto,
+          metadata.telefono_consultorio,
+          data.telefono_contacto,
+          data.telefono_consultorio
+        ) || 'No registrado',
+
+        logo_universidad_url: primerTexto(
+          medicoGuardado.logo_universidad_url,
+          metadata.logo_universidad_url,
+          metadata.logo_universidad,
+          metadata.doctor_logo_universidad_url,
+          data.logo_universidad_url,
+          data.logo_universidad,
+          data.doctor_logo_universidad_url
+        ),
       },
 
-      diagnostico:
-        metadata.diagnostico ||
-        data.diagnostico ||
-        data.descripcion ||
-        'N/A',
+      diagnostico: primerTexto(
+        data.diagnostico,
+        solicitudGuardada.diagnostico,
+        metadata.diagnostico,
+        data.descripcion
+      ) || 'N/A',
 
-      observaciones:
-        metadata.observaciones ||
-        data.observaciones ||
-        'Sin observaciones',
+      observaciones: primerTexto(
+        data.observaciones,
+        solicitudGuardada.observaciones,
+        metadata.observaciones
+      ) || 'Sin observaciones',
 
-      hora_obtencion_muestra:
-        metadata.hora_obtencion_muestra ||
-        data.hora_obtencion_muestra ||
-        '',
+      hora_obtencion_muestra: primerTexto(
+        data.hora_obtencion_muestra,
+        solicitudGuardada.hora_obtencion_muestra,
+        metadata.hora_obtencion_muestra
+      ),
 
-      hora_recepcion_muestra:
-        metadata.hora_recepcion_muestra ||
-        data.hora_recepcion_muestra ||
-        '',
+      hora_recepcion_muestra: primerTexto(
+        data.hora_recepcion_muestra,
+        solicitudGuardada.hora_recepcion_muestra,
+        metadata.hora_recepcion_muestra
+      ),
 
-      estudios: estudios.map((item) => ({
-        id_estudio: item.id_estudio,
+      estudios: estudios.map((item, index) => ({
+        id_estudio:
+          item.id_estudio ||
+          item.id_detalle ||
+          index + 1,
         nombre:
           item.nombre_estudio ||
           item.nombre ||
           item.estudio ||
           'Estudio',
-
         observaciones_estudio:
           item.observaciones_estudio ||
           item.observaciones ||
@@ -1827,6 +1953,147 @@ const DoctorFilaEspera = () => {
       })),
     };
   };
+
+  const obtenerDocumentoLaboratorioCompleto = useCallback(async (doc = {}) => {
+    const metadataActual = normalizarMetadata(doc.metadata);
+    const dataActual = doc.data || {};
+
+    const idSolicitud = Number(
+      doc.id_origen ||
+      dataActual.id_solicitud ||
+      metadataActual.id_solicitud ||
+      metadataActual.solicitudLaboratorio?.id_solicitud ||
+      0
+    );
+
+    if (!idSolicitud) {
+      return doc;
+    }
+
+    const { data: respuesta } = await api.get(
+      `/laboratorio/solicitudes/${idSolicitud}`
+    );
+
+    if (!respuesta?.ok) {
+      throw new Error(
+        respuesta?.mensaje ||
+        'No se pudo obtener la solicitud de laboratorio.'
+      );
+    }
+
+    const solicitud = respuesta.solicitud || {};
+    const detalles = Array.isArray(respuesta.detalles)
+      ? respuesta.detalles
+      : [];
+
+    const solicitudAnterior =
+      metadataActual.solicitudLaboratorio ||
+      dataActual.solicitudLaboratorio ||
+      {};
+
+    const medicoAnterior = solicitudAnterior.medico || {};
+    const pacienteAnterior = solicitudAnterior.paciente || {};
+
+    const solicitudLaboratorio = {
+      ...solicitudAnterior,
+      ...solicitud,
+      id_solicitud: solicitud.id_solicitud || idSolicitud,
+
+      paciente: {
+        ...pacienteAnterior,
+        nombre: primerTexto(
+          solicitud.nombre_paciente,
+          pacienteAnterior.nombre,
+          pacienteAnterior.nombre_paciente
+        ),
+        expediente: primerTexto(
+          solicitud.id_paciente_expediente,
+          solicitud.id_expediente,
+          pacienteAnterior.expediente,
+          pacienteAnterior.id_expediente
+        ),
+        edad: primerTexto(
+          solicitud.edad_paciente,
+          solicitud.edad,
+          pacienteAnterior.edad
+        ),
+        sexo: primerTexto(
+          solicitud.sexo_paciente,
+          solicitud.sexo,
+          pacienteAnterior.sexo
+        ),
+        telefono: primerTexto(
+          solicitud.telefono_paciente,
+          solicitud.telefono,
+          pacienteAnterior.telefono
+        ),
+      },
+
+      medico: {
+        ...medicoAnterior,
+        nombre: primerTexto(
+          solicitud.medico_nombre,
+          solicitud.nombre_medico,
+          solicitud.nombre_doctor,
+          medicoAnterior.nombre_completo,
+          medicoAnterior.nombre
+        ),
+        nombre_completo: primerTexto(
+          solicitud.medico_nombre,
+          solicitud.nombre_medico,
+          solicitud.nombre_doctor,
+          medicoAnterior.nombre_completo,
+          medicoAnterior.nombre
+        ),
+        cedula: primerTexto(
+          solicitud.medico_cedula,
+          solicitud.cedula_profesional,
+          medicoAnterior.cedula_profesional,
+          medicoAnterior.cedula
+        ),
+        cedula_profesional: primerTexto(
+          solicitud.medico_cedula,
+          solicitud.cedula_profesional,
+          medicoAnterior.cedula_profesional,
+          medicoAnterior.cedula
+        ),
+        especialidad: primerTexto(
+          solicitud.medico_especialidad,
+          solicitud.especialidad,
+          medicoAnterior.especialidad
+        ),
+        telefono: primerTexto(
+          solicitud.medico_telefono,
+          solicitud.telefono_medico,
+          solicitud.telefono_doctor,
+          solicitud.doctor_telefono,
+          medicoAnterior.telefono,
+          medicoAnterior.medico_telefono,
+          medicoAnterior.telefono_medico,
+          medicoAnterior.doctor_telefono,
+          medicoAnterior.telefono_contacto,
+          medicoAnterior.telefono_consultorio,
+          medicoAnterior.celular
+        ),
+      },
+
+      estudios: detalles,
+    };
+
+    return {
+      ...doc,
+      data: {
+        ...dataActual,
+        ...solicitud,
+        estudios: detalles,
+      },
+      metadata: {
+        ...metadataActual,
+        __laboratorio_hidratado: true,
+        solicitudLaboratorio,
+      },
+    };
+  }, []);
 
   const mapearReferenciaParaImpresion = (doc = {}) => {
     const metadata = normalizarMetadata(doc.metadata);
@@ -2163,6 +2430,89 @@ const DoctorFilaEspera = () => {
     };
   };
 
+  const obtenerTelefonoDoctorDocumento = (
+    doc = {},
+    datosNormalizados = {}
+  ) => {
+    const metadata = normalizarMetadata(doc.metadata);
+    const data = doc.data || {};
+
+    const datosDoctor =
+      datosNormalizados?.datos_doctor ||
+      datosNormalizados?.doctor ||
+      data.datos_doctor ||
+      data.doctor ||
+      metadata.datos_doctor ||
+      metadata.doctor ||
+      {};
+
+    const medico =
+      datosNormalizados?.medico ||
+      data.medico ||
+      metadata.medico ||
+      {};
+
+    return (
+      primerTexto(
+        datosNormalizados?.telefono_doctor,
+        datosNormalizados?.doctor_telefono,
+        datosNormalizados?.medico_telefono,
+        datosNormalizados?.telefono_medico,
+        datosNormalizados?.telefono_responsable,
+        datosNormalizados?.responsable_telefono,
+
+        datosDoctor?.telefono,
+        datosDoctor?.telefono_doctor,
+        datosDoctor?.doctor_telefono,
+        datosDoctor?.medico_telefono,
+        datosDoctor?.telefono_medico,
+        datosDoctor?.telefono_contacto,
+        datosDoctor?.telefono_consultorio,
+        datosDoctor?.celular,
+
+        medico?.telefono,
+        medico?.telefono_doctor,
+        medico?.doctor_telefono,
+        medico?.medico_telefono,
+        medico?.telefono_medico,
+        medico?.telefono_contacto,
+        medico?.telefono_consultorio,
+        medico?.celular,
+
+        data.telefono_doctor,
+        data.doctor_telefono,
+        data.medico_telefono,
+        data.telefono_medico,
+        data.telefono_responsable,
+        data.responsable_telefono,
+        data.telefono_contacto,
+        data.telefono_consultorio,
+
+        metadata.telefono_doctor,
+        metadata.doctor_telefono,
+        metadata.medico_telefono,
+        metadata.telefono_medico,
+        metadata.telefono_responsable,
+        metadata.responsable_telefono,
+        metadata.telefono_contacto,
+        metadata.telefono_consultorio,
+
+        perfilDoctorDocumentos?.telefono,
+        perfilDoctorDocumentos?.telefono_contacto,
+        perfilDoctorDocumentos?.telefono_consultorio,
+        perfilDoctorDocumentos?.medico_telefono,
+        perfilDoctorDocumentos?.doctor_telefono,
+        perfilDoctorDocumentos?.celular,
+
+        pacienteDocumentos?.telefono_doctor,
+        pacienteDocumentos?.doctor_telefono,
+        pacienteDocumentos?.medico_telefono,
+        pacienteDocumentos?.telefono_contacto,
+        pacienteDocumentos?.telefono_consultorio
+      ) || 'N/A'
+    );
+  };
+
   const abrirDocumentosAtencion = async (paciente) => {
     if (!paciente.id_expediente) {
       Swal.fire({
@@ -2475,6 +2825,66 @@ const DoctorFilaEspera = () => {
       });
     }
   };
+
+
+  useEffect(() => {
+    if (
+      !modalDocumentosAbierto ||
+      documentoSeleccionado?.tipo !== 'LABORATORIO'
+    ) {
+      return;
+    }
+
+    const metadata = normalizarMetadata(documentoSeleccionado.metadata);
+
+    if (metadata.__laboratorio_hidratado) {
+      return;
+    }
+
+    let cancelado = false;
+
+    const hidratarVistaPrevia = async () => {
+      try {
+        const documentoCompleto =
+          await obtenerDocumentoLaboratorioCompleto(documentoSeleccionado);
+
+        if (cancelado) return;
+
+        const idDocumento =
+          documentoCompleto.id_documento ||
+          documentoCompleto.id;
+
+        setDocumentosAtencion((actuales) =>
+          actuales.map((item) => {
+            const idActual = item.id_documento || item.id;
+
+            return Number(idActual) === Number(idDocumento)
+              ? documentoCompleto
+              : item;
+          })
+        );
+
+        setDocumentoSeleccionado(documentoCompleto);
+      } catch (error) {
+        console.warn(
+          'No se pudo hidratar la solicitud de laboratorio para vista previa:',
+          error
+        );
+      }
+    };
+
+    hidratarVistaPrevia();
+
+    return () => {
+      cancelado = true;
+    };
+  }, [
+    modalDocumentosAbierto,
+    documentoSeleccionado?.id_documento,
+    documentoSeleccionado?.id_origen,
+    documentoSeleccionado?.tipo,
+    obtenerDocumentoLaboratorioCompleto,
+  ]);
 
   const abrirHtmlImpresion = (html, titulo = 'Documento clínico') => {
     const ventana = window.open('', '_blank', 'width=920,height=720');
@@ -2980,6 +3390,20 @@ const DoctorFilaEspera = () => {
       return limpio || fallback;
     };
 
+    const telefonoDoctor = texto(
+      primerTexto(
+        doctor.telefono,
+        doctor.telefono_doctor,
+        doctor.doctor_telefono,
+        doctor.medico_telefono,
+        doctor.telefono_medico,
+        doctor.telefono_contacto,
+        doctor.telefono_consultorio,
+        doctor.celular
+      ),
+      'No registrado'
+    );
+
     const obtenerUrlLogo = (ruta) => {
       if (!ruta) return '';
 
@@ -3194,6 +3618,7 @@ const DoctorFilaEspera = () => {
             <p><strong>Nombre:</strong> ${escapeHtml(texto(doctor.nombre_completo, 'Doctor Shaddai'))}</p>
             <p><strong>Especialidad:</strong> ${escapeHtml(texto(doctor.especialidad, 'Medicina general'))}</p>
             <p><strong>Cédula:</strong> ${escapeHtml(texto(doctor.cedula_profesional))}</p>
+            <p><strong>Teléfono:</strong> ${escapeHtml(telefonoDoctor)}</p>
             <p><strong>Consultorio:</strong> ${escapeHtml(texto(doctor.direccion_consultorio, 'Farmacias Shaddai'))}</p>
           </div>
 
@@ -3232,6 +3657,7 @@ const DoctorFilaEspera = () => {
             <p>Firma del médico</p>
             <strong>${escapeHtml(texto(doctor.nombre_completo, 'Doctor Shaddai'))}</strong>
             <span>Cédula: ${escapeHtml(texto(doctor.cedula_profesional))}</span>
+            <span>Teléfono: ${escapeHtml(telefonoDoctor)}</span>
           </div>
         </div>
       </section>
@@ -3834,15 +4260,8 @@ const DoctorFilaEspera = () => {
 
   const reimprimirLaboratorio = async (doc) => {
     try {
-      const docCompleto = {
-        ...doc,
-        metadata: {
-          ...normalizarMetadata(doc.metadata),
-        },
-        data: {
-          ...(doc.data || {}),
-        },
-      };
+      const docCompleto =
+        await obtenerDocumentoLaboratorioCompleto(doc);
 
       setDocumentoSeleccionado(docCompleto);
 
@@ -3852,7 +4271,10 @@ const DoctorFilaEspera = () => {
         });
       });
 
-      await imprimirNodoEnIframe('laboratorio-imprimible', 'Solicitud de laboratorio');
+      await imprimirNodoEnIframe(
+        'laboratorio-imprimible',
+        'Solicitud de laboratorio'
+      );
     } catch (error) {
       console.error('Error al reimprimir laboratorio:', error);
 
@@ -4837,13 +5259,29 @@ const DoctorFilaEspera = () => {
     }
 
     if (documentoSeleccionado.tipo === 'RECETA') {
-      const recetaGenerada =
+      const recetaBase =
         documentoSeleccionado.metadata?.recetaGenerada ||
         mapearRecetaParaImpresion({
           doc: documentoSeleccionado,
           receta: documentoSeleccionado.data || {},
           detalles: [],
         });
+
+      const telefonoDoctor = obtenerTelefonoDoctorDocumento(
+        documentoSeleccionado,
+        recetaBase?.doctor || {}
+      );
+
+      const recetaGenerada = {
+        ...recetaBase,
+        doctor: {
+          ...(recetaBase?.doctor || {}),
+          telefono: primerTexto(
+            recetaBase?.doctor?.telefono,
+            telefonoDoctor
+          ) || 'No registrado',
+        },
+      };
 
       return (
         <RecetaImprimible
@@ -4859,7 +5297,6 @@ const DoctorFilaEspera = () => {
 
     if (documentoSeleccionado.tipo === 'LABORATORIO') {
       const solicitudLaboratorio =
-        documentoSeleccionado.metadata?.solicitudLaboratorio ||
         mapearLaboratorioParaImpresion(documentoSeleccionado);
 
       return <LaboratorioImprimible solicitud={solicitudLaboratorio} />;
@@ -5055,6 +5492,11 @@ const DoctorFilaEspera = () => {
         documentoSeleccionado
       );
 
+      const telefonoDoctor = obtenerTelefonoDoctorDocumento(
+        documentoSeleccionado,
+        notaImpresion
+      );
+
       return (
         <NotaMedicaImprimible
           nota={notaImpresion}
@@ -5063,6 +5505,7 @@ const DoctorFilaEspera = () => {
             nombre_completo: notaImpresion.doctor_nombre_completo,
             cedula_profesional: notaImpresion.cedula_profesional,
             especialidad: notaImpresion.especialidad,
+            telefono: telefonoDoctor,
           }}
           farmaciaNombre="Farmacia Shaddai"
         />
@@ -5073,6 +5516,11 @@ const DoctorFilaEspera = () => {
       const metadata = normalizarMetadata(documentoSeleccionado.metadata);
       const datosConsentimiento =
         mapearConsentimientoParaImpresion(documentoSeleccionado);
+
+      const telefonoDoctor = obtenerTelefonoDoctorDocumento(
+        documentoSeleccionado,
+        datosConsentimiento
+      );
 
       return (
         <ConsentimientoInformadoImprimible
@@ -5135,7 +5583,10 @@ const DoctorFilaEspera = () => {
               documentoSeleccionado.data?.especialidad ||
               pacienteDocumentos?.doctor_especialidad ||
               pacienteDocumentos?.especialidad ||
+              perfilDoctorDocumentos?.especialidad ||
               'N/A',
+
+            telefono: telefonoDoctor,
           }}
           datos={datosConsentimiento}
         />
@@ -5144,6 +5595,11 @@ const DoctorFilaEspera = () => {
 
     if (documentoSeleccionado.tipo === 'REFERENCIA') {
       const datosReferencia = mapearReferenciaParaImpresion(documentoSeleccionado);
+
+      const telefonoDoctor = obtenerTelefonoDoctorDocumento(
+        documentoSeleccionado,
+        datosReferencia
+      );
 
       return (
         <HojaReferenciaContrarreferenciaImprimible
@@ -5170,7 +5626,9 @@ const DoctorFilaEspera = () => {
               datosReferencia.especialidad ||
               pacienteDocumentos?.doctor_especialidad ||
               pacienteDocumentos?.especialidad ||
+              perfilDoctorDocumentos?.especialidad ||
               'N/A',
+            telefono: telefonoDoctor,
           }}
           datos={datosReferencia}
           tipo="ambas"
@@ -5180,6 +5638,11 @@ const DoctorFilaEspera = () => {
 
     if (documentoSeleccionado.tipo === 'VIOLENCIA_LESION') {
       const datosViolencia = mapearViolenciaParaImpresion(documentoSeleccionado);
+
+      const telefonoDoctor = obtenerTelefonoDoctorDocumento(
+        documentoSeleccionado,
+        datosViolencia
+      );
 
       return (
         <HojaViolenciaLesionImprimible
@@ -5205,7 +5668,9 @@ const DoctorFilaEspera = () => {
             especialidad:
               pacienteDocumentos?.doctor_especialidad ||
               pacienteDocumentos?.especialidad ||
+              perfilDoctorDocumentos?.especialidad ||
               'N/A',
+            telefono: telefonoDoctor,
           }}
           datos={datosViolencia}
         />
@@ -6710,6 +7175,10 @@ function LaboratorioImprimible({ solicitud }) {
                 <p className="lab-text">
                   <strong>Cédula:</strong> {textoSeguro(solicitud?.medico?.cedula)}
                 </p>
+                <p className="lab-text">
+                  <strong>Teléfono:</strong>{' '}
+                  {textoSeguro(solicitud?.medico?.telefono, 'No registrado')}
+                </p>
               </section>
 
               <section className="lab-card">
@@ -6821,6 +7290,9 @@ function LaboratorioImprimible({ solicitud }) {
                   <p className="lab-signature-sub">
                     Cédula: {textoSeguro(solicitud?.medico?.cedula)}
                   </p>
+                  <p className="lab-signature-sub">
+                    Teléfono: {textoSeguro(solicitud?.medico?.telefono, 'No registrado')}
+                  </p>
                 </div>
 
                 <div className="lab-seal-card">Sello de la unidad</div>
@@ -6843,6 +7315,30 @@ function RecetaImprimible({ recetaGenerada, fechaActual, perfilDoctor }) {
   const productos = recetaGenerada?.productos || [];
   const receta = recetaGenerada?.receta || {};
   const expediente = recetaGenerada?.expediente || null;
+
+  const doctor = {
+    ...(perfilDoctor || {}),
+    ...(recetaGenerada?.doctor || {}),
+  };
+
+  const telefonoDoctor = primerTexto(
+    recetaGenerada?.doctor?.telefono,
+    recetaGenerada?.doctor?.telefono_doctor,
+    recetaGenerada?.doctor?.doctor_telefono,
+    recetaGenerada?.doctor?.medico_telefono,
+    recetaGenerada?.doctor?.telefono_medico,
+    recetaGenerada?.doctor?.telefono_contacto,
+    recetaGenerada?.doctor?.telefono_consultorio,
+    recetaGenerada?.doctor?.celular,
+    perfilDoctor?.telefono,
+    perfilDoctor?.telefono_doctor,
+    perfilDoctor?.doctor_telefono,
+    perfilDoctor?.medico_telefono,
+    perfilDoctor?.telefono_medico,
+    perfilDoctor?.telefono_contacto,
+    perfilDoctor?.telefono_consultorio,
+    perfilDoctor?.celular
+  ) || 'No registrado';
 
   const folio =
     receta.folio_receta ||
@@ -6913,7 +7409,7 @@ function RecetaImprimible({ recetaGenerada, fechaActual, perfilDoctor }) {
                 <div className="space-y-0.5 leading-tight">
                   <p>
                     <strong>Nombre:</strong>{' '}
-                    {perfilDoctor?.nombre_completo || 'Doctor Shaddai'}
+                    {doctor.nombre_completo || 'Doctor Shaddai'}
                   </p>
 
                   <p>
@@ -6922,17 +7418,21 @@ function RecetaImprimible({ recetaGenerada, fechaActual, perfilDoctor }) {
 
                   <p>
                     <strong>Especialidad:</strong>{' '}
-                    {perfilDoctor?.especialidad || 'N/A'}
+                    {doctor.especialidad || 'N/A'}
                   </p>
 
                   <p>
                     <strong>Cédula:</strong>{' '}
-                    {perfilDoctor?.cedula_profesional || 'N/A'}
+                    {doctor.cedula_profesional || 'N/A'}
+                  </p>
+
+                  <p>
+                    <strong>Teléfono:</strong> {telefonoDoctor}
                   </p>
 
                   <p className="line-clamp-2">
                     <strong>Domicilio:</strong>{' '}
-                    {perfilDoctor?.direccion_consultorio || 'N/A'}
+                    {doctor.direccion_consultorio || 'N/A'}
                   </p>
                 </div>
               </div>
@@ -7096,7 +7596,7 @@ function RecetaImprimible({ recetaGenerada, fechaActual, perfilDoctor }) {
               <div className="mx-auto mb-1.5 h-px w-48 bg-slate-500" />
               <p className="font-black">Firma del médico</p>
               <p className="text-slate-500">
-                {perfilDoctor?.nombre_completo || ''}
+                {doctor.nombre_completo || ''}
               </p>
             </div>
 
@@ -7104,8 +7604,10 @@ function RecetaImprimible({ recetaGenerada, fechaActual, perfilDoctor }) {
               <div className="mx-auto mb-1.5 h-px w-48 bg-slate-500" />
               <p className="font-black">Cédula profesional</p>
               <p className="text-slate-500">
-                {perfilDoctor?.cedula_profesional || ''}
+                {doctor.cedula_profesional || ''}
               </p>
+              <p className="mt-1 font-black">Teléfono</p>
+              <p className="text-slate-500">{telefonoDoctor}</p>
             </div>
           </div>
 

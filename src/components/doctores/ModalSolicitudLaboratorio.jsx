@@ -18,6 +18,16 @@ import {
 import api from '../../api/axios';
 import logoFarmacia from '../../assets/logoShaddai.png';
 
+const obtenerPrimerTexto = (...valores) => {
+  const encontrado = valores.find((valor) => {
+    return valor !== undefined && valor !== null && String(valor).trim() !== '';
+  });
+
+  return encontrado !== undefined && encontrado !== null
+    ? String(encontrado).trim()
+    : '';
+};
+
 export default function ModalSolicitudLaboratorio({
   abierto,
   onClose,
@@ -110,27 +120,63 @@ export default function ModalSolicitudLaboratorio({
 
   const pacienteFinal = {
     nombre:
-      paciente?.nombre ||
-      paciente?.nombre_paciente ||
-      'Paciente de prueba',
-    edad: paciente?.edad || '---',
-    sexo: paciente?.sexo || '---',
+      obtenerPrimerTexto(
+        paciente?.nombre,
+        paciente?.nombre_paciente,
+        paciente?.paciente_nombre
+      ) || 'Paciente de prueba',
+
+    edad: obtenerPrimerTexto(paciente?.edad) || '---',
+
+    sexo: obtenerPrimerTexto(paciente?.sexo) || '---',
+
     expediente:
-      paciente?.no_expediente ||
-      paciente?.id_expediente ||
-      '---',
+      obtenerPrimerTexto(
+        paciente?.no_expediente,
+        paciente?.id_expediente,
+        paciente?.expediente
+      ) || '---',
   };
 
+  /*
+   * Acepta las variantes que pueden venir del perfil, de una consulta
+   * guardada o de endpoints antiguos. Así la impresión no depende de un
+   * único nombre de columna.
+   */
   const medicoFinal = {
     nombre:
-      medico?.nombre_completo ||
-      medico?.nombre ||
-      'Médico solicitante de prueba',
+      obtenerPrimerTexto(
+        medico?.nombre_completo,
+        medico?.medico_nombre,
+        medico?.doctor_nombre_completo,
+        medico?.nombre
+      ) || 'Médico solicitante',
+
     cedula:
-      medico?.cedula_profesional ||
-      medico?.cedula ||
-      '---',
-    especialidad: medico?.especialidad || '---',
+      obtenerPrimerTexto(
+        medico?.cedula_profesional,
+        medico?.medico_cedula,
+        medico?.doctor_cedula_profesional,
+        medico?.cedula
+      ) || '---',
+
+    especialidad:
+      obtenerPrimerTexto(
+        medico?.especialidad,
+        medico?.medico_especialidad,
+        medico?.doctor_especialidad
+      ) || '---',
+
+    telefono:
+      obtenerPrimerTexto(
+        medico?.telefono,
+        medico?.telefono_contacto,
+        medico?.telefono_consultorio,
+        medico?.celular,
+        medico?.medico_telefono,
+        medico?.doctor_telefono,
+        medico?.perfil?.telefono
+      ) || '---',
   };
 
   const escapeHtml = (valor = '') => {
@@ -964,6 +1010,7 @@ export default function ModalSolicitudLaboratorio({
                     <p class="texto"><strong>Institución:</strong> Farmacias Shaddai</p>
                     <p class="texto"><strong>Especialidad:</strong> ${escapeHtml(solicitud.medico?.especialidad || 'N/A')}</p>
                     <p class="texto"><strong>Cédula:</strong> ${escapeHtml(solicitud.medico?.cedula || 'N/A')}</p>
+                    <p class="texto"><strong>Teléfono:</strong> ${escapeHtml(solicitud.medico?.telefono || 'N/A')}</p>
                   </section>
 
                   <section class="card">
@@ -1040,6 +1087,7 @@ export default function ModalSolicitudLaboratorio({
                       <p class="firma-titulo">Firma del médico</p>
                       <p class="firma-sub">${escapeHtml(solicitud.medico?.nombre || '')}</p>
                       <p class="firma-sub">Cédula: ${escapeHtml(solicitud.medico?.cedula || 'N/A')}</p>
+                      <p class="firma-sub">Teléfono: ${escapeHtml(solicitud.medico?.telefono || 'N/A')}</p>
                     </div>
 
                     <div class="sello-card">
@@ -1227,6 +1275,13 @@ export default function ModalSolicitudLaboratorio({
                           Especialidad:
                         </span>{' '}
                         {medicoFinal.especialidad}
+                      </p>
+
+                      <p>
+                        <span className="font-bold text-slate-600">
+                          Teléfono:
+                        </span>{' '}
+                        {medicoFinal.telefono}
                       </p>
 
                       <p className="inline-flex items-center gap-2">

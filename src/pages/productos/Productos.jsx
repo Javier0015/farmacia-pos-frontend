@@ -95,7 +95,10 @@ export default function Productos() {
 
       if (data.ok) {
         setProductos(data.productos || []);
+        return true;
       }
+
+      return false;
     } catch (error) {
       console.error(error);
 
@@ -106,9 +109,20 @@ export default function Productos() {
           error.response?.data?.mensaje ||
           'No se pudieron cargar los productos.',
       });
+
+      return false;
     } finally {
       setCargando(false);
     }
+  };
+
+  const limpiarSoloCampoBusqueda = () => {
+    setBuscar('');
+    setIdProductoSeleccionado('');
+    setSugerenciasProductos([]);
+    setCargandoSugerencias(false);
+    setMostrarSugerencias(false);
+    setIndiceSugerencia(-1);
   };
 
   const buscarSugerenciasProductos = async (termino) => {
@@ -157,7 +171,7 @@ export default function Productos() {
     }
   };
 
-  const seleccionarSugerenciaProducto = async (producto) => {
+  const seleccionarSugerenciaProducto = (producto) => {
     const idProducto = Number(producto?.id_producto || 0);
 
     if (!Number.isInteger(idProducto) || idProducto <= 0) return;
@@ -171,25 +185,36 @@ export default function Productos() {
     setMostrarSugerencias(false);
     setIndiceSugerencia(-1);
 
-    await cargarProductos({
-      termino: producto.nombre || '',
-      idProducto,
-    });
+    // Ya no se consulta aquí.
+    // Solo se prepara el producto para Buscar o Enter.
   };
 
-  const ejecutarBusquedaProductos = async () => {
+  const ejecutarBusquedaProductos = async ({ producto = null } = {}) => {
     solicitudSugerenciasRef.current += 1;
 
-    setIdProductoSeleccionado('');
+    const productoSeleccionado = producto || null;
+    const idProducto = productoSeleccionado
+      ? Number(productoSeleccionado.id_producto || 0)
+      : Number(idProductoSeleccionado || 0);
+
+    const termino = productoSeleccionado
+      ? productoSeleccionado.nombre || ''
+      : buscar;
+
     setCargandoSugerencias(false);
     setSugerenciasProductos([]);
     setMostrarSugerencias(false);
     setIndiceSugerencia(-1);
 
-    await cargarProductos({
-      termino: buscar,
-      idProducto: null,
+    const consultaExitosa = await cargarProductos({
+      termino,
+      idProducto:
+        Number.isInteger(idProducto) && idProducto > 0 ? idProducto : null,
     });
+
+    if (consultaExitosa) {
+      limpiarSoloCampoBusqueda();
+    }
   };
 
   const manejarCambioBusqueda = (valor) => {
@@ -544,18 +569,17 @@ export default function Productos() {
                 if (e.key === 'Enter') {
                   e.preventDefault();
 
-                  if (
+                  const productoPorEnter =
                     mostrarSugerencias &&
-                    indiceSugerencia >= 0 &&
-                    sugerenciasProductos[indiceSugerencia]
-                  ) {
-                    seleccionarSugerenciaProducto(
+                      indiceSugerencia >= 0 &&
                       sugerenciasProductos[indiceSugerencia]
-                    );
-                    return;
-                  }
+                      ? sugerenciasProductos[indiceSugerencia]
+                      : null;
 
-                  ejecutarBusquedaProductos();
+                  ejecutarBusquedaProductos({
+                    producto: productoPorEnter,
+                  });
+
                   return;
                 }
 
@@ -607,11 +631,10 @@ export default function Productos() {
                             e.preventDefault();
                             seleccionarSugerenciaProducto(producto);
                           }}
-                          className={`flex w-full items-start justify-between gap-4 px-4 py-3 text-left transition ${
-                            seleccionado
-                              ? 'bg-sky-50 text-sky-800'
-                              : 'text-slate-700 hover:bg-slate-50'
-                          }`}
+                          className={`flex w-full items-start justify-between gap-4 px-4 py-3 text-left transition ${seleccionado
+                            ? 'bg-sky-50 text-sky-800'
+                            : 'text-slate-700 hover:bg-slate-50'
+                            }`}
                         >
                           <div className="min-w-0">
                             <p className="truncate text-sm font-black">
@@ -623,11 +646,10 @@ export default function Productos() {
                           </div>
 
                           <span
-                            className={`shrink-0 rounded-full px-3 py-1 text-xs font-black ${
-                              producto.activo
-                                ? 'bg-emerald-50 text-emerald-700'
-                                : 'bg-slate-100 text-slate-600'
-                            }`}
+                            className={`shrink-0 rounded-full px-3 py-1 text-xs font-black ${producto.activo
+                              ? 'bg-emerald-50 text-emerald-700'
+                              : 'bg-slate-100 text-slate-600'
+                              }`}
                           >
                             {producto.activo ? 'Activo' : 'Inactivo'}
                           </span>
@@ -799,11 +821,10 @@ export default function Productos() {
 
                     <td className="px-5 py-4 text-center">
                       <span
-                        className={`text-xs font-bold px-3 py-1 rounded-full ${
-                          producto.activo
-                            ? 'bg-sky-100 text-sky-700'
-                            : 'bg-slate-200 text-slate-600'
-                        }`}
+                        className={`text-xs font-bold px-3 py-1 rounded-full ${producto.activo
+                          ? 'bg-sky-100 text-sky-700'
+                          : 'bg-slate-200 text-slate-600'
+                          }`}
                       >
                         {producto.activo ? 'Activo' : 'Inactivo'}
                       </span>
@@ -977,12 +998,11 @@ export default function Productos() {
                             key={cat.id_categoria}
                             type="button"
                             onClick={() => seleccionarCategoria(cat)}
-                            className={`w-full text-left px-4 py-3 hover:bg-sky-50 transition ${
-                              Number(form.id_categoria) ===
+                            className={`w-full text-left px-4 py-3 hover:bg-sky-50 transition ${Number(form.id_categoria) ===
                               Number(cat.id_categoria)
-                                ? 'bg-sky-100 text-sky-700 font-bold'
-                                : 'text-slate-700'
-                            }`}
+                              ? 'bg-sky-100 text-sky-700 font-bold'
+                              : 'text-slate-700'
+                              }`}
                           >
                             {cat.nombre}
                           </button>

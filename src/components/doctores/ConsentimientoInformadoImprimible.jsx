@@ -172,6 +172,19 @@ const obtenerCedulaDoctor = (perfilDoctor = {}) => {
   return perfilDoctor?.cedula_profesional || 'N/A';
 };
 
+const obtenerTelefonoDoctor = (perfilDoctor = {}) => {
+  return (
+    primerTextoDisponible(
+      perfilDoctor?.telefono,
+      perfilDoctor?.telefono_contacto,
+      perfilDoctor?.telefono_consultorio,
+      perfilDoctor?.medico_telefono,
+      perfilDoctor?.doctor_telefono,
+      perfilDoctor?.celular
+    ) || 'N/A'
+  );
+};
+
 export default function ConsentimientoInformadoImprimible({
   expediente = {},
   perfilDoctor = {},
@@ -188,6 +201,7 @@ export default function ConsentimientoInformadoImprimible({
   );
   const nombreDoctor = obtenerNombreDoctor(perfilDoctor);
   const cedulaDoctor = obtenerCedulaDoctor(perfilDoctor);
+  const telefonoDoctor = obtenerTelefonoDoctor(perfilDoctor);
 
   return (
     <>
@@ -473,6 +487,9 @@ export default function ConsentimientoInformadoImprimible({
 
                 <p className="text-center font-semibold">
                   Cédula profesional: {cedulaDoctor}
+                </p>
+                <p className="text-center font-semibold">
+                  Teléfono: {telefonoDoctor}
                 </p>
               </div>
 

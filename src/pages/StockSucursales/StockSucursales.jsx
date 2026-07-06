@@ -97,14 +97,15 @@ export default function StockSucursales() {
 
     if (!idProducto && !criterio) {
       setMensaje('Escribe el nombre, código de barras o presentación del producto');
-      setProducto(null);
-      setSucursales([]);
-      return;
+      return false;
     }
 
     try {
       setCargando(true);
       setMensaje('');
+
+      // Aquí sí se limpia el resultado anterior,
+      // porque el usuario ya confirmó una nueva búsqueda.
       setProducto(null);
       setSucursales([]);
       setMostrarSugerencias(false);
@@ -128,53 +129,62 @@ export default function StockSucursales() {
 
       if (!response.ok || !data.ok) {
         setMensaje(data.mensaje || 'No se encontró información del producto.');
-        return;
+        return false;
       }
+
+      const sucursalesEncontradas = data.sucursales || [];
 
       setProducto(data.producto || null);
-      setSucursales(data.sucursales || []);
+      setSucursales(sucursalesEncontradas);
 
-      if (!data.sucursales || data.sucursales.length === 0) {
+      if (sucursalesEncontradas.length === 0) {
         setMensaje('No hay existencias registradas para este producto.');
       }
+
+      return true;
     } catch (error) {
       console.error(error);
       setMensaje('Error al consultar el stock en sucursales.');
+      return false;
     } finally {
       setCargando(false);
     }
   };
 
+  const limpiarSoloInputBusqueda = () => {
+    setBusqueda('');
+    setProductoSeleccionadoId(null);
+    setSugerencias([]);
+    setMostrarSugerencias(false);
+    setIndiceSugerencia(-1);
+  };
+
   const buscarStock = async (e) => {
     e.preventDefault();
 
-    if (productoSeleccionadoId) {
-      await consultarStock({ idProducto: productoSeleccionadoId });
-      return;
-    }
+    const consultaExitosa = productoSeleccionadoId
+      ? await consultarStock({ idProducto: productoSeleccionadoId })
+      : await consultarStock({ texto: busqueda });
 
-    await consultarStock({ texto: busqueda });
+    if (consultaExitosa) {
+      limpiarSoloInputBusqueda();
+    }
   };
 
-  const seleccionarProducto = async (item) => {
+  const seleccionarProducto = (item) => {
     setProductoSeleccionadoId(item.id_producto);
     setBusqueda(item.nombre || item.producto || '');
     setSugerencias([]);
     setMostrarSugerencias(false);
     setIndiceSugerencia(-1);
-
-    await consultarStock({ idProducto: item.id_producto });
   };
-
   const manejarCambioBusqueda = (e) => {
     setBusqueda(e.target.value);
     setProductoSeleccionadoId(null);
-    setProducto(null);
-    setSucursales([]);
     setMensaje('');
   };
 
-  const manejarTeclaBusqueda = (e) => {
+  const manejarTeclaBusqueda = async (e) => {
     if (e.key === 'Escape') {
       setMostrarSugerencias(false);
       setIndiceSugerencia(-1);
@@ -203,7 +213,15 @@ export default function StockSucursales() {
 
     if (e.key === 'Enter' && indiceSugerencia >= 0) {
       e.preventDefault();
-      seleccionarProducto(sugerencias[indiceSugerencia]);
+
+      const item = sugerencias[indiceSugerencia];
+      const consultaExitosa = await consultarStock({
+        idProducto: item.id_producto,
+      });
+
+      if (consultaExitosa) {
+        limpiarSoloInputBusqueda();
+      }
     }
   };
 
@@ -394,11 +412,10 @@ export default function StockSucursales() {
                         aria-selected={indiceSugerencia === index}
                         onMouseDown={(e) => e.preventDefault()}
                         onClick={() => seleccionarProducto(item)}
-                        className={`flex w-full items-start justify-between gap-4 px-4 py-3 text-left transition ${
-                          indiceSugerencia === index
-                            ? 'bg-sky-50 text-sky-950'
-                            : 'hover:bg-sky-50 text-slate-800'
-                        }`}
+                        className={`flex w-full items-start justify-between gap-4 px-4 py-3 text-left transition ${indiceSugerencia === index
+                          ? 'bg-sky-50 text-sky-950'
+                          : 'hover:bg-sky-50 text-slate-800'
+                          }`}
                       >
                         <div className="min-w-0">
                           <p className="truncate text-sm font-black">

@@ -98,6 +98,22 @@ const cedulaResponsable = (perfilDoctor = {}, datos = {}) => {
   return datos.cedula_profesional || perfilDoctor?.cedula_profesional || '';
 };
 
+const telefonoResponsable = (perfilDoctor = {}, datos = {}) => {
+  return (
+    datos.telefono_doctor ||
+    datos.doctor_telefono ||
+    datos.medico_telefono ||
+    datos.telefono_responsable ||
+    perfilDoctor?.telefono ||
+    perfilDoctor?.telefono_contacto ||
+    perfilDoctor?.telefono_consultorio ||
+    perfilDoctor?.medico_telefono ||
+    perfilDoctor?.doctor_telefono ||
+    perfilDoctor?.celular ||
+    'N/A'
+  );
+};
+
 const Check = ({ label, checked }) => (
   <span className="rr-check">
     <span className="rr-check-box">{checked ? 'X' : ''}</span>
@@ -147,6 +163,7 @@ function HojaReferencia({ datos = {}, expediente, paciente, perfilDoctor }) {
   const pacienteNombre = nombrePacienteCompleto(expediente, paciente, datos);
   const medico = nombreResponsable(perfilDoctor, datos);
   const cedula = cedulaResponsable(perfilDoctor, datos);
+  const telefono = telefonoResponsable(perfilDoctor, datos);
 
   return (
     <div className="rr-sheet">
@@ -265,6 +282,7 @@ function HojaReferencia({ datos = {}, expediente, paciente, perfilDoctor }) {
             <div>Nombre, firma y cédula profesional del médico tratante</div>
             <div className="rr-sign-small">{medico}</div>
             <div className="rr-sign-small">Cédula: {cedula}</div>
+            <div className="rr-sign-small">Teléfono: {telefono}</div>
           </div>
 
           <div className="rr-seal">
@@ -354,18 +372,18 @@ function HojaContrarreferencia({ datos = {}, expediente }) {
         </section>
 
         <footer className="rr-footer">
-          
+
           <div className="rr-sign">
-        <br />
-        <br />
+            <br />
+            <br />
 
             <div className="rr-line" />
             <div>Nombre, firma y cédula profesional del médico tratante</div>
           </div>
 
           <div className="rr-sign">
-        <br />
-        <br />
+            <br />
+            <br />
 
             <div className="rr-line" />
             <div>Nombre y firma del paciente y familiar responsable</div>

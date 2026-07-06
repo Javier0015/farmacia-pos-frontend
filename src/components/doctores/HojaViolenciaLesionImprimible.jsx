@@ -371,6 +371,22 @@ const obtenerCedulaResponsable = (perfilDoctor = {}, datos = {}) => {
   return datos?.responsable_cedula || perfilDoctor?.cedula_profesional || 'N/A';
 };
 
+const obtenerTelefonoResponsable = (perfilDoctor = {}, datos = {}) => {
+  return (
+    datos?.responsable_telefono ||
+    datos?.telefono_responsable ||
+    datos?.medico_telefono ||
+    datos?.doctor_telefono ||
+    perfilDoctor?.telefono ||
+    perfilDoctor?.telefono_contacto ||
+    perfilDoctor?.telefono_consultorio ||
+    perfilDoctor?.medico_telefono ||
+    perfilDoctor?.doctor_telefono ||
+    perfilDoctor?.celular ||
+    'N/A'
+  );
+};
+
 const obtenerEspecialidadDoctor = (perfilDoctor = {}) => {
   return perfilDoctor?.especialidad || 'N/A';
 };
@@ -472,6 +488,10 @@ export default function HojaViolenciaLesionImprimible({
   const nombrePaciente = obtenerNombrePaciente(expediente, paciente, datosFinal);
   const nombreResponsable = obtenerNombreResponsable(perfilDoctor, datosFinal);
   const cedulaResponsable = obtenerCedulaResponsable(perfilDoctor, datosFinal);
+  const telefonoResponsable = obtenerTelefonoResponsable(
+    perfilDoctor,
+    datosFinal
+  );
   const especialidadDoctor = obtenerEspecialidadDoctor(perfilDoctor);
 
   const areasSeleccionadas = datosFinal.areas_anatomicas || [];
@@ -1129,6 +1149,9 @@ export default function HojaViolenciaLesionImprimible({
               <p>
                 <strong>Cédula profesional:</strong> {cedulaResponsable}
               </p>
+              <p>
+                <strong>Teléfono:</strong> {telefonoResponsable}
+              </p>
             </div>
 
             <div>
@@ -1136,7 +1159,7 @@ export default function HojaViolenciaLesionImprimible({
             </div>
           </footer>
 
-         {/* <p className="vl-note">
+          {/* <p className="vl-note">
             Este formato es una herramienta de apoyo para el registro clínico. Ajusta su uso conforme a los protocolos internos y disposiciones aplicables.
           </p>
           */}

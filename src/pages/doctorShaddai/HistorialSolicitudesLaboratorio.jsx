@@ -202,10 +202,13 @@ export default function HistorialSolicitudesLaboratorio() {
     const estudiosHtml = estudiosFinales
       .map((item) => {
         const nombre = item.nombre || item.nombre_estudio || 'Estudio';
+
         const observacion = item.observaciones_estudio
           ? `
             <div class="observacion-estudio">
-              <strong>Observaciones:</strong> ${escapeHtml(item.observaciones_estudio)}
+              <strong>Observaciones:</strong> ${escapeHtml(
+                item.observaciones_estudio
+              )}
             </div>
           `
           : '';
@@ -239,12 +242,19 @@ export default function HistorialSolicitudesLaboratorio() {
           day: '2-digit',
         });
 
+    const telefonoMedico =
+      solicitud.medico_telefono ||
+      solicitud.telefono_doctor ||
+      solicitud.doctor_telefono ||
+      'N/A';
+
     const html = `
       <!DOCTYPE html>
       <html>
         <head>
           <meta charset="UTF-8" />
           <title>Solicitud de Laboratorio</title>
+
           <style>
             * {
               box-sizing: border-box;
@@ -409,33 +419,50 @@ export default function HistorialSolicitudesLaboratorio() {
               </div>
 
               <div class="campo">
-                <strong>Nombre del paciente:</strong> ${escapeHtml(solicitud.nombre_paciente)}
+                <strong>Nombre del paciente:</strong>
+                ${escapeHtml(solicitud.nombre_paciente)}
               </div>
 
               <div class="campo">
-                <strong>Edad:</strong> ${escapeHtml(solicitud.edad || '---')}
+                <strong>Edad:</strong>
+                ${escapeHtml(solicitud.edad || '---')}
               </div>
 
               <div class="campo">
-                <strong>Sexo:</strong> ${escapeHtml(solicitud.sexo || '---')}
+                <strong>Sexo:</strong>
+                ${escapeHtml(solicitud.sexo || '---')}
               </div>
 
               <div class="campo">
-                <strong>Médico:</strong> ${escapeHtml(solicitud.medico_nombre || solicitud.nombre_medico || 'Doctor Shaddai')}
+                <strong>Médico:</strong>
+                ${escapeHtml(
+                  solicitud.medico_nombre ||
+                    solicitud.nombre_medico ||
+                    'Doctor Shaddai'
+                )}
               </div>
 
               <div class="campo">
-                <strong>Hr. obtención de la muestra:</strong> ${horaObtencionImpresa}
+                <strong>Teléfono del médico:</strong>
+                ${escapeHtml(telefonoMedico)}
               </div>
 
               <div class="campo">
-                <strong>Hr. recepción de la muestra:</strong> ${horaRecepcionImpresa}
+                <strong>Hr. obtención de la muestra:</strong>
+                ${horaObtencionImpresa}
+              </div>
+
+              <div class="campo">
+                <strong>Hr. recepción de la muestra:</strong>
+                ${horaRecepcionImpresa}
               </div>
             </div>
 
             <div class="seccion">
               <h3>Diagnóstico</h3>
-              <div class="bloque">${escapeHtml(solicitud.diagnostico || '')}</div>
+              <div class="bloque">
+                ${escapeHtml(solicitud.diagnostico || '')}
+              </div>
             </div>
 
             <div class="seccion">
@@ -458,9 +485,19 @@ export default function HistorialSolicitudesLaboratorio() {
 
             <div class="firma">
               <div class="linea-firma"></div>
-              <strong>${escapeHtml(solicitud.medico_nombre || 'Doctor Shaddai')}</strong><br />
-              Cédula: ${escapeHtml(solicitud.medico_cedula || 'N/A')}<br />
-              Especialidad: ${escapeHtml(solicitud.medico_especialidad || 'N/A')}
+              <strong>
+                ${escapeHtml(
+                  solicitud.medico_nombre || 'Doctor Shaddai'
+                )}
+              </strong>
+              <br />
+              Cédula: ${escapeHtml(solicitud.medico_cedula || 'N/A')}
+              <br />
+              Especialidad: ${escapeHtml(
+                solicitud.medico_especialidad || 'N/A'
+              )}
+              <br />
+              Teléfono: ${escapeHtml(telefonoMedico)}
             </div>
 
             <div class="footer">
@@ -806,6 +843,12 @@ function ModalDetalleSolicitudLaboratorio({
 }) {
   const estatus = String(solicitud.estatus || '').toUpperCase();
 
+  const telefonoMedico =
+    solicitud.medico_telefono ||
+    solicitud.telefono_doctor ||
+    solicitud.doctor_telefono ||
+    'N/A';
+
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
       <div className="max-h-[92vh] w-full max-w-5xl overflow-hidden rounded-3xl bg-white shadow-2xl">
@@ -912,6 +955,32 @@ function ModalDetalleSolicitudLaboratorio({
                   {formatearHora(solicitud.hora_recepcion_muestra) || 'N/A'}
                 </p>
               </div>
+            </div>
+          </div>
+
+          <div className="mb-5 rounded-2xl border border-slate-100 bg-white p-4">
+            <h3 className="mb-3 flex items-center gap-2 font-black text-slate-800">
+              <User size={18} className="text-sky-700" />
+              Médico solicitante
+            </h3>
+
+            <div className="space-y-1 text-sm text-slate-600">
+              <p>
+                <strong>Nombre:</strong>{' '}
+                {solicitud.medico_nombre ||
+                  solicitud.nombre_medico ||
+                  'Doctor Shaddai'}
+              </p>
+              <p>
+                <strong>Cédula:</strong> {solicitud.medico_cedula || 'N/A'}
+              </p>
+              <p>
+                <strong>Especialidad:</strong>{' '}
+                {solicitud.medico_especialidad || 'N/A'}
+              </p>
+              <p>
+                <strong>Teléfono:</strong> {telefonoMedico}
+              </p>
             </div>
           </div>
 
