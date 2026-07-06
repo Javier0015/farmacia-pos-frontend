@@ -59,6 +59,9 @@ const formEditarLoteInicial = {
   lote: '',
   fecha_caducidad: '',
   precio_compra: '',
+  ubicacion: '',
+  stock_actual: '',
+  observaciones_stock: '',
 };
 
 const tiposMovimiento = [
@@ -951,6 +954,7 @@ export default function Inventario() {
 
   const abrirEditarLote = (loteItem) => {
     setLoteEditando(loteItem);
+
     setFormEditarLote({
       id_lote: loteItem.id_lote || '',
       id_proveedor: loteItem.id_proveedor || '',
@@ -959,7 +963,14 @@ export default function Inventario() {
         ? String(loteItem.fecha_caducidad).slice(0, 10)
         : '',
       precio_compra: loteItem.precio_compra || '',
+      ubicacion: loteItem.ubicacion || productoLotes?.ubicacion || '',
+      stock_actual:
+        loteItem.stock_actual !== null && loteItem.stock_actual !== undefined
+          ? String(loteItem.stock_actual)
+          : '',
+      observaciones_stock: '',
     });
+
     setModalEditarLote(true);
   };
 
@@ -1011,6 +1022,21 @@ export default function Inventario() {
       return;
     }
 
+    const stockLote = Number(formEditarLote.stock_actual);
+
+    if (
+      formEditarLote.stock_actual === '' ||
+      !Number.isFinite(stockLote) ||
+      stockLote < 0
+    ) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Stock inválido',
+        text: 'El stock del lote debe ser un número igual o mayor a cero.',
+      });
+      return;
+    }
+
     try {
       setGuardando(true);
 
@@ -1023,6 +1049,9 @@ export default function Inventario() {
         precio_compra: formEditarLote.precio_compra
           ? Number(formEditarLote.precio_compra)
           : 0,
+        ubicacion: formEditarLote.ubicacion.trim() || null,
+        stock_actual: stockLote,
+        observaciones: formEditarLote.observaciones_stock.trim() || null,
       };
 
       const { data } = await api.put(
@@ -2722,7 +2751,126 @@ export default function Inventario() {
                 <div className="md:col-span-2 rounded-2xl bg-amber-50 border border-amber-100 p-4 text-amber-800 text-sm">
                   <p className="font-bold">Nota</p>
                   <p>
-                    Esta edición solo cambia los datos administrativos del lote. El stock se modifica desde movimientos para conservar el historial.
+                    Puedes editar los datos administrativos, la ubicación y el stock del lote.
+                    Si modificas el stock, el sistema registrará automáticamente un movimiento
+                    de ajuste para conservar el historial.
+                  </p>
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Lote *
+                  </label>
+                  <input
+                    name="lote"
+                    value={formEditarLote.lote}
+                    onChange={handleEditarLoteChange}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    placeholder="Ej. PAR-2026-A"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Fecha de caducidad
+                  </label>
+                  <input
+                    type="date"
+                    name="fecha_caducidad"
+                    value={formEditarLote.fecha_caducidad}
+                    onChange={handleEditarLoteChange}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Precio compra lote
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    name="precio_compra"
+                    value={formEditarLote.precio_compra}
+                    onChange={handleEditarLoteChange}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    placeholder="0.00"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Stock actual del lote
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    name="stock_actual"
+                    value={formEditarLote.stock_actual}
+                    onChange={handleEditarLoteChange}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    placeholder="0"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Ubicación
+                  </label>
+                  <input
+                    type="text"
+                    name="ubicacion"
+                    value={formEditarLote.ubicacion}
+                    onChange={handleEditarLoteChange}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    placeholder="Ej. Anaquel A-03"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Proveedor
+                  </label>
+                  <select
+                    name="id_proveedor"
+                    value={formEditarLote.id_proveedor}
+                    onChange={handleEditarLoteChange}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
+                  >
+                    <option value="">Sin proveedor</option>
+                    {proveedores.map((proveedor) => (
+                      <option
+                        key={proveedor.id_proveedor}
+                        value={proveedor.id_proveedor}
+                      >
+                        {proveedor.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Motivo del ajuste de stock
+                  </label>
+                  <textarea
+                    name="observaciones_stock"
+                    value={formEditarLote.observaciones_stock}
+                    onChange={handleEditarLoteChange}
+                    rows="3"
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 resize-none"
+                    placeholder="Ej. Se realizó conteo físico y se corrigió la existencia."
+                  />
+                </div>
+
+                <div className="md:col-span-2 rounded-2xl bg-slate-50 border border-slate-100 p-4 text-sm text-slate-600">
+                  <p>
+                    <span className="font-bold text-slate-700">
+                      Compra relacionada:
+                    </span>{' '}
+                    {loteEditando?.folio_compra || '—'}
                   </p>
                 </div>
 
