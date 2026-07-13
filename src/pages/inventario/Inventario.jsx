@@ -15,9 +15,13 @@ import {
   Package,
   Warehouse,
   Loader2,
+  FileSpreadsheet,
 } from 'lucide-react';
 import api from '../../api/axios';
 import { useAuth } from '../../context/AuthContext';
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
+import logoFarmacia from '../../assets/logoCompleto.jpeg';
 import {
   esSuperAdmin,
   obtenerSucursalInicial,
@@ -285,6 +289,33 @@ function ProductoSearchSelect({
     </div>
   );
 }
+
+const convertirImagenABase64 = async (rutaImagen) => {
+  const respuesta = await fetch(rutaImagen);
+
+  if (!respuesta.ok) {
+    throw new Error('No se pudo cargar el logo de la farmacia.');
+  }
+
+  const blob = await respuesta.blob();
+
+  return new Promise((resolve, reject) => {
+    const lector = new FileReader();
+
+    lector.onloadend = () => {
+      const resultado = String(lector.result || '');
+      const base64 = resultado.split(',')[1];
+
+      resolve(base64);
+    };
+
+    lector.onerror = () => {
+      reject(new Error('No se pudo convertir el logo.'));
+    };
+
+    lector.readAsDataURL(blob);
+  });
+};
 
 export default function Inventario() {
   const { usuario } = useAuth();
@@ -1422,6 +1453,735 @@ export default function Inventario() {
     formMovimiento.tipo_movimiento
   );
 
+const exportarInventarioExcel = async () => {
+  if (!idSucursal) {
+    Swal.fire({
+      icon: 'warning',
+      title: 'Selecciona una sucursal',
+      text: 'Primero selecciona la sucursal que deseas exportar.',
+    });
+
+    return;
+  }
+
+  if (!inventario.length) {
+    Swal.fire({
+      icon: 'info',
+      title: 'Sin información',
+      text: 'No hay productos disponibles para exportar.',
+    });
+
+    return;
+  }
+
+  try {
+    const nombreSucursal =
+      sucursalActual?.nombre || `Sucursal ${idSucursal}`;
+
+    const fechaActual = new Date();
+
+    const fechaExportacion = fechaActual.toLocaleString('es-MX', {
+      dateStyle: 'long',
+      timeStyle: 'short',
+    });
+
+    const workbook = new ExcelJS.Workbook();
+
+    workbook.creator = 'Farmacia Shaddai';
+    workbook.company = 'Farmacia Shaddai';
+    workbook.created = fechaActual;
+    workbook.modified = fechaActual;
+
+    const worksheet = workbook.addWorksheet('Inventario', {
+      views: [
+        {
+          state: 'frozen',
+          ySplit: 7,
+        },
+      ],
+      pageSetup: {
+        orientation: 'landscape',
+        fitToPage: true,
+        fitToWidth: 1,
+        fitToHeight: 0,
+        paperSize: 9,
+        margins: {
+          left: 0.25,
+          right: 0.25,
+          top: 0.5,
+          bottom: 0.5,
+          header: 0.2,
+          footer: 0.2,
+        },
+      },
+    });
+
+    /*
+     * Encabezado general
+     */
+    worksheet.mergeCells('A1:B4');
+    worksheet.mergeCells('C1:H2');
+    worksheet.mergeCells('C3:H3');
+    worksheet.mergeCells('C4:H4');
+
+    const celdaFarmacia = worksheet.getCell('C1');
+
+    celdaFarmacia.value = 'FARMACIA SHADDAI';
+    celdaFarmacia.font = {
+      name: 'Arial',
+      size: 22,
+      bold: true,
+      color: {
+        argb: 'FFFFFFFF',
+      },
+    };
+
+    celdaFarmacia.alignment = {
+      vertical: 'middle',
+      horizontal: 'center',
+    };
+
+    celdaFarmacia.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: {
+        argb: 'FF0369A1',
+      },
+    };
+
+    const celdaTitulo = worksheet.getCell('C3');
+
+    celdaTitulo.value = 'REPORTE DE INVENTARIO';
+    celdaTitulo.font = {
+      name: 'Arial',
+      size: 15,
+      bold: true,
+      color: {
+        argb: 'FF0F172A',
+      },
+    };
+
+    celdaTitulo.alignment = {
+      vertical: 'middle',
+      horizontal: 'center',
+    };
+
+    celdaTitulo.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: {
+        argb: 'FFE0F2FE',
+      },
+    };
+
+    const celdaSucursal = worksheet.getCell('C4');
+
+    celdaSucursal.value =
+      `${nombreSucursal} · Generado el ${fechaExportacion}`;
+
+    celdaSucursal.font = {
+      name: 'Arial',
+      size: 11,
+      italic: true,
+      color: {
+        argb: 'FF475569',
+      },
+    };
+
+    celdaSucursal.alignment = {
+      vertical: 'middle',
+      horizontal: 'center',
+    };
+
+    /*
+     * Logo
+     */
+    try {
+      const logoBase64 = await convertirImagenABase64(logoFarmacia);
+
+      const logoId = workbook.addImage({
+        base64: logoBase64,
+        extension: 'jpeg',
+      });
+
+      worksheet.addImage(logoId, {
+        tl: {
+          col: 0.1,
+          row: 0.15,
+        },
+        ext: {
+          width: 350,
+          height: 120,
+        },
+        editAs: 'oneCell',
+      });
+    } catch (errorLogo) {
+      console.warn('No se pudo insertar el logo:', errorLogo);
+
+      const celdaLogoTexto = worksheet.getCell('A1');
+
+      celdaLogoTexto.value = 'FARMACIA\nSHADDAI';
+      celdaLogoTexto.alignment = {
+        vertical: 'middle',
+        horizontal: 'center',
+        wrapText: true,
+      };
+
+      celdaLogoTexto.font = {
+        bold: true,
+        size: 16,
+        color: {
+          argb: 'FF0369A1',
+        },
+      };
+    }
+
+    worksheet.getRow(1).height = 28;
+    worksheet.getRow(2).height = 28;
+    worksheet.getRow(3).height = 24;
+    worksheet.getRow(4).height = 24;
+    worksheet.getRow(5).height = 8;
+
+    /*
+     * Resumen
+     */
+    const stockTotal = inventario.reduce(
+      (total, item) => total + Number(item.stock_actual || 0),
+      0
+    );
+
+    worksheet.mergeCells('A6:B6');
+    worksheet.mergeCells('C6:D6');
+    worksheet.mergeCells('E6:F6');
+    worksheet.mergeCells('G6:H6');
+
+    const resumenCeldas = [
+      {
+        celda: 'A6',
+        texto: `Productos: ${resumen.totalProductos}`,
+      },
+      {
+        celda: 'C6',
+        texto: `Bajo stock: ${resumen.productosBajoStock}`,
+      },
+      {
+        celda: 'E6',
+        texto: `Stock total: ${stockTotal.toLocaleString('es-MX')}`,
+      },
+      {
+        celda: 'G6',
+        texto: `Sucursal: ${nombreSucursal}`,
+      },
+    ];
+
+    resumenCeldas.forEach(({ celda, texto }) => {
+      const cell = worksheet.getCell(celda);
+
+      cell.value = texto;
+
+      cell.font = {
+        name: 'Arial',
+        bold: true,
+        size: 10,
+        color: {
+          argb: 'FF0F172A',
+        },
+      };
+
+      cell.alignment = {
+        vertical: 'middle',
+        horizontal: 'center',
+        wrapText: true,
+      };
+
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: {
+          argb: 'FFF1F5F9',
+        },
+      };
+
+      cell.border = {
+        top: {
+          style: 'thin',
+          color: {
+            argb: 'FFCBD5E1',
+          },
+        },
+        left: {
+          style: 'thin',
+          color: {
+            argb: 'FFCBD5E1',
+          },
+        },
+        bottom: {
+          style: 'thin',
+          color: {
+            argb: 'FFCBD5E1',
+          },
+        },
+        right: {
+          style: 'thin',
+          color: {
+            argb: 'FFCBD5E1',
+          },
+        },
+      };
+    });
+
+    worksheet.getRow(6).height = 32;
+
+    /*
+     * Encabezados de la tabla
+     */
+    const encabezados = [
+      'Producto',
+      'Código',
+      'Categoría',
+      'Ubicación',
+      'Próxima caducidad',
+      'Stock',
+      'Mínimo',
+      'Precio venta',
+    ];
+
+    const filaEncabezado = worksheet.getRow(7);
+
+    encabezados.forEach((titulo, indice) => {
+      const cell = filaEncabezado.getCell(indice + 1);
+
+      cell.value = titulo;
+
+      cell.font = {
+        name: 'Arial',
+        bold: true,
+        size: 10,
+        color: {
+          argb: 'FFFFFFFF',
+        },
+      };
+
+      cell.alignment = {
+        vertical: 'middle',
+        horizontal: 'center',
+        wrapText: true,
+      };
+
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: {
+          argb: 'FF0369A1',
+        },
+      };
+
+      cell.border = {
+        top: {
+          style: 'thin',
+          color: {
+            argb: 'FF075985',
+          },
+        },
+        left: {
+          style: 'thin',
+          color: {
+            argb: 'FF075985',
+          },
+        },
+        bottom: {
+          style: 'thin',
+          color: {
+            argb: 'FF075985',
+          },
+        },
+        right: {
+          style: 'thin',
+          color: {
+            argb: 'FF075985',
+          },
+        },
+      };
+    });
+
+    filaEncabezado.height = 38;
+
+    /*
+     * Datos del inventario
+     */
+    inventario.forEach((item, index) => {
+      const stockActual = Number(item.stock_actual || 0);
+      const stockMinimo = Number(item.stock_minimo || 0);
+      const precioVenta = Number(item.precio_venta || 0);
+
+      const fechaCaducidad = item.proxima_caducidad
+        ? new Date(item.proxima_caducidad)
+        : null;
+
+      const fila = worksheet.addRow([
+        item.producto || '',
+        item.codigo_barras || '',
+        item.categoria || '',
+        item.ubicacion || '',
+        fechaCaducidad,
+        stockActual,
+        stockMinimo,
+        precioVenta,
+      ]);
+
+      fila.height = 25;
+
+      fila.eachCell({ includeEmpty: true }, (cell, columnNumber) => {
+        cell.font = {
+          name: 'Arial',
+          size: 10,
+          color: {
+            argb: 'FF334155',
+          },
+        };
+
+        cell.alignment = {
+          vertical: 'middle',
+          horizontal: [5, 6, 7, 8].includes(columnNumber)
+            ? 'center'
+            : 'left',
+          wrapText: [1, 3].includes(columnNumber),
+        };
+
+        cell.border = {
+          top: {
+            style: 'thin',
+            color: {
+              argb: 'FFE2E8F0',
+            },
+          },
+          left: {
+            style: 'thin',
+            color: {
+              argb: 'FFE2E8F0',
+            },
+          },
+          bottom: {
+            style: 'thin',
+            color: {
+              argb: 'FFE2E8F0',
+            },
+          },
+          right: {
+            style: 'thin',
+            color: {
+              argb: 'FFE2E8F0',
+            },
+          },
+        };
+
+        if (index % 2 !== 0) {
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: {
+              argb: 'FFF8FAFC',
+            },
+          };
+        }
+      });
+
+      /*
+       * Formatos de columnas
+       */
+      fila.getCell(5).numFmt = 'dd/mm/yyyy';
+      fila.getCell(6).numFmt = '#,##0.00';
+      fila.getCell(7).numFmt = '#,##0.00';
+      fila.getCell(8).numFmt = '"$"#,##0.00';
+
+      /*
+       * Resaltar bajo stock
+       */
+      if (item.bajo_stock) {
+        fila.getCell(6).font = {
+          name: 'Arial',
+          size: 10,
+          bold: true,
+          color: {
+            argb: 'FF92400E',
+          },
+        };
+
+        fila.getCell(6).fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: {
+            argb: 'FFFEF3C7',
+          },
+        };
+      }
+
+      /*
+       * Resaltar caducidad próxima
+       */
+      if (item.caducidad_proxima) {
+        fila.getCell(5).font = {
+          name: 'Arial',
+          size: 10,
+          bold: true,
+          color: {
+            argb: 'FFB91C1C',
+          },
+        };
+
+        fila.getCell(5).fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: {
+            argb: 'FFFEE2E2',
+          },
+        };
+      }
+    });
+
+    /*
+     * Anchos de columnas
+     */
+    const anchosColumnas = [
+      38, // Producto
+      21, // Código
+      25, // Categoría
+      18, // Ubicación
+      21, // Próxima caducidad
+      14, // Stock
+      14, // Mínimo
+      18, // Precio venta
+    ];
+
+    anchosColumnas.forEach((ancho, index) => {
+      worksheet.getColumn(index + 1).width = ancho;
+    });
+
+    /*
+     * Filtro automático
+     */
+    worksheet.autoFilter = {
+      from: {
+        row: 7,
+        column: 1,
+      },
+      to: {
+        row: 7,
+        column: encabezados.length,
+      },
+    };
+
+    /*
+     * Configuración de impresión
+     */
+    worksheet.pageSetup.printTitlesRow = '7:7';
+    worksheet.pageSetup.printArea = `A1:H${worksheet.rowCount}`;
+
+    /*
+     * Pie del reporte
+     */
+    const filaFinal = worksheet.rowCount + 2;
+
+    worksheet.mergeCells(`A${filaFinal}:H${filaFinal}`);
+
+   /* const celdaPie = worksheet.getCell(`A${filaFinal}`);
+
+    celdaPie.value =
+      '';
+
+    celdaPie.font = {
+      name: 'Arial',
+      italic: true,
+      size: 9,
+      color: {
+        argb: 'FF64748B',
+      },
+    };
+
+    celdaPie.alignment = {
+      horizontal: 'center',
+      vertical: 'middle',
+    };*/
+
+    /*
+     * Hoja de resumen
+     */
+    const hojaResumen = workbook.addWorksheet('Resumen');
+
+    hojaResumen.columns = [
+      {
+        header: 'Concepto',
+        key: 'concepto',
+        width: 35,
+      },
+      {
+        header: 'Valor',
+        key: 'valor',
+        width: 35,
+      },
+    ];
+
+    hojaResumen.addRows([
+      {
+        concepto: 'Farmacia',
+        valor: 'Farmacia Shaddai',
+      },
+      {
+        concepto: 'Sucursal',
+        valor: nombreSucursal,
+      },
+      {
+        concepto: 'Productos en inventario',
+        valor: resumen.totalProductos,
+      },
+      {
+        concepto: 'Productos con bajo stock',
+        valor: resumen.productosBajoStock,
+      },
+      {
+        concepto: 'Stock total',
+        valor: stockTotal,
+      },
+      {
+        concepto: 'Valor estimado de venta',
+        valor: resumen.valorVentaEstimado,
+      },
+      {
+        concepto: 'Fecha de exportación',
+        valor: fechaExportacion,
+      },
+    ]);
+
+    hojaResumen.getRow(1).eachCell((cell) => {
+      cell.font = {
+        name: 'Arial',
+        bold: true,
+        color: {
+          argb: 'FFFFFFFF',
+        },
+      };
+
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: {
+          argb: 'FF0369A1',
+        },
+      };
+
+      cell.alignment = {
+        vertical: 'middle',
+        horizontal: 'center',
+      };
+
+      cell.border = {
+        top: {
+          style: 'thin',
+          color: {
+            argb: 'FF075985',
+          },
+        },
+        left: {
+          style: 'thin',
+          color: {
+            argb: 'FF075985',
+          },
+        },
+        bottom: {
+          style: 'thin',
+          color: {
+            argb: 'FF075985',
+          },
+        },
+        right: {
+          style: 'thin',
+          color: {
+            argb: 'FF075985',
+          },
+        },
+      };
+    });
+
+    hojaResumen.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return;
+
+      row.eachCell({ includeEmpty: true }, (cell) => {
+        cell.font = {
+          name: 'Arial',
+          size: 10,
+          color: {
+            argb: 'FF334155',
+          },
+        };
+
+        cell.border = {
+          top: {
+            style: 'thin',
+            color: {
+              argb: 'FFE2E8F0',
+            },
+          },
+          left: {
+            style: 'thin',
+            color: {
+              argb: 'FFE2E8F0',
+            },
+          },
+          bottom: {
+            style: 'thin',
+            color: {
+              argb: 'FFE2E8F0',
+            },
+          },
+          right: {
+            style: 'thin',
+            color: {
+              argb: 'FFE2E8F0',
+            },
+          },
+        };
+      });
+    });
+
+    hojaResumen.getCell('B7').numFmt = '"$"#,##0.00';
+
+    /*
+     * Crear archivo
+     */
+    const buffer = await workbook.xlsx.writeBuffer();
+
+    const archivo = new Blob([buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+
+    const nombreSeguro = nombreSucursal
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9_-]/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_+|_+$/g, '');
+
+    const fechaArchivo = fechaActual
+      .toISOString()
+      .slice(0, 10);
+
+    saveAs(
+      archivo,
+      `inventario_${nombreSeguro}_${fechaArchivo}.xlsx`
+    );
+  } catch (error) {
+    console.error('Error al exportar inventario:', error);
+
+    Swal.fire({
+      icon: 'error',
+      title: 'No se pudo exportar',
+      text:
+        error.message ||
+        'Ocurrió un error al generar el archivo de Excel.',
+    });
+  }
+};
+
   return (
     <div className="w-full max-w-full overflow-visible space-y-5 sm:space-y-6 pb-8">
       <section className="relative z-30 bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-sm border border-slate-100 overflow-visible">
@@ -1472,6 +2232,16 @@ export default function Inventario() {
             >
               <Plus size={20} />
               Asignar stock
+            </button>
+
+            <button
+              type="button"
+              onClick={exportarInventarioExcel}
+              disabled={!idSucursal || cargando || inventario.length === 0}
+              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <FileSpreadsheet size={19} />
+              Exportar Excel
             </button>
           </div>
         </div>
