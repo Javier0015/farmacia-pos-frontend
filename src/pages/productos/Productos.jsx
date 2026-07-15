@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Swal from 'sweetalert2';
 import {
   Plus,
@@ -33,6 +33,7 @@ const formInicial = {
 export default function Productos() {
   const [productos, setProductos] = useState([]);
   const [categorias, setCategorias] = useState([]);
+  const [idCategoriaFiltro, setIdCategoriaFiltro] = useState('');
 
   const [buscar, setBuscar] = useState('');
   const [sugerenciasProductos, setSugerenciasProductos] = useState([]);
@@ -123,6 +124,18 @@ export default function Productos() {
     setCargandoSugerencias(false);
     setMostrarSugerencias(false);
     setIndiceSugerencia(-1);
+  };
+
+  const limpiarFiltrosProductos = async () => {
+    solicitudSugerenciasRef.current += 1;
+
+    limpiarSoloCampoBusqueda();
+    setIdCategoriaFiltro('');
+
+    await cargarProductos({
+      termino: '',
+      idProducto: null,
+    });
   };
 
   const buscarSugerenciasProductos = async (termino) => {
@@ -447,8 +460,24 @@ export default function Productos() {
     });
   };
 
-  const totalActivos = productos.filter((producto) => producto.activo).length;
-  const totalInactivos = productos.filter((producto) => !producto.activo).length;
+  const productosFiltrados = useMemo(() => {
+    if (!idCategoriaFiltro) {
+      return productos;
+    }
+
+    return productos.filter(
+      (producto) =>
+        Number(producto.id_categoria) === Number(idCategoriaFiltro)
+    );
+  }, [productos, idCategoriaFiltro]);
+
+  const totalActivos = productosFiltrados.filter(
+    (producto) => producto.activo
+  ).length;
+
+  const totalInactivos = productosFiltrados.filter(
+    (producto) => !producto.activo
+  ).length;
 
   const categoriaSeleccionada = categorias.find(
     (cat) => Number(cat.id_categoria) === Number(form.id_categoria)
@@ -518,8 +547,28 @@ export default function Productos() {
           </button>
         </div>
 
-        <div className="mt-6 flex flex-col md:flex-row gap-3">
-          <div className="relative z-50 flex-1">
+        <div className="mt-6 grid grid-cols-1 lg:grid-cols-[minmax(230px,280px)_minmax(0,1fr)_auto_auto] gap-3 items-start">
+          <div className="min-w-0">
+            <select
+              value={idCategoriaFiltro}
+              onChange={(e) => setIdCategoriaFiltro(e.target.value)}
+              className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500"
+              aria-label="Filtrar productos por categoría"
+            >
+              <option value="">Todas las categorías</option>
+
+              {categorias.map((categoria) => (
+                <option
+                  key={categoria.id_categoria}
+                  value={categoria.id_categoria}
+                >
+                  {categoria.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="relative z-50 min-w-0">
             <Search
               className="absolute left-4 top-3.5 text-slate-400"
               size={20}
@@ -571,8 +620,8 @@ export default function Productos() {
 
                   const productoPorEnter =
                     mostrarSugerencias &&
-                      indiceSugerencia >= 0 &&
-                      sugerenciasProductos[indiceSugerencia]
+                    indiceSugerencia >= 0 &&
+                    sugerenciasProductos[indiceSugerencia]
                       ? sugerenciasProductos[indiceSugerencia]
                       : null;
 
@@ -631,10 +680,11 @@ export default function Productos() {
                             e.preventDefault();
                             seleccionarSugerenciaProducto(producto);
                           }}
-                          className={`flex w-full items-start justify-between gap-4 px-4 py-3 text-left transition ${seleccionado
-                            ? 'bg-sky-50 text-sky-800'
-                            : 'text-slate-700 hover:bg-slate-50'
-                            }`}
+                          className={`flex w-full items-start justify-between gap-4 px-4 py-3 text-left transition ${
+                            seleccionado
+                              ? 'bg-sky-50 text-sky-800'
+                              : 'text-slate-700 hover:bg-slate-50'
+                          }`}
                         >
                           <div className="min-w-0">
                             <p className="truncate text-sm font-black">
@@ -646,10 +696,11 @@ export default function Productos() {
                           </div>
 
                           <span
-                            className={`shrink-0 rounded-full px-3 py-1 text-xs font-black ${producto.activo
-                              ? 'bg-emerald-50 text-emerald-700'
-                              : 'bg-slate-100 text-slate-600'
-                              }`}
+                            className={`shrink-0 rounded-full px-3 py-1 text-xs font-black ${
+                              producto.activo
+                                ? 'bg-emerald-50 text-emerald-700'
+                                : 'bg-slate-100 text-slate-600'
+                            }`}
                           >
                             {producto.activo ? 'Activo' : 'Inactivo'}
                           </span>
@@ -666,10 +717,20 @@ export default function Productos() {
             type="button"
             onClick={ejecutarBusquedaProductos}
             disabled={cargando}
-            className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition disabled:opacity-60"
+            className="inline-flex w-full lg:w-auto items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition disabled:opacity-60"
           >
             <RefreshCw size={19} className={cargando ? 'animate-spin' : ''} />
             {cargando ? 'Buscando...' : 'Buscar'}
+          </button>
+
+          <button
+            type="button"
+            onClick={limpiarFiltrosProductos}
+            disabled={cargando}
+            className="inline-flex w-full lg:w-auto items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition disabled:opacity-60"
+          >
+            <X size={18} />
+            Limpiar
           </button>
         </div>
 
@@ -761,17 +822,19 @@ export default function Productos() {
                     Cargando productos...
                   </td>
                 </tr>
-              ) : productos.length === 0 ? (
+              ) : productosFiltrados.length === 0 ? (
                 <tr>
                   <td
                     colSpan="9"
                     className="px-5 py-10 text-center text-slate-500"
                   >
-                    No hay productos registrados.
+                    {idCategoriaFiltro
+                      ? 'No hay productos en la categoría seleccionada.'
+                      : 'No hay productos registrados.'}
                   </td>
                 </tr>
               ) : (
-                productos.map((producto) => (
+                productosFiltrados.map((producto) => (
                   <tr key={producto.id_producto} className="hover:bg-slate-50">
                     <td className="px-5 py-4">
                       <div>

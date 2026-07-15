@@ -335,6 +335,7 @@ export default function Inventario() {
 
   const [idSucursal, setIdSucursal] = useState('');
   const [buscar, setBuscar] = useState('');
+  const [categoriaSeleccionada, setCategoriaSeleccionada] = useState('');
   const [idProductoBusqueda, setIdProductoBusqueda] = useState('');
   const [sugerenciasInventario, setSugerenciasInventario] = useState([]);
   const [cargandoSugerenciasInventario, setCargandoSugerenciasInventario] = useState(false);
@@ -369,6 +370,36 @@ export default function Inventario() {
     return sucursales.find((s) => Number(s.id_sucursal) === Number(idSucursal));
   }, [sucursales, idSucursal]);
 
+  const categoriasInventario = useMemo(() => {
+    const categoriasUnicas = new Map();
+
+    inventario.forEach((item) => {
+      const categoria = String(item.categoria || 'Sin categoría').trim();
+
+      categoriasUnicas.set(normalizarTexto(categoria), categoria);
+    });
+
+    return Array.from(categoriasUnicas.values()).sort((a, b) =>
+      a.localeCompare(b, 'es', { sensitivity: 'base' })
+    );
+  }, [inventario]);
+
+  const inventarioFiltrado = useMemo(() => {
+    if (!categoriaSeleccionada) {
+      return inventario;
+    }
+
+    const categoriaNormalizada = normalizarTexto(categoriaSeleccionada);
+
+    return inventario.filter((item) => {
+      const categoriaProducto = normalizarTexto(
+        item.categoria || 'Sin categoría'
+      );
+
+      return categoriaProducto === categoriaNormalizada;
+    });
+  }, [inventario, categoriaSeleccionada]);
+
   const productosSinInventario = useMemo(() => {
     const productosInventario = new Set(
       inventario.map((item) => Number(item.id_producto))
@@ -382,18 +413,24 @@ export default function Inventario() {
   }, [productos, inventario]);
 
   const resumen = useMemo(() => {
-    const totalProductos = inventario.length;
+    const totalProductos = inventarioFiltrado.length;
 
-    const productosBajoStock = inventario.filter(
+    const productosBajoStock = inventarioFiltrado.filter(
       (item) => item.bajo_stock
     ).length;
 
-    const valorInventario = inventario.reduce((acc, item) => {
-      return acc + Number(item.stock_actual || 0) * Number(item.precio_compra || 0);
+    const valorInventario = inventarioFiltrado.reduce((acc, item) => {
+      return (
+        acc +
+        Number(item.stock_actual || 0) * Number(item.precio_compra || 0)
+      );
     }, 0);
 
-    const valorVentaEstimado = inventario.reduce((acc, item) => {
-      return acc + Number(item.stock_actual || 0) * Number(item.precio_venta || 0);
+    const valorVentaEstimado = inventarioFiltrado.reduce((acc, item) => {
+      return (
+        acc +
+        Number(item.stock_actual || 0) * Number(item.precio_venta || 0)
+      );
     }, 0);
 
     return {
@@ -402,7 +439,7 @@ export default function Inventario() {
       valorInventario,
       valorVentaEstimado,
     };
-  }, [inventario]);
+  }, [inventarioFiltrado]);
 
   const formatoMoneda = (valor) => {
     return Number(valor || 0).toLocaleString('es-MX', {
@@ -716,6 +753,7 @@ export default function Inventario() {
   const limpiarFiltros = async () => {
     solicitudSugerenciasInventarioRef.current += 1;
     setBuscar('');
+    setCategoriaSeleccionada('');
     setIdProductoBusqueda('');
     setSugerenciasInventario([]);
     setMostrandoSugerenciasInventario(false);
@@ -837,6 +875,7 @@ export default function Inventario() {
      * Al cambiar de sucursal conservamos el texto escrito, pero dejamos de
      * usar cualquier ID seleccionado de la sucursal anterior.
      */
+    setCategoriaSeleccionada('');
     setIdProductoBusqueda('');
     solicitudSugerenciasInventarioRef.current += 1;
     setSugerenciasInventario([]);
@@ -1464,7 +1503,7 @@ const exportarInventarioExcel = async () => {
     return;
   }
 
-  if (!inventario.length) {
+  if (!inventarioFiltrado.length) {
     Swal.fire({
       icon: 'info',
       title: 'Sin información',
@@ -1477,6 +1516,9 @@ const exportarInventarioExcel = async () => {
   try {
     const nombreSucursal =
       sucursalActual?.nombre || `Sucursal ${idSucursal}`;
+
+    const nombreCategoria =
+      categoriaSeleccionada || 'Todas las categorías';
 
     const fechaActual = new Date();
 
@@ -1577,7 +1619,7 @@ const exportarInventarioExcel = async () => {
     const celdaSucursal = worksheet.getCell('C4');
 
     celdaSucursal.value =
-      `${nombreSucursal} · Generado el ${fechaExportacion}`;
+      `${nombreSucursal} · Categoría: ${nombreCategoria} · Generado el ${fechaExportacion}`;
 
     celdaSucursal.font = {
       name: 'Arial',
@@ -1645,7 +1687,7 @@ const exportarInventarioExcel = async () => {
     /*
      * Resumen
      */
-    const stockTotal = inventario.reduce(
+    const stockTotal = inventarioFiltrado.reduce(
       (total, item) => total + Number(item.stock_actual || 0),
       0
     );
@@ -1809,7 +1851,7 @@ const exportarInventarioExcel = async () => {
     /*
      * Datos del inventario
      */
-    inventario.forEach((item, index) => {
+    inventarioFiltrado.forEach((item, index) => {
       const stockActual = Number(item.stock_actual || 0);
       const stockMinimo = Number(item.stock_minimo || 0);
       const precioVenta = Number(item.precio_venta || 0);
@@ -2031,6 +2073,10 @@ const exportarInventarioExcel = async () => {
         valor: nombreSucursal,
       },
       {
+        concepto: 'Categoría',
+        valor: nombreCategoria,
+      },
+      {
         concepto: 'Productos en inventario',
         valor: resumen.totalProductos,
       },
@@ -2143,7 +2189,7 @@ const exportarInventarioExcel = async () => {
       });
     });
 
-    hojaResumen.getCell('B7').numFmt = '"$"#,##0.00';
+    hojaResumen.getCell('B8').numFmt = '"$"#,##0.00';
 
     /*
      * Crear archivo
@@ -2237,7 +2283,11 @@ const exportarInventarioExcel = async () => {
             <button
               type="button"
               onClick={exportarInventarioExcel}
-              disabled={!idSucursal || cargando || inventario.length === 0}
+              disabled={
+                !idSucursal ||
+                cargando ||
+                inventarioFiltrado.length === 0
+              }
               className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <FileSpreadsheet size={19} />
@@ -2246,7 +2296,7 @@ const exportarInventarioExcel = async () => {
           </div>
         </div>
 
-        <div className="relative z-40 mt-6 grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div className="relative z-40 mt-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4">
           <div className="min-w-0">
             <label className="block text-sm font-bold text-slate-700 mb-2">
               Sucursal
@@ -2279,6 +2329,27 @@ const exportarInventarioExcel = async () => {
 
           <div className="min-w-0">
             <label className="block text-sm font-bold text-slate-700 mb-2">
+              Categoría
+            </label>
+
+            <select
+              value={categoriaSeleccionada}
+              onChange={(e) => setCategoriaSeleccionada(e.target.value)}
+              disabled={!idSucursal || inventario.length === 0}
+              className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white disabled:bg-slate-100 disabled:cursor-not-allowed"
+            >
+              <option value="">Todas las categorías</option>
+
+              {categoriasInventario.map((categoria) => (
+                <option key={categoria} value={categoria}>
+                  {categoria}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="min-w-0">
+            <label className="block text-sm font-bold text-slate-700 mb-2">
               Fecha inicio
             </label>
             <input
@@ -2301,7 +2372,7 @@ const exportarInventarioExcel = async () => {
             />
           </div>
 
-          <div className="relative z-50 md:col-span-2 min-w-0">
+          <div className="relative z-50 md:col-span-2 xl:col-span-2 min-w-0">
             <label className="block text-sm font-bold text-slate-700 mb-2">
               Buscar
             </label>
@@ -2516,12 +2587,14 @@ const exportarInventarioExcel = async () => {
             <div className="rounded-2xl bg-slate-50 p-6 text-center text-slate-500 font-semibold">
               Cargando inventario...
             </div>
-          ) : inventario.length === 0 ? (
+          ) : inventarioFiltrado.length === 0 ? (
             <div className="rounded-2xl bg-slate-50 p-6 text-center text-slate-500 font-semibold">
-              No hay productos con inventario asignado en esta sucursal.
+              {categoriaSeleccionada
+                ? 'No hay productos que coincidan con la categoría seleccionada.'
+                : 'No hay productos con inventario asignado en esta sucursal.'}
             </div>
           ) : (
-            inventario.map((item) => (
+            inventarioFiltrado.map((item) => (
               <article
                 key={item.id_inventario}
                 className={`rounded-2xl border p-4 shadow-sm ${item.bajo_stock
@@ -2692,14 +2765,16 @@ const exportarInventarioExcel = async () => {
                     Cargando inventario...
                   </td>
                 </tr>
-              ) : inventario.length === 0 ? (
+              ) : inventarioFiltrado.length === 0 ? (
                 <tr>
                   <td colSpan="10" className="px-5 py-10 text-center text-slate-500">
-                    No hay productos con inventario asignado en esta sucursal.
+                    {categoriaSeleccionada
+                      ? 'No hay productos que coincidan con la categoría seleccionada.'
+                      : 'No hay productos con inventario asignado en esta sucursal.'}
                   </td>
                 </tr>
               ) : (
-                inventario.map((item) => (
+                inventarioFiltrado.map((item) => (
                   <tr
                     key={item.id_inventario}
                     className={
