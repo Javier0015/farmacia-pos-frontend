@@ -23,6 +23,7 @@ import ProductoCatalogoModal from '../../components/catalogo/ProductoCatalogoMod
 import SucursalesDisponiblesModal from '../../components/catalogo/SucursalesDisponiblesModal';
 import logoFarmacia from '../../assets/logoShaddai.png';
 import logoFarmaciaCompleto from '../../assets/logoCompleto-sinFondo.png';
+import ChatbotDisponibilidad from '../../components/catalogo/ChatbotDisponibilidad';
 
 
 const CONFIGURACION_REDES_SOCIALES = {
@@ -1296,6 +1297,14 @@ export default function CatalogoPublico() {
           onCerrar={() => setProductoDisponibilidadSeleccionado(null)}
         />
       )}
+            <ChatbotDisponibilidad
+              onVerDetalle={abrirDetalle}
+              onVerDisponibilidad={(producto) => {
+                setProductoDisponibilidadSeleccionado(producto);
+              }}
+              onAbrirWhatsApp={abrirSelectorWhatsapp}
+            />
     </div>
+
   );
 }
