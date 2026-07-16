@@ -81,6 +81,21 @@ const ICONOS_OPCION = {
 const esperar = (milisegundos) =>
   new Promise((resolve) => window.setTimeout(resolve, milisegundos));
 
+/**
+ * Simula un tiempo de respuesta más natural.
+ * Los mensajes cortos tardan aproximadamente 1.6 segundos
+ * y los mensajes largos llegan hasta un máximo de 3 segundos.
+ */
+const calcularDemoraEscritura = (texto, demoraMinima = 1600) => {
+  const longitud = String(texto || '').trim().length;
+  const demoraPorLongitud = 1300 + longitud * 18;
+
+  return Math.min(
+    3000,
+    Math.max(demoraMinima, demoraPorLongitud)
+  );
+};
+
 const obtenerNombreProducto = (producto) =>
   producto?.titulo_catalogo ||
   producto?.nombre_producto ||
@@ -211,10 +226,19 @@ function IndicadorEscritura() {
     <div className="flex items-start gap-2.5 chatbot-mensaje-entrada">
       <AvatarBot />
 
-      <div className="flex items-center gap-1 rounded-2xl rounded-tl-md border border-sky-100 bg-white px-4 py-3 shadow-sm">
-        <span className="chatbot-punto h-2 w-2 rounded-full bg-sky-500" />
-        <span className="chatbot-punto h-2 w-2 rounded-full bg-sky-500 [animation-delay:150ms]" />
-        <span className="chatbot-punto h-2 w-2 rounded-full bg-sky-500 [animation-delay:300ms]" />
+      <div className="flex items-center gap-1.5 rounded-2xl rounded-tl-md border border-emerald-100 bg-white px-4 py-3 shadow-sm">
+        <span
+          className="chatbot-punto h-2 w-2 rounded-full bg-emerald-500"
+          style={{ animationDelay: '0ms' }}
+        />
+        <span
+          className="chatbot-punto h-2 w-2 rounded-full bg-emerald-500"
+          style={{ animationDelay: '200ms' }}
+        />
+        <span
+          className="chatbot-punto h-2 w-2 rounded-full bg-emerald-500"
+          style={{ animationDelay: '400ms' }}
+        />
       </div>
     </div>
   );
@@ -222,7 +246,7 @@ function IndicadorEscritura() {
 
 function AvatarBot() {
   return (
-    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-700 to-cyan-500 text-white shadow-md shadow-sky-500/20">
+    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-700 to-lime-500 text-white shadow-md shadow-emerald-500/20">
       <Bot size={19} />
     </div>
   );
@@ -231,7 +255,7 @@ function AvatarBot() {
 function BurbujaUsuario({ texto }) {
   return (
     <div className="flex justify-end chatbot-mensaje-entrada">
-      <div className="max-w-[84%] rounded-2xl rounded-tr-md bg-gradient-to-br from-sky-700 to-sky-600 px-4 py-3 text-sm font-bold leading-relaxed text-white shadow-md shadow-sky-900/10">
+      <div className="max-w-[84%] rounded-2xl rounded-tr-md bg-gradient-to-br from-emerald-700 to-green-600 px-4 py-3 text-sm font-bold leading-relaxed text-white shadow-md shadow-emerald-900/10">
         {texto}
       </div>
     </div>
@@ -247,7 +271,7 @@ function BotonOpcion({ opcion, onClick, disabled }) {
         type="button"
         onClick={() => onClick(opcion)}
         disabled={disabled}
-        className="inline-flex items-center gap-2 rounded-xl border border-sky-100 bg-white px-3 py-2 text-xs font-black text-sky-700 shadow-sm transition hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-50"
+        className="inline-flex items-center gap-2 rounded-xl border border-emerald-100 bg-white px-3 py-2 text-xs font-black text-emerald-700 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-300 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
       >
         <Icono size={15} />
         {opcion.etiqueta}
@@ -256,7 +280,7 @@ function BotonOpcion({ opcion, onClick, disabled }) {
   }
 
   const clasesIcono = {
-    buscar: 'border-sky-100 bg-sky-50 text-sky-700',
+    buscar: 'border-emerald-100 bg-emerald-50 text-emerald-700',
     promociones: 'border-rose-100 bg-rose-50 text-rose-700',
     categorias: 'border-violet-100 bg-violet-50 text-violet-700',
     whatsapp: 'border-emerald-100 bg-emerald-50 text-emerald-700',
@@ -267,7 +291,7 @@ function BotonOpcion({ opcion, onClick, disabled }) {
       type="button"
       onClick={() => onClick(opcion)}
       disabled={disabled}
-      className="group flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-sky-200 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
+      className="group flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
     >
       <div
         className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border ${
@@ -290,7 +314,7 @@ function BotonOpcion({ opcion, onClick, disabled }) {
 
       <ChevronRight
         size={18}
-        className="shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-sky-600"
+        className="shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-emerald-600"
       />
     </button>
   );
@@ -306,14 +330,14 @@ function ProductoChatCard({
   const precio = obtenerPrecioProducto(producto);
 
   return (
-    <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:border-sky-200 hover:shadow-md">
+    <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:border-emerald-200 hover:shadow-md">
       <button
         type="button"
         onClick={() => onSeleccionar(producto)}
         disabled={disabled}
         className="flex w-full gap-3 p-3 text-left disabled:cursor-not-allowed disabled:opacity-60"
       >
-        <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-100 bg-sky-50 text-sky-600">
+        <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-100 bg-emerald-50 text-emerald-600">
           {producto.imagen_url ? (
             <img
               src={producto.imagen_url}
@@ -343,14 +367,14 @@ function ProductoChatCard({
           </p>
 
           <div className="mt-2 flex items-center justify-between gap-2">
-            <p className="text-base font-black text-sky-700">
+            <p className="text-base font-black text-emerald-700">
               {precio.toLocaleString('es-MX', {
                 style: 'currency',
                 currency: 'MXN',
               })}
             </p>
 
-            <span className="inline-flex items-center gap-1 text-[11px] font-black text-sky-600">
+            <span className="inline-flex items-center gap-1 text-[11px] font-black text-emerald-600">
               Seleccionar
               <ChevronRight size={14} />
             </span>
@@ -362,7 +386,7 @@ function ProductoChatCard({
         type="button"
         onClick={() => onVerDetalle?.(producto)}
         disabled={disabled}
-        className="inline-flex w-full items-center justify-center gap-2 border-t border-slate-100 px-3 py-2.5 text-xs font-black text-slate-500 transition hover:bg-slate-50 hover:text-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
+        className="inline-flex w-full items-center justify-center gap-2 border-t border-slate-100 px-3 py-2.5 text-xs font-black text-slate-500 transition hover:bg-slate-50 hover:text-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
       >
         Ver información del producto
         <ArrowUpRight size={14} />
@@ -384,7 +408,7 @@ function MensajeBot({
       <AvatarBot />
 
       <div className="min-w-0 max-w-[calc(100%_-_46px)] flex-1">
-        <div className="rounded-2xl rounded-tl-md border border-sky-100 bg-white px-4 py-3 text-sm font-semibold leading-relaxed text-slate-700 shadow-sm">
+        <div className="rounded-2xl rounded-tl-md border border-emerald-100 bg-white px-4 py-3 text-sm font-semibold leading-relaxed text-slate-700 shadow-sm">
           {mensaje.texto}
         </div>
 
@@ -506,12 +530,16 @@ export default function ChatbotDisponibilidad({
   const responderBot = async (
     texto,
     configuracion = {},
-    demora = 550
+    demoraMinima = 1600
   ) => {
     const sesion = sesionRef.current;
+    const demoraReal = calcularDemoraEscritura(
+      texto,
+      demoraMinima
+    );
 
     setEscribiendo(true);
-    await esperar(demora);
+    await esperar(demoraReal);
 
     if (sesion !== sesionRef.current) return false;
 
@@ -541,6 +569,7 @@ export default function ChatbotDisponibilidad({
       },
       450
     );
+    await responderBot ('Selecciona una opción o escribe el nombre de un producto para buscalo. 😊')
   };
 
   const iniciarConversacion = async () => {
@@ -550,15 +579,17 @@ export default function ChatbotDisponibilidad({
     setIniciado(true);
     setModoEntrada(MODO_ENTRADA.LIBRE);
 
+    const saludoInicial =
+      '¡Hola! Soy tu asistente de Farmacias Shaddai.';
+
     setEscribiendo(true);
-    await esperar(450);
+    await esperar(calcularDemoraEscritura(saludoInicial, 1800));
 
     if (sesion !== sesionRef.current) return;
 
     agregarMensaje({
       autor: 'bot',
-      texto:
-        '¡Hola! 👋 Soy el asistente del catálogo de Farmacias Shaddai.',
+      texto: saludoInicial,
     });
 
     setEscribiendo(false);
@@ -1122,12 +1153,13 @@ export default function ChatbotDisponibilidad({
           }
 
           @keyframes chatbotPunto {
-            0%, 60%, 100% {
+            0%, 15%, 45%, 100% {
               transform: translateY(0);
               opacity: .35;
             }
+
             30% {
-              transform: translateY(-4px);
+              transform: translateY(-5px);
               opacity: 1;
             }
           }
@@ -1135,11 +1167,11 @@ export default function ChatbotDisponibilidad({
           @keyframes chatbotPulso {
             0%, 100% {
               transform: scale(1);
-              box-shadow: 0 18px 40px rgba(3, 105, 161, .28);
+              box-shadow: 0 18px 40px rgba(5, 150, 105, .30);
             }
             50% {
               transform: scale(1.035);
-              box-shadow: 0 22px 52px rgba(6, 182, 212, .38);
+              box-shadow: 0 22px 52px rgba(34, 197, 94, .42);
             }
           }
 
@@ -1148,7 +1180,8 @@ export default function ChatbotDisponibilidad({
           }
 
           .chatbot-punto {
-            animation: chatbotPunto 1.1s ease-in-out infinite;
+            animation: chatbotPunto 1.2s ease-in-out infinite;
+            will-change: transform, opacity;
           }
 
           .chatbot-boton-pulso {
@@ -1161,12 +1194,12 @@ export default function ChatbotDisponibilidad({
         <button
           type="button"
           onClick={() => setAbierto(true)}
-          className="chatbot-boton-pulso fixed bottom-5 right-5 z-[950] inline-flex items-center gap-3 rounded-full border border-white/30 bg-gradient-to-r from-sky-700 to-cyan-500 px-4 py-4 font-black text-white transition hover:-translate-y-1 sm:px-5"
+          className="chatbot-boton-pulso fixed bottom-5 right-5 z-[950] inline-flex items-center gap-3 rounded-full border border-white/30 bg-gradient-to-r from-emerald-700 to-lime-500 px-4 py-4 font-black text-white transition hover:-translate-y-1 sm:px-5"
           aria-label="Abrir asistente del catálogo"
         >
           <span className="relative flex h-7 w-7 items-center justify-center">
             <MessageCircle size={25} />
-            <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full border-2 border-cyan-500 bg-emerald-400" />
+            <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full border-2 border-lime-400 bg-emerald-400" />
           </span>
 
           <span className="hidden sm:inline">¿Buscas un producto?</span>
@@ -1186,9 +1219,9 @@ export default function ChatbotDisponibilidad({
           "
           aria-label="Asistente del catálogo"
         >
-          <header className="relative overflow-hidden bg-gradient-to-br from-sky-800 via-sky-600 to-cyan-500 px-5 pb-5 pt-4 text-white">
+          <header className="relative overflow-hidden bg-gradient-to-br from-emerald-800 via-emerald-600 to-lime-500 px-5 pb-5 pt-4 text-white">
             <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-white/10" />
-            <div className="absolute -bottom-16 -left-10 h-32 w-32 rounded-full bg-cyan-200/15" />
+            <div className="absolute -bottom-16 -left-10 h-32 w-32 rounded-full bg-lime-200/15" />
 
             <div className="relative flex items-start justify-between gap-3">
               <div className="flex min-w-0 items-center gap-3">
@@ -1201,7 +1234,7 @@ export default function ChatbotDisponibilidad({
                     Asistente Shaddai
                   </h2>
 
-                  <p className="mt-0.5 flex items-center gap-1.5 text-xs font-bold text-sky-100">
+                  <p className="mt-0.5 flex items-center gap-1.5 text-xs font-bold text-emerald-100">
                     <span className="h-2 w-2 rounded-full bg-emerald-300" />
                     Atención automática en línea
                   </p>
@@ -1263,13 +1296,13 @@ export default function ChatbotDisponibilidad({
                 onChange={(event) => setEntrada(event.target.value)}
                 placeholder={placeholder}
                 disabled={bloqueado}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3.5 pl-4 pr-14 text-sm font-bold text-slate-700 outline-none transition focus:border-sky-400 focus:bg-white focus:ring-4 focus:ring-sky-100 disabled:cursor-not-allowed disabled:opacity-60"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3.5 pl-4 pr-14 text-sm font-bold text-slate-700 outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
               />
 
               <button
                 type="submit"
                 disabled={!entrada.trim() || bloqueado}
-                className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-xl bg-sky-600 text-white shadow-md shadow-sky-600/20 transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+                className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-xl bg-emerald-500 text-slate-950 shadow-md shadow-amber-500/25 transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
                 aria-label="Enviar mensaje"
               >
                 {procesando ? (
