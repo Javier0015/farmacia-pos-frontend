@@ -112,6 +112,100 @@ const limpiarConsultaProducto = (valor) => {
   return limpio.length >= 2 ? limpio : original;
 };
 
+
+const normalizarMensaje = (valor) =>
+  String(valor || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[¿?¡!,.;:]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const EXPRESIONES_SALUDO = [
+  'hola',
+  'holi',
+  'holis',
+  'buen dia',
+  'buenos dias',
+  'buenas',
+  'buenas tardes',
+  'buenas noches',
+  'que tal',
+  'que onda',
+  'saludos',
+];
+
+const EXPRESIONES_AYUDA = [
+  'ayuda',
+  'necesito ayuda',
+  'quiero ayuda',
+  'me ayudas',
+  'puedes ayudarme',
+  'en que me puedes ayudar',
+  'que puedes hacer',
+  'como funciona',
+  'como puedes ayudarme',
+  'no se que buscar',
+];
+
+const EXPRESIONES_AGRADECIMIENTO = [
+  'gracias',
+  'muchas gracias',
+  'te agradezco',
+  'perfecto gracias',
+  'excelente gracias',
+  'muy amable',
+];
+
+const EXPRESIONES_DESPEDIDA = [
+  'adios',
+  'hasta luego',
+  'nos vemos',
+  'hasta pronto',
+  'bye',
+  'eso es todo',
+  'seria todo',
+];
+
+const coincideExpresion = (mensaje, expresiones) =>
+  expresiones.some(
+    (expresion) =>
+      mensaje === expresion ||
+      mensaje.startsWith(`${expresion} `) ||
+      mensaje.endsWith(` ${expresion}`)
+  );
+
+const quitarSaludoInicial = (mensaje) => {
+  let resultado = mensaje;
+
+  const saludosOrdenados = [...EXPRESIONES_SALUDO].sort(
+    (a, b) => b.length - a.length
+  );
+
+  for (const saludo of saludosOrdenados) {
+    if (resultado === saludo) return '';
+
+    if (resultado.startsWith(`${saludo} `)) {
+      resultado = resultado.slice(saludo.length).trim();
+      break;
+    }
+  }
+
+  return resultado
+    .replace(/^(como estas|como esta|como andas)\b/, '')
+    .trim();
+};
+
+const obtenerSaludoSegunHora = () => {
+  const hora = new Date().getHours();
+
+  if (hora >= 6 && hora < 12) return '¡Buenos días! 😊';
+  if (hora >= 12 && hora < 19) return '¡Buenas tardes! 😊';
+
+  return '¡Buenas noches! 😊';
+};
+
 function IndicadorEscritura() {
   return (
     <div className="flex items-start gap-2.5 chatbot-mensaje-entrada">
@@ -859,7 +953,84 @@ export default function ChatbotDisponibilidad({
   };
 
   const interpretarEntrada = async (texto) => {
-    const normalizado = texto.toLowerCase();
+    const normalizadoOriginal = normalizarMensaje(texto);
+    const contieneSaludo = coincideExpresion(
+      normalizadoOriginal,
+      EXPRESIONES_SALUDO
+    );
+    const mensajeSinSaludo = contieneSaludo
+      ? quitarSaludoInicial(normalizadoOriginal)
+      : normalizadoOriginal;
+
+    if (contieneSaludo) {
+      await responderBot(
+        `${obtenerSaludoSegunHora()} ¿En qué puedo ayudarte?`,
+        {},
+        320
+      );
+
+      if (!mensajeSinSaludo) {
+        await mostrarMenu();
+        return;
+      }
+    }
+
+    const normalizado = mensajeSinSaludo || normalizadoOriginal;
+
+    if (coincideExpresion(normalizado, EXPRESIONES_AYUDA)) {
+      await responderBot(
+        'Claro. Puedo buscar productos, mostrar promociones, explorar categorías, consultar disponibilidad y ayudarte a contactar una sucursal.',
+        {},
+        350
+      );
+
+      await mostrarMenu();
+      return;
+    }
+
+    if (coincideExpresion(normalizado, EXPRESIONES_AGRADECIMIENTO)) {
+      await responderBot(
+        '¡Con gusto! 😊 Estoy aquí para ayudarte cuando lo necesites.',
+        {
+          tipo: TIPO_MENSAJE.OPCIONES,
+          opciones: [
+            {
+              id: 'buscar',
+              etiqueta: 'Buscar otro producto',
+              icono: 'buscar',
+              compacta: true,
+            },
+            {
+              id: 'menu',
+              etiqueta: 'Ver opciones',
+              icono: 'menu',
+              compacta: true,
+            },
+          ],
+        },
+        320
+      );
+      return;
+    }
+
+    if (coincideExpresion(normalizado, EXPRESIONES_DESPEDIDA)) {
+      await responderBot(
+        '¡Gracias por consultar Farmacias Shaddai! Que tengas un excelente día. 👋',
+        {
+          tipo: TIPO_MENSAJE.OPCIONES,
+          opciones: [
+            {
+              id: 'menu',
+              etiqueta: 'Volver al menú',
+              icono: 'menu',
+              compacta: true,
+            },
+          ],
+        },
+        320
+      );
+      return;
+    }
 
     if (
       normalizado.includes('promoc') ||
@@ -872,8 +1043,7 @@ export default function ChatbotDisponibilidad({
 
     if (
       normalizado.includes('categor') ||
-      normalizado.includes('seccion') ||
-      normalizado.includes('sección')
+      normalizado.includes('seccion')
     ) {
       await cargarCategorias();
       return;
@@ -891,14 +1061,13 @@ export default function ChatbotDisponibilidad({
 
     if (
       normalizado === 'menu' ||
-      normalizado === 'menú' ||
       normalizado.includes('opciones')
     ) {
       await mostrarMenu();
       return;
     }
 
-    await buscarProductos(texto);
+    await buscarProductos(mensajeSinSaludo || texto);
   };
 
   const enviarMensaje = async (event) => {
@@ -1000,7 +1169,7 @@ export default function ChatbotDisponibilidad({
             <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full border-2 border-cyan-500 bg-emerald-400" />
           </span>
 
-          <span className="hidden sm:inline">¿Necesitas ayuda?</span>
+          <span className="hidden sm:inline">¿Buscas un producto?</span>
         </button>
       )}
 
