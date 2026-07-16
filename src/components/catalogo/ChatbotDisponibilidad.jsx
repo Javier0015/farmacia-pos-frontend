@@ -569,7 +569,7 @@ export default function ChatbotDisponibilidad({
       },
       450
     );
-    await responderBot ('Selecciona una opción o escribe el nombre de un producto para buscalo. 😊')
+    await responderBot ('Selecciona una opción o escribe el nombre de un producto para buscarlo. 😊')
   };
 
   const iniciarConversacion = async () => {
@@ -1236,7 +1236,7 @@ export default function ChatbotDisponibilidad({
 
                   <p className="mt-0.5 flex items-center gap-1.5 text-xs font-bold text-emerald-100">
                     <span className="h-2 w-2 rounded-full bg-emerald-300" />
-                    Atención automática en línea
+                    En línea
                   </p>
                 </div>
               </div>
