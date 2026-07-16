@@ -1202,7 +1202,7 @@ export default function ChatbotDisponibilidad({
             <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full border-2 border-lime-400 bg-emerald-400" />
           </span>
 
-          <span className="hidden sm:inline">¿Buscas un producto?</span>
+          <span className="hidden sm:inline">¿Necesitas ayuda?</span>
         </button>
       )}
 
