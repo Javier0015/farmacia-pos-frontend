@@ -58,6 +58,14 @@ const denominacionesCaja = [
 
 const METODOS_PAGO = ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'PUNTOS'];
 
+const CONFIGURACION_IMPRESION_LOCAL = {
+  url: 'http://localhost:3030',
+  apiKey: 'shaddai-printer-2026',
+};
+
+const API_IMPRESION_LOCAL = CONFIGURACION_IMPRESION_LOCAL.url;
+const PRINTER_KEY = CONFIGURACION_IMPRESION_LOCAL.apiKey;
+
 const normalizarMetodoPago = (metodo) => {
   const valor = String(metodo || '').trim().toUpperCase();
   return valor || '—';
@@ -883,6 +891,7 @@ export default function Caja() {
   const [cargandoReporteCierre, setCargandoReporteCierre] = useState(false);
 
   const [cerrandoCaja, setCerrandoCaja] = useState(false);
+  const [abriendoCajon, setAbriendoCajon] = useState(false);
 
 
   const formatoMoneda = (valor) => {
@@ -1219,6 +1228,93 @@ export default function Caja() {
   const refrescarTodo = async () => {
     await cargarCajas();
     await cargarSesionAbierta();
+  };
+
+  const abrirCajonFisico = async () => {
+    if (!sesionAbierta) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Caja cerrada',
+        text: 'Primero debes abrir una sesión de caja.',
+      });
+      return;
+    }
+
+    const confirmacion = await Swal.fire({
+      icon: 'question',
+      title: '¿Abrir el cajón?',
+      text: 'Se enviará el comando de apertura a la caja registradora.',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, abrir cajón',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#059669',
+      cancelButtonColor: '#64748b',
+    });
+
+    if (!confirmacion.isConfirmed) return;
+
+    try {
+      setAbriendoCajon(true);
+
+      Swal.fire({
+        title: 'Abriendo cajón...',
+        html: `
+          <div style="text-align:center">
+            <p>Enviando el comando a la caja registradora.</p>
+          </div>
+        `,
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        showConfirmButton: false,
+        didOpen: () => {
+          Swal.showLoading();
+        },
+      });
+
+      const response = await fetch(`${API_IMPRESION_LOCAL}/abrir-caja`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-printer-key': PRINTER_KEY,
+        },
+      });
+
+      let data = {};
+
+      try {
+        data = await response.json();
+      } catch {
+        data = {};
+      }
+
+      if (!response.ok || !data.ok) {
+        throw new Error(
+          data.message ||
+          data.mensaje ||
+          'No se pudo abrir el cajón.'
+        );
+      }
+
+      Swal.fire({
+        icon: 'success',
+        title: 'Cajón abierto',
+        text: 'El cajón fue abierto correctamente.',
+        timer: 1200,
+        showConfirmButton: false,
+      });
+    } catch (error) {
+      console.error('Error al abrir el cajón:', error);
+
+      Swal.fire({
+        icon: 'error',
+        title: 'No se pudo abrir el cajón',
+        text:
+          error.message ||
+          'Verifica que la aplicación local de impresión esté abierta y que el cajón esté conectado.',
+      });
+    } finally {
+      setAbriendoCajon(false);
+    }
   };
 
   const abrirModalAbrir = () => {
@@ -1605,13 +1701,26 @@ export default function Caja() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:flex gap-3 w-full xl:w-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-3 xl:flex gap-3 w-full xl:w-auto">
             <button
               onClick={refrescarTodo}
               className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition"
             >
               <RefreshCw size={19} className={cargando ? 'animate-spin' : ''} />
               Actualizar
+            </button>
+
+            <button
+              type="button"
+              onClick={abrirCajonFisico}
+              disabled={!estadoAbierta || abriendoCajon}
+              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-lg shadow-emerald-900/20 transition disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Printer
+                size={19}
+                className={abriendoCajon ? 'animate-pulse' : ''}
+              />
+              {abriendoCajon ? 'Abriendo...' : 'Abrir cajón'}
             </button>
 
             {!estadoAbierta ? (
