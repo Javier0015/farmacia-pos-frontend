@@ -1231,14 +1231,14 @@ export default function Caja() {
   };
 
   const abrirCajonFisico = async () => {
-    if (!sesionAbierta) {
+    /*if (!sesionAbierta) {
       Swal.fire({
         icon: 'warning',
         title: 'Caja cerrada',
         text: 'Primero debes abrir una sesión de caja.',
       });
       return;
-    }
+    }*/
 
     const confirmacion = await Swal.fire({
       icon: 'question',
@@ -1713,7 +1713,7 @@ export default function Caja() {
             <button
               type="button"
               onClick={abrirCajonFisico}
-              disabled={!estadoAbierta || abriendoCajon}
+              disabled={!idCaja || abriendoCajon}
               className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-lg shadow-emerald-900/20 transition disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Printer
