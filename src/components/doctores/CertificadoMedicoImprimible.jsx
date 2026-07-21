@@ -16,32 +16,85 @@ const TIPOS_CERTIFICADO = {
   },
 };
 
-const formatearFechaLarga = (fecha) => {
-  if (!fecha) return '';
+const ZONA_HORARIA_SISTEMA = 'America/Mexico_City';
 
-  const valor = new Date(`${String(fecha).slice(0, 10)}T00:00:00`);
-
-  if (Number.isNaN(valor.getTime())) return fecha;
-
-  return valor.toLocaleDateString('es-MX', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
-};
-
-const formatearFechaCorta = (fecha) => {
-  if (!fecha) return '';
-
-  const valor = new Date(fecha);
-
-  if (Number.isNaN(valor.getTime())) return fecha;
-
-  return valor.toLocaleDateString('es-MX', {
+const obtenerFechaActualMexico = () => {
+  const partes = new Intl.DateTimeFormat('en-CA', {
+    timeZone: ZONA_HORARIA_SISTEMA,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-  });
+  }).formatToParts(new Date());
+
+  const valores = Object.fromEntries(
+    partes.map(({ type, value }) => [type, value])
+  );
+
+  return `${valores.year}-${valores.month}-${valores.day}`;
+};
+
+const crearFechaSegura = (fecha) => {
+  if (!fecha) return null;
+
+  const texto = String(fecha).trim();
+
+  /*
+   * Las fechas en formato YYYY-MM-DD no deben pasarse directamente
+   * a new Date(), porque JavaScript las interpreta como UTC y en
+   * México pueden mostrarse como el día anterior.
+   */
+  const fechaSimple = /^(\d{4})-(\d{2})-(\d{2})$/.exec(
+    texto.slice(0, 10)
+  );
+
+  if (fechaSimple) {
+    const [, anio, mes, dia] = fechaSimple;
+
+    /*
+     * Se crea al mediodía UTC para evitar que el cambio de zona horaria
+     * mueva la fecha al día anterior o siguiente.
+     */
+    return new Date(
+      Date.UTC(
+        Number(anio),
+        Number(mes) - 1,
+        Number(dia),
+        12,
+        0,
+        0
+      )
+    );
+  }
+
+  const valor = new Date(texto);
+
+  return Number.isNaN(valor.getTime()) ? null : valor;
+};
+
+const formatearFechaLarga = (fecha) => {
+  const valor = crearFechaSegura(fecha);
+
+  if (!valor) return fecha || '';
+
+  return new Intl.DateTimeFormat('es-MX', {
+    timeZone: ZONA_HORARIA_SISTEMA,
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  }).format(valor);
+};
+
+const formatearFechaCorta = (fecha) => {
+  const valor = crearFechaSegura(fecha);
+
+  if (!valor) return fecha || '';
+
+  return new Intl.DateTimeFormat('es-MX', {
+    timeZone: ZONA_HORARIA_SISTEMA,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(valor);
 };
 
 const obtenerUrlArchivo = (ruta) => {
@@ -72,7 +125,12 @@ const primerTexto = (...valores) => {
     : '';
 };
 
-const obtenerNombrePaciente = ({ certificado, expediente, paciente, nombrePaciente }) => {
+const obtenerNombrePaciente = ({
+  certificado,
+  expediente,
+  paciente,
+  nombrePaciente,
+}) => {
   const datosPaciente = certificado?.datos_paciente || {};
 
   return primerTexto(
@@ -159,7 +217,7 @@ export default function CertificadoMedicoImprimible({
   const fechaExpedicion = primerTexto(
     datosBase.fecha_expedicion,
     datosBase.fecha_creacion,
-    new Date().toISOString().slice(0, 10)
+    obtenerFechaActualMexico()
   );
 
   const destinatario = primerTexto(
@@ -364,7 +422,15 @@ export default function CertificadoMedicoImprimible({
               className="cert-logo-farmacia"
             />
 
-           
+            {/*
+            {logoUniversidadFinal && (
+              <img
+                src={logoUniversidadFinal}
+                alt="Universidad"
+                className="cert-logo-universidad"
+              />
+            )}
+            */}
           </div>
 
           <div className="cert-contacto">
@@ -373,9 +439,11 @@ export default function CertificadoMedicoImprimible({
               {datosDoctor.direccion_consultorio ||
                 'Calle Cofre de Perote #804, Colonia San Cayetano el Bordo, Pachuca de Soto Hidalgo.'}
             </p>
+
             <p>
               <b>Teléfono:</b> {datosDoctor.telefono || 'N/A'}
             </p>
+
             <p>
               <b>Correo:</b> {datosDoctor.correo || 'N/A'}
             </p>
@@ -402,8 +470,6 @@ export default function CertificadoMedicoImprimible({
 
         <div className="cert-title">
           CERTIFICA
-         
-         
         </div>
 
         <p className="cert-parrafo">
@@ -447,12 +513,23 @@ export default function CertificadoMedicoImprimible({
 
         <div className="cert-firma">
           <div className="cert-linea" />
-          <strong>{datosDoctor.nombre_completo || 'Doctor Shaddai'}</strong>
-          <span>Cédula profesional: {datosDoctor.cedula_profesional || 'N/A'}</span>
+
+          <strong>
+            {datosDoctor.nombre_completo || 'Doctor Shaddai'}
+          </strong>
+
+          <span>
+            Cédula profesional: {datosDoctor.cedula_profesional || 'N/A'}
+          </span>
         </div>
 
-      {/*  <div className="cert-footer">
-          Documento clínico interno · Expediente #{expediente?.id_expediente || datosPaciente.id_expediente || 'N/A'}
+        {/*
+        <div className="cert-footer">
+          Documento clínico interno · Expediente #
+          {expediente?.id_expediente ||
+            datosPaciente.id_expediente ||
+            'N/A'}
+
           {folioCertificado ? ` · ${folioCertificado}` : ''}
         </div>
         */}

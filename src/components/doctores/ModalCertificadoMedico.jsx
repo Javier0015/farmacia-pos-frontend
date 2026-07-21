@@ -44,23 +44,63 @@ const TIPOS_CERTIFICADO = {
     },
 };
 
-const formatearFechaInput = () => {
-    const hoy = new Date();
-    return hoy.toISOString().slice(0, 10);
-};
+const ZONA_HORARIA_SISTEMA = 'America/Mexico_City';
 
-const formatearFechaCorta = (fecha) => {
-    if (!fecha) return '';
-
-    const valor = new Date(fecha);
-
-    if (Number.isNaN(valor.getTime())) return fecha;
-
-    return valor.toLocaleDateString('es-MX', {
+const formatearFechaInput = (fecha = new Date()) => {
+    const partes = new Intl.DateTimeFormat('en-CA', {
+        timeZone: ZONA_HORARIA_SISTEMA,
         year: 'numeric',
         month: '2-digit',
         day: '2-digit',
-    });
+    }).formatToParts(fecha);
+
+    const valores = Object.fromEntries(
+        partes.map(({ type, value }) => [type, value])
+    );
+
+    return `${valores.year}-${valores.month}-${valores.day}`;
+};
+
+const normalizarFechaParaMexico = (fecha) => {
+    if (!fecha) return null;
+
+    const texto = String(fecha).trim();
+
+    // Fecha proveniente de input type="date": 2026-07-21
+    const fechaSimple = /^(\d{4})-(\d{2})-(\d{2})$/.exec(texto);
+
+    if (fechaSimple) {
+        const [, anio, mes, dia] = fechaSimple;
+
+        // Mediodía UTC evita que México la convierta al día anterior.
+        return new Date(
+            Date.UTC(
+                Number(anio),
+                Number(mes) - 1,
+                Number(dia),
+                12,
+                0,
+                0
+            )
+        );
+    }
+
+    const valor = new Date(texto);
+
+    return Number.isNaN(valor.getTime()) ? null : valor;
+};
+
+const formatearFechaCorta = (fecha) => {
+    const valor = normalizarFechaParaMexico(fecha);
+
+    if (!valor) return '';
+
+    return new Intl.DateTimeFormat('es-MX', {
+        timeZone: ZONA_HORARIA_SISTEMA,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    }).format(valor);
 };
 
 const obtenerUrlArchivo = (ruta) => {

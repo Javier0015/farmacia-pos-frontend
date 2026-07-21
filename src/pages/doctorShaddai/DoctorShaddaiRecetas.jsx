@@ -286,15 +286,36 @@ export default function DoctorShaddaiRecetas() {
   const formatearFecha = (fecha) => {
     if (!fecha) return 'N/A';
 
-    const valor = new Date(fecha);
+    const texto = String(fecha).trim();
+    const fechaSimple = /^(\d{4})-(\d{2})-(\d{2})$/.exec(texto);
+
+    let valor;
+
+    if (fechaSimple) {
+      const [, anio, mes, dia] = fechaSimple;
+
+      valor = new Date(
+        Date.UTC(
+          Number(anio),
+          Number(mes) - 1,
+          Number(dia),
+          12,
+          0,
+          0
+        )
+      );
+    } else {
+      valor = new Date(texto);
+    }
 
     if (Number.isNaN(valor.getTime())) return 'N/A';
 
-    return valor.toLocaleDateString('es-MX', {
+    return new Intl.DateTimeFormat('es-MX', {
+      timeZone: 'America/Mexico_City',
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
-    });
+    }).format(valor);
   };
 
   const obtenerFechaActual = () => {
