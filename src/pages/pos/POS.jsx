@@ -2282,7 +2282,7 @@ export default function POS() {
         <p><b>Pago mixto:</b></p>
         ${pagosParaEnviar.map((pago) => `<p>${pago.metodo_pago}: <b>${formatoMoneda(pago.monto)}</b></p>`).join('')}
         <p><b>Total pagado:</b> ${formatoMoneda(totalPagadoMixto)}</p>
-        <p><b>Cambio:</b> ${formatoMoneda(cambioMixto)}</p>
+        <p style="font-size:30px;color:#92400e><b>Cambio:</b> ${formatoMoneda(cambioMixto)}</p>
       `
       : `
         <p><b>Método:</b> ${metodoPago === 'PUNTOS' ? 'Pagar con puntos' : metodoPago}</p>
@@ -2428,7 +2428,7 @@ export default function POS() {
               ${pagoMixtoActivo
               ? `<p><b>Pagado:</b> ${formatoMoneda(totalPagadoMixto)}</p><p><b>Cambio:</b> ${formatoMoneda(cambioMixto)}</p>`
               : metodoPago !== 'PUNTOS'
-                ? `<p><b>Cambio:</b> ${formatoMoneda(data.resumen?.cambio || 0)}</p>`
+                ? `<p style="font-size:30px;"><b>Cambio:</b> ${formatoMoneda(data.resumen?.cambio || 0)}</p>`
                 : ''
             }
               ${detalleTicketDigitalResultadoHtml}
@@ -3946,7 +3946,7 @@ function CarritoPOS({
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-lg font-black text-slate-900 outline-none focus:bg-white focus:ring-2 focus:ring-sky-500"
                   placeholder="0.00"
                 />
-                <div className={`mt-3 rounded-2xl px-4 py-3 text-sm font-black ${resumen.cambio >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                <div className={`mt-3 rounded-2xl px-4 py-3 text-2xl font-black ${resumen.cambio >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
                   Cambio: {formatoMoneda(resumen.cambio)}
                 </div>
               </div>
