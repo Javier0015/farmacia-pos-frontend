@@ -294,18 +294,30 @@ const normalizarBooleano = (valor, valorDefault = true) => {
   return Boolean(valor);
 };
 
-const normalizarLineas = (valor, limite = 8) => {
+const normalizarLineas = (
+  valor,
+  limite = null,
+  maxCaracteresPorLinea = 500
+) => {
   const lineas = Array.isArray(valor)
     ? valor
     : String(valor ?? '').replace(/\r\n/g, '\n').split('\n');
 
   /*
-   * Se conservan los renglones vacíos para que el usuario pueda separar
-   * visualmente el encabezado o el mensaje final.
+   * El encabezado puede quedar sin límite de renglones. Cuando se recibe un
+   * límite numérico (por ejemplo, para el pie), se aplica únicamente a ese
+   * bloque. Se conservan los renglones vacíos para permitir separaciones.
    */
-  return lineas
-    .slice(0, limite)
-    .map((linea) => String(linea ?? '').replace(/\r/g, '').slice(0, 100));
+  const lineasLimitadas =
+    Number.isInteger(limite) && limite > 0
+      ? lineas.slice(0, limite)
+      : lineas;
+
+  return lineasLimitadas.map((linea) =>
+    String(linea ?? '')
+      .replace(/\r/g, '')
+      .slice(0, maxCaracteresPorLinea)
+  );
 };
 
 const normalizarConfiguracion = (configuracion = {}) => {
@@ -336,8 +348,8 @@ const normalizarConfiguracion = (configuracion = {}) => {
         .trim()
         .slice(0, 100) || CONFIGURACION_DEFAULT.nombre_negocio,
 
-    encabezado: normalizarLineas(combinada.encabezado, 6),
-    pie_ticket: normalizarLineas(combinada.pie_ticket, 8),
+    encabezado: normalizarLineas(combinada.encabezado),
+    pie_ticket: normalizarLineas(combinada.pie_ticket, 20),
 
     rfc: String(combinada.rfc || '').trim().slice(0, 30),
     direccion: String(combinada.direccion || '').trim().slice(0, 200),
@@ -532,24 +544,106 @@ const fila = (izquierda = '', derecha = '', ancho = 30) => {
   return `${izq}${' '.repeat(espacios)}${der}`.slice(0, ancho);
 };
 
+const longitudTexto = (valor = '') =>
+  Array.from(String(valor || '')).length;
+
+const cortarTexto = (valor = '', inicio = 0, fin = undefined) =>
+  Array.from(String(valor || '')).slice(inicio, fin).join('');
+
+const dividirTokenLargo = (token = '', largo = 30) => {
+  const texto = String(token || '');
+
+  if (!texto) return [''];
+
+  if (longitudTexto(texto) <= largo) {
+    return [texto];
+  }
+
+  /*
+   * Los correos se dividen preferentemente después de @. De esta manera:
+   * atencionaclientes@
+   * farmaciasshaddaipach.com.mx
+   *
+   * En 80 mm normalmente cabrán completos y no se dividirán.
+   */
+  const posicionArroba = texto.indexOf('@');
+
+  if (posicionArroba > 0) {
+    const usuario = texto.slice(0, posicionArroba + 1);
+    const dominio = texto.slice(posicionArroba + 1);
+
+    if (
+      longitudTexto(usuario) <= largo &&
+      longitudTexto(dominio) <= largo
+    ) {
+      return [usuario, dominio];
+    }
+  }
+
+  const partes = [];
+  let restante = texto;
+
+  while (longitudTexto(restante) > largo) {
+    const ventana = cortarTexto(restante, 0, largo);
+    let puntoCorte = -1;
+
+    /*
+     * Busca un delimitador cercano al final para evitar cortes poco legibles
+     * en dominios, URLs, códigos o textos con guiones.
+     */
+    for (let indice = ventana.length - 1; indice >= 0; indice -= 1) {
+      if (['/', '.', '-', '_', '@'].includes(ventana[indice])) {
+        puntoCorte = indice + 1;
+        break;
+      }
+    }
+
+    if (puntoCorte < Math.floor(largo * 0.45)) {
+      puntoCorte = largo;
+    }
+
+    partes.push(cortarTexto(restante, 0, puntoCorte));
+    restante = cortarTexto(restante, puntoCorte);
+  }
+
+  if (restante) partes.push(restante);
+
+  return partes;
+};
+
 const partirTexto = (texto = '', largo = 16) => {
   const limpio = limpiarTexto(texto);
 
   if (!limpio) return [''];
 
-  const palabras = limpio.split(' ');
+  /*
+   * Una línea formada solamente por separadores se ajusta al ancho físico
+   * del ticket, en vez de imprimirse en dos renglones o quedar truncada.
+   */
+  if (/^([-=_*])\1{2,}$/.test(limpio)) {
+    return [limpio[0].repeat(largo)];
+  }
+
+  const tokens = limpio
+    .split(' ')
+    .flatMap((token) => dividirTokenLargo(token, largo));
+
   const lineas = [];
   let actual = '';
 
-  for (const palabra of palabras) {
-    const palabraLimpia = palabra.slice(0, largo);
+  for (const token of tokens) {
+    const candidato = actual ? `${actual} ${token}` : token;
 
-    if (`${actual} ${palabraLimpia}`.trim().length <= largo) {
-      actual = `${actual} ${palabraLimpia}`.trim();
-    } else {
-      if (actual) lineas.push(actual);
-      actual = palabraLimpia;
+    if (longitudTexto(candidato) <= largo) {
+      actual = candidato;
+      continue;
     }
+
+    if (actual) {
+      lineas.push(actual);
+    }
+
+    actual = token;
   }
 
   if (actual) lineas.push(actual);
@@ -573,8 +667,57 @@ const obtenerColumnasArticulo = (ancho) => {
   };
 };
 
-const generarVistaPrevia = (configuracion) => {
-  const formatoTicket = obtenerFormatoTicket(configuracion?.formato_ticket);
+
+const normalizarTextoComparacion = (valor = '') =>
+  limpiarTexto(valor)
+    .toUpperCase()
+    .replace(/[.,;:()[\]{}#]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const contieneMismaInformacion = (linea = '', valor = '') => {
+  const lineaNormalizada = normalizarTextoComparacion(linea);
+  const valorNormalizado = normalizarTextoComparacion(valor);
+
+  if (!lineaNormalizada || !valorNormalizado) return false;
+
+  if (lineaNormalizada === valorNormalizado) return true;
+
+  /*
+   * La comparación parcial solo se aplica a textos suficientemente largos
+   * para evitar ocultar encabezados cortos por coincidencias accidentales.
+   */
+  return (
+    lineaNormalizada.length >= 12 &&
+    valorNormalizado.length >= 12 &&
+    (
+      lineaNormalizada.includes(valorNormalizado) ||
+      valorNormalizado.includes(lineaNormalizada)
+    )
+  );
+};
+
+const pareceLineaDireccion = (linea = '') => {
+  const texto = normalizarTextoComparacion(linea);
+
+  if (!texto) return false;
+
+  return /\b(CALLE|AVENIDA|AV|BLVD|BOULEVARD|CARRETERA|CTO|CIRCUITO|CAMINO|COLONIA|COL|FRACCIONAMIENTO|FRACC|CODIGO POSTAL|CP|C P|NUMERO|NO|N)\b/.test(
+    texto
+  );
+};
+
+const generarVistaPrevia = (
+  configuracionEntrada,
+  nombreSucursal = ''
+) => {
+  /*
+   * Normalizamos en cada render para que valores como "false", "0" o false
+   * produzcan exactamente el mismo resultado en la vista previa.
+   */
+  const configuracion = normalizarConfiguracion(configuracionEntrada);
+
+  const formatoTicket = obtenerFormatoTicket(configuracion.formato_ticket);
   const ancho = formatoTicket.columnas;
   const columnasArticulo = obtenerColumnasArticulo(ancho);
   const lineas = [];
@@ -609,28 +752,121 @@ const generarVistaPrevia = (configuracion) => {
     });
   };
 
-  if (configuracion.mostrar_nombre_negocio) {
+  if (
+    configuracion.mostrar_nombre_negocio &&
+    configuracion.nombre_negocio
+  ) {
     agregarCentrado(configuracion.nombre_negocio);
   }
 
+  /*
+   * La vista previa ahora respeta también el interruptor "Sucursal".
+   * En configuración global se usa un texto de ejemplo.
+   */
+  if (configuracion.mostrar_sucursal) {
+    agregarCentrado(
+      nombreSucursal || 'SUCURSAL DE EJEMPLO'
+    );
+  }
 
+  /*
+   * Las líneas adicionales se mantienen, pero se eliminan duplicados de
+   * nombre, sucursal, RFC, dirección y teléfono. Además, cuando Dirección
+   * está desactivada, no se deja visible una dirección escrita dentro del
+   * encabezado adicional.
+   */
+  const encabezadoVisible = (configuracion.encabezado || []).filter(
+    (linea) => {
+      if (!String(linea || '').trim()) return true;
 
-  configuracion.encabezado.forEach(agregarCentrado);
+      if (
+        contieneMismaInformacion(
+          linea,
+          configuracion.nombre_negocio
+        )
+      ) {
+        return false;
+      }
+
+      if (
+        nombreSucursal &&
+        contieneMismaInformacion(linea, nombreSucursal)
+      ) {
+        return false;
+      }
+
+      if (
+        configuracion.rfc &&
+        (
+          contieneMismaInformacion(linea, configuracion.rfc) ||
+          contieneMismaInformacion(
+            linea,
+            `RFC: ${configuracion.rfc}`
+          )
+        )
+      ) {
+        return false;
+      }
+
+      if (
+        configuracion.direccion &&
+        contieneMismaInformacion(
+          linea,
+          configuracion.direccion
+        )
+      ) {
+        return false;
+      }
+
+      if (
+        configuracion.telefono &&
+        (
+          contieneMismaInformacion(
+            linea,
+            configuracion.telefono
+          ) ||
+          contieneMismaInformacion(
+            linea,
+            `TEL. ${configuracion.telefono}`
+          )
+        )
+      ) {
+        return false;
+      }
+
+      if (
+        !configuracion.mostrar_direccion &&
+        pareceLineaDireccion(linea)
+      ) {
+        return false;
+      }
+
+      return true;
+    }
+  );
+
+  encabezadoVisible.forEach(agregarCentrado);
 
   if (configuracion.mostrar_rfc && configuracion.rfc) {
     agregarCentrado(`RFC: ${configuracion.rfc}`);
   }
 
-  if (configuracion.mostrar_direccion) {
-    agregarCentrado(
-      configuracion.direccion || 'AV. PRINCIPAL 123, CENTRO'
-    );
+  /*
+   * Ya no se muestra una dirección ficticia. Si el interruptor está apagado,
+   * esta sección desaparece inmediatamente de la vista previa.
+   */
+  if (
+    configuracion.mostrar_direccion &&
+    configuracion.direccion
+  ) {
+    agregarCentrado(configuracion.direccion);
   }
 
-  if (configuracion.mostrar_telefono) {
-    agregarCentrado(
-      `TEL. ${configuracion.telefono || '771 000 0000'}`
-    );
+  if (
+    configuracion.mostrar_telefono &&
+    configuracion.telefono
+  ) {
+    agregarCentrado(`TEL. ${configuracion.telefono}`);
   }
 
   if (lineas.length > 0) lineas.push('');
@@ -701,7 +937,9 @@ const generarVistaPrevia = (configuracion) => {
       });
 
       if (configuracion.mostrar_lote) {
-        lineas.push(`${sangria}Lote: ${producto.lote}`.slice(0, ancho));
+        lineas.push(
+          `${sangria}Lote: ${producto.lote}`.slice(0, ancho)
+        );
       }
 
       if (configuracion.mostrar_caducidad) {
@@ -758,16 +996,20 @@ const generarVistaPrevia = (configuracion) => {
 
   if (configuracion.pie_ticket.length > 0) {
     lineas.push('');
-
     configuracion.pie_ticket.forEach(agregarCentrado);
   }
 
-  for (let i = 0; i < configuracion.lineas_finales; i += 1) {
+  for (
+    let i = 0;
+    i < configuracion.lineas_finales;
+    i += 1
+  ) {
     lineas.push('');
   }
 
   return lineas.join('\n');
 };
+
 
 function Interruptor({ activo, onChange, titulo, descripcion, disabled = false }) {
   return (
@@ -837,7 +1079,7 @@ function SeccionOpciones({
           return (
             <Interruptor
               key={opcion.campo}
-              activo={Boolean(formulario[opcion.campo])}
+              activo={normalizarBooleano(formulario[opcion.campo], false)}
               titulo={opcion.titulo}
               descripcion={opcion.descripcion}
               disabled={deshabilitado}
@@ -910,8 +1152,11 @@ export default function ConfiguracionTicket() {
   const hayCambios = hayCambiosTicket || hayCambiosCorreo;
 
   const ticketVistaPrevia = useMemo(() => {
-    return generarVistaPrevia(formulario);
-  }, [formulario]);
+    return generarVistaPrevia(
+      formulario,
+      sucursalSeleccionada?.nombre || ''
+    );
+  }, [formulario, sucursalSeleccionada?.nombre]);
 
   const cargarSucursales = useCallback(async () => {
     try {
@@ -1045,7 +1290,7 @@ export default function ConfiguracionTicket() {
   const alternarCampo = (campo) => {
     setFormulario((anterior) => ({
       ...anterior,
-      [campo]: !anterior[campo],
+      [campo]: !normalizarBooleano(anterior[campo], false),
     }));
   };
 
@@ -1671,12 +1916,17 @@ export default function ConfiguracionTicket() {
                   onChange={(event) =>
                     actualizarCampo(
                       'encabezado',
-                      normalizarLineas(event.target.value, 6)
+                      normalizarLineas(event.target.value)
                     )
                   }
                   className="w-full resize-y rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100"
                   placeholder={'SUCURSAL CENTRO\nVENTA AL PUBLICO EN GENERAL'}
                 />
+
+                <p className="mt-1.5 text-xs text-slate-500">
+                  Sin límite de renglones. Los textos largos se ajustan
+                  automáticamente al ancho seleccionado del ticket.
+                </p>
               </label>
 
               <label>
@@ -1690,7 +1940,7 @@ export default function ConfiguracionTicket() {
                   onChange={(event) =>
                     actualizarCampo(
                       'pie_ticket',
-                      normalizarLineas(event.target.value, 8)
+                      normalizarLineas(event.target.value, 20)
                     )
                   }
                   className="w-full resize-y rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100"

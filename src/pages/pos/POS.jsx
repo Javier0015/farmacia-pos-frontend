@@ -2501,11 +2501,394 @@ export default function POS() {
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#039;');
 
+
+  const obtenerAnchoTicketLocal = (configuracion = {}) => {
+    const formato = String(
+      configuracion?.formato_ticket || '58mm_30'
+    ).toLowerCase();
+
+    return formato.includes('80') || formato.includes('48')
+      ? 48
+      : 30;
+  };
+
+  const longitudTextoTicketLocal = (valor = '') =>
+    Array.from(String(valor || '')).length;
+
+  const cortarTextoTicketLocal = (
+    valor = '',
+    inicio = 0,
+    fin = undefined
+  ) =>
+    Array.from(String(valor || '')).slice(inicio, fin).join('');
+
+  const dividirTokenLargoTicketLocal = (
+    token = '',
+    ancho = 30
+  ) => {
+    const texto = String(token || '');
+
+    if (!texto) return [''];
+
+    if (longitudTextoTicketLocal(texto) <= ancho) {
+      return [texto];
+    }
+
+    /*
+     * Los correos se dividen preferentemente después de @ para mantenerlos
+     * legibles y conservar todos sus caracteres en tickets de 58 mm.
+     */
+    const posicionArroba = texto.indexOf('@');
+
+    if (posicionArroba > 0) {
+      const usuario = texto.slice(0, posicionArroba + 1);
+      const dominio = texto.slice(posicionArroba + 1);
+
+      if (
+        longitudTextoTicketLocal(usuario) <= ancho &&
+        longitudTextoTicketLocal(dominio) <= ancho
+      ) {
+        return [usuario, dominio];
+      }
+    }
+
+    const partes = [];
+    let restante = texto;
+
+    while (longitudTextoTicketLocal(restante) > ancho) {
+      const ventana = cortarTextoTicketLocal(
+        restante,
+        0,
+        ancho
+      );
+
+      let puntoCorte = -1;
+
+      for (
+        let indice = ventana.length - 1;
+        indice >= 0;
+        indice -= 1
+      ) {
+        if (
+          ['/', '.', '-', '_', '@'].includes(ventana[indice])
+        ) {
+          puntoCorte = indice + 1;
+          break;
+        }
+      }
+
+      if (puntoCorte < Math.floor(ancho * 0.45)) {
+        puntoCorte = ancho;
+      }
+
+      partes.push(
+        cortarTextoTicketLocal(restante, 0, puntoCorte)
+      );
+
+      restante = cortarTextoTicketLocal(
+        restante,
+        puntoCorte
+      );
+    }
+
+    if (restante) partes.push(restante);
+
+    return partes;
+  };
+
+  const envolverLineaTicketLocal = (
+    linea = '',
+    ancho = 30
+  ) => {
+    const texto = String(linea ?? '')
+      .replace(/\r/g, '')
+      .trim();
+
+    if (!texto) return [''];
+
+    /*
+     * Los separadores se ajustan a una sola línea del ancho físico.
+     */
+    if (/^([-=_*])\1{2,}$/.test(texto)) {
+      return [texto[0].repeat(ancho)];
+    }
+
+    const tokens = texto
+      .split(/\s+/)
+      .flatMap((token) =>
+        dividirTokenLargoTicketLocal(token, ancho)
+      );
+
+    const lineas = [];
+    let actual = '';
+
+    for (const token of tokens) {
+      const candidato = actual
+        ? `${actual} ${token}`
+        : token;
+
+      if (
+        longitudTextoTicketLocal(candidato) <= ancho
+      ) {
+        actual = candidato;
+        continue;
+      }
+
+      if (actual) lineas.push(actual);
+      actual = token;
+    }
+
+    if (actual) lineas.push(actual);
+
+    return lineas.length ? lineas : [''];
+  };
+
+  const prepararLineasConfiguracionTicketLocal = (
+    valor,
+    ancho = 30
+  ) => {
+    const lineas = Array.isArray(valor)
+      ? valor
+      : String(valor ?? '')
+          .replace(/\r\n/g, '\n')
+          .split('\n');
+
+    return lineas.flatMap((linea) =>
+      envolverLineaTicketLocal(linea, ancho)
+    );
+  };
+
+
+  /*
+   * Ajusta únicamente el texto mostrado por el POS en modo prueba.
+   * Esto permite reflejar el RFC y su interruptor aunque una versión antigua
+   * de la API local no los agregue a /vista-previa-ticket.
+   *
+   * La impresión física no se modifica: continúa usando la respuesta normal
+   * de /imprimir-ticket.
+   */
+  const ajustarRfcVistaPreviaLocal = ({
+    ticket = '',
+    rfc = '',
+    mostrarRfc = true,
+    configuracion = {},
+  }) => {
+    const contenidoOriginal = String(ticket || '');
+    const rfcLimpio = String(rfc || '').trim();
+
+    if (!contenidoOriginal.trim()) return contenidoOriginal;
+
+    const saltoLinea = contenidoOriginal.includes('\r\n') ? '\r\n' : '\n';
+    let lineas = contenidoOriginal.replace(/\r\n/g, '\n').split('\n');
+
+    const normalizarComparacion = (valor = '') =>
+      String(valor || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^\p{L}\p{N}]/gu, '')
+        .toUpperCase();
+
+    const rfcNormalizado = normalizarComparacion(rfcLimpio);
+
+    const esLineaRfc = (linea = '') => {
+      const texto = String(linea || '').trim();
+
+      if (/^RFC\s*:/i.test(texto)) return true;
+
+      if (!rfcNormalizado) return false;
+
+      return normalizarComparacion(texto).includes(rfcNormalizado);
+    };
+
+    /*
+     * Cuando el interruptor está apagado, quitamos cualquier RFC que pudiera
+     * haber agregado la API local.
+     */
+    if (!mostrarRfc || !rfcLimpio) {
+      return lineas
+        .filter((linea) => !esLineaRfc(linea))
+        .join(saltoLinea);
+    }
+
+    /*
+     * Evita duplicarlo si una versión futura de la API ya empieza a enviarlo.
+     */
+    if (lineas.some((linea) => esLineaRfc(linea))) {
+      return contenidoOriginal;
+    }
+
+    const formato = String(
+      configuracion?.formato_ticket || '58mm_30'
+    ).toLowerCase();
+
+    const ancho = formato.includes('80') || formato.includes('48')
+      ? 48
+      : 30;
+
+    const centrarLinea = (valor = '') => {
+      const texto = String(valor || '').trim().slice(0, ancho);
+      const espacios = Math.max(
+        Math.floor((ancho - texto.length) / 2),
+        0
+      );
+
+      return `${' '.repeat(espacios)}${texto}`;
+    };
+
+    const direccionConfigurada = String(
+      configuracion?.direccion || ''
+    ).trim();
+
+    const telefonoConfigurado = String(
+      configuracion?.telefono || ''
+    ).trim();
+
+    const obtenerPrefijoComparable = (valor = '') => {
+      const palabras = String(valor || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toUpperCase()
+        .split(' ')
+        .filter(Boolean)
+        .slice(0, 3);
+
+      return palabras.join('');
+    };
+
+    const prefijoDireccion = obtenerPrefijoComparable(
+      direccionConfigurada
+    );
+
+    const telefonoNormalizado = normalizarComparacion(
+      telefonoConfigurado
+    );
+
+    /*
+     * Orden esperado:
+     * nombre -> encabezado adicional -> RFC -> dirección -> teléfono.
+     *
+     * Primero intentamos insertar justo antes de la dirección configurada.
+     */
+    let indiceInsercion = -1;
+
+    if (prefijoDireccion) {
+      indiceInsercion = lineas.findIndex((linea) => {
+        const normalizada = normalizarComparacion(linea);
+        return normalizada.includes(prefijoDireccion);
+      });
+    }
+
+    /*
+     * Si no se localiza la dirección, se coloca antes del teléfono.
+     */
+    if (indiceInsercion < 0 && telefonoNormalizado) {
+      indiceInsercion = lineas.findIndex((linea) => {
+        const normalizada = normalizarComparacion(linea);
+
+        return (
+          normalizada.includes(telefonoNormalizado) ||
+          /^\s*TEL(?:EFONO)?[\s.:]/i.test(String(linea || ''))
+        );
+      });
+    }
+
+    /*
+     * Como último respaldo, se inserta antes del primer bloque de fecha.
+     */
+    if (indiceInsercion < 0) {
+      indiceInsercion = lineas.findIndex((linea, indice) => {
+        if (indice <= 0) return false;
+
+        return /^\s*\d{1,2}[/-]\d{1,2}[/-]\d{2,4}/.test(
+          String(linea || '')
+        );
+      });
+    }
+
+    /*
+     * Si tampoco hay fecha, se agrega al final del encabezado, antes del
+     * primer renglón vacío disponible.
+     */
+    if (indiceInsercion < 0) {
+      indiceInsercion = lineas.findIndex(
+        (linea, indice) => indice > 0 && !String(linea || '').trim()
+      );
+    }
+
+    if (indiceInsercion < 0) {
+      indiceInsercion = lineas.length;
+    }
+
+    lineas.splice(
+      indiceInsercion,
+      0,
+      centrarLinea(`RFC: ${rfcLimpio}`)
+    );
+
+    return lineas.join(saltoLinea);
+  };
+
   /*
    * Obtiene la configuración activa para la sucursal que realizó la venta.
    * Si la sucursal no tiene configuración propia, el backend devuelve la global.
    * Si ocurre un error, el ticket sigue usando la configuración local de respaldo
    * definida en el driver de impresión.
+   */
+  /*
+   * Convierte las distintas estructuras posibles de /configuracion-ticket
+   * en el objeto final utilizado por la API local de impresión.
+   */
+  const normalizarConfiguracionTicket = (valor) => {
+    if (!valor) return null;
+
+    let configuracion = valor;
+
+    if (typeof configuracion === 'string') {
+      try {
+        configuracion = JSON.parse(configuracion);
+      } catch (error) {
+        console.warn(
+          'La configuración del ticket no contiene un JSON válido:',
+          error
+        );
+        return null;
+      }
+    }
+
+    if (
+      !configuracion ||
+      typeof configuracion !== 'object' ||
+      Array.isArray(configuracion)
+    ) {
+      return null;
+    }
+
+    /*
+     * Algunas respuestas llegan como:
+     * { configuracion: { configuracion: {...} } }
+     * y otras directamente como:
+     * { configuracion: {...} }
+     */
+    if (
+      Object.prototype.hasOwnProperty.call(configuracion, 'configuracion') &&
+      configuracion.configuracion !== configuracion
+    ) {
+      const configuracionInterna = normalizarConfiguracionTicket(
+        configuracion.configuracion
+      );
+
+      if (configuracionInterna) return configuracionInterna;
+    }
+
+    return configuracion;
+  };
+
+  /*
+   * Obtiene la configuración guardada en la pantalla Configuración del ticket.
+   * Esa configuración tiene prioridad sobre los datos generales de sucursales.
    */
   const obtenerConfiguracionTicketParaImpresion = async (datosTicket = {}) => {
     const idSucursalVenta = Number(
@@ -2515,11 +2898,16 @@ export default function POS() {
       0
     );
 
+    const configuracionIncluidaEnVenta = normalizarConfiguracionTicket(
+      datosTicket?.configuracion_ticket
+    );
+
     try {
       const { data } = await api.get('/configuracion-ticket', {
-        params: idSucursalVenta > 0
-          ? { id_sucursal: idSucursalVenta }
-          : {},
+        params:
+          idSucursalVenta > 0
+            ? { id_sucursal: idSucursalVenta }
+            : {},
       });
 
       if (!data?.ok) {
@@ -2528,14 +2916,18 @@ export default function POS() {
         );
       }
 
-      return data?.configuracion?.configuracion || null;
+      const configuracionConsultada = normalizarConfiguracionTicket(
+        data?.configuracion
+      );
+
+      return configuracionConsultada || configuracionIncluidaEnVenta || null;
     } catch (error) {
       console.warn(
-        'No se pudo cargar la configuración del ticket. Se usará la configuración local de respaldo:',
+        'No se pudo consultar /configuracion-ticket. Se usará la configuración incluida en la venta:',
         error
       );
 
-      return null;
+      return configuracionIncluidaEnVenta || null;
     }
   };
 
@@ -2584,62 +2976,162 @@ export default function POS() {
       const configuracionTicket =
         await obtenerConfiguracionTicketParaImpresion(datosTicket);
 
+      const ventaTicket = datosTicket?.venta || {};
+
       const idSucursalVenta = Number(
-        datosTicket?.venta?.id_sucursal ||
-        datosTicket?.venta?.idSucursal ||
+        ventaTicket?.id_sucursal ||
+        ventaTicket?.idSucursal ||
         idSucursal ||
         0
       );
 
-      const nombreSucursalTicket =
+      /*
+       * El nombre de la sucursal se conserva desde la venta. Si la propia
+       * configuración define uno, ese valor tiene prioridad.
+       */
+      const nombreSucursalTicket = String(
+        configuracionTicket?.nombre_sucursal ||
+        configuracionTicket?.sucursal ||
+        ventaTicket?.nombre_sucursal ||
+        ventaTicket?.sucursal ||
         sucursalActual?.nombre ||
         sucursalActual?.nombre_sucursal ||
         sucursalActual?.razon_social ||
         sucursalActual?.sucursal ||
-        '';
+        ''
+      ).trim();
 
-      const direccionSucursalTicket =
+      /*
+       * La dirección y el teléfono guardados en Configuración del ticket
+       * tienen prioridad. Los datos de la tabla sucursales son solo respaldo.
+       */
+      const direccionTicket = String(
+        configuracionTicket?.direccion ||
+        configuracionTicket?.direccion_sucursal ||
+        ventaTicket?.direccion_sucursal ||
         sucursalActual?.direccion ||
         sucursalActual?.domicilio ||
-        '';
+        ''
+      ).trim();
 
-      const telefonoSucursalTicket =
+      const telefonoTicket = String(
+        configuracionTicket?.telefono ||
+        configuracionTicket?.telefono_sucursal ||
+        ventaTicket?.telefono_sucursal ||
         sucursalActual?.telefono ||
         sucursalActual?.telefono_contacto ||
-        '';
+        ''
+      ).trim();
+
+      /*
+       * RFC:
+       * La impresión física ya lo lee desde configuracion_ticket, pero algunas
+       * versiones de /vista-previa-ticket lo buscan dentro de venta o incluso
+       * en la raíz del payload. Se envía en las tres ubicaciones para mantener
+       * compatibilidad sin modificar la API local.
+       */
+      const rfcTicket = String(
+        configuracionTicket?.rfc ||
+        configuracionTicket?.rfc_sucursal ||
+        ventaTicket?.rfc ||
+        ventaTicket?.rfc_sucursal ||
+        sucursalActual?.rfc ||
+        sucursalActual?.rfc_sucursal ||
+        ''
+      ).trim();
+
+      const mostrarRfcTicket = (() => {
+        const valor = configuracionTicket?.mostrar_rfc;
+
+        if (valor === undefined || valor === null) return true;
+        if (typeof valor === 'boolean') return valor;
+
+        const texto = String(valor).trim().toLowerCase();
+
+        if (['false', '0', 'no', 'n'].includes(texto)) return false;
+        if (['true', '1', 'si', 'sí', 's'].includes(texto)) return true;
+
+        return Boolean(valor);
+      })();
+
+      const anchoTicketLocal = obtenerAnchoTicketLocal(
+        configuracionTicket || {}
+      );
+
+      /*
+       * Se preparan las líneas antes de enviarlas. Así una API local antigua
+       * que recorta palabras largas recibe el correo ya dividido y no pierde
+       * caracteres en la vista previa ni en la impresión física.
+       */
+      const encabezadoTicketPreparado =
+        prepararLineasConfiguracionTicketLocal(
+          configuracionTicket?.encabezado || [],
+          anchoTicketLocal
+        );
+
+      const pieTicketPreparado =
+        prepararLineasConfiguracionTicketLocal(
+          configuracionTicket?.pie_ticket || [],
+          anchoTicketLocal
+        );
+
+      /*
+       * Conservamos encabezado, pie_ticket, formato_ticket y todos los campos
+       * mostrar_*. RFC, dirección y teléfono se normalizan antes de enviarse.
+       */
+      const configuracionTicketFinal = configuracionTicket
+        ? {
+          ...configuracionTicket,
+          encabezado: encabezadoTicketPreparado,
+          pie_ticket: pieTicketPreparado,
+          rfc: rfcTicket,
+          mostrar_rfc: mostrarRfcTicket,
+          direccion: direccionTicket,
+          telefono: telefonoTicket,
+        }
+        : {
+          encabezado: encabezadoTicketPreparado,
+          pie_ticket: pieTicketPreparado,
+          rfc: rfcTicket,
+          mostrar_rfc: mostrarRfcTicket,
+          direccion: direccionTicket,
+          telefono: telefonoTicket,
+        };
 
       const datosParaImprimir = {
         ...datosTicket,
 
+        /*
+         * Compatibilidad con versiones de la vista previa local que buscan
+         * estos valores directamente en la raíz del JSON.
+         */
+        rfc: rfcTicket,
+        rfc_sucursal: rfcTicket,
+        mostrar_rfc: mostrarRfcTicket,
+
         venta: {
-          ...datosTicket.venta,
+          ...ventaTicket,
 
           ...(idSucursalVenta > 0
             ? { id_sucursal: idSucursalVenta }
             : {}),
 
-          sucursal:
-            datosTicket?.venta?.sucursal ||
-            datosTicket?.venta?.nombre_sucursal ||
-            nombreSucursalTicket,
+          /*
+           * Algunas versiones de la API local leen estos campos desde venta
+           * en lugar de configuracion_ticket. Por eso se envían aquí también
+           * con los valores provenientes de la configuración del ticket.
+           */
+          sucursal: nombreSucursalTicket,
+          nombre_sucursal: nombreSucursalTicket,
+          direccion_sucursal: direccionTicket,
+          telefono_sucursal: telefonoTicket,
 
-          nombre_sucursal:
-            datosTicket?.venta?.nombre_sucursal ||
-            datosTicket?.venta?.sucursal ||
-            nombreSucursalTicket,
-
-          direccion_sucursal:
-            datosTicket?.venta?.direccion_sucursal ||
-            direccionSucursalTicket,
-
-          telefono_sucursal:
-            datosTicket?.venta?.telefono_sucursal ||
-            telefonoSucursalTicket,
+          rfc: rfcTicket,
+          rfc_sucursal: rfcTicket,
+          mostrar_rfc: mostrarRfcTicket,
         },
 
-        ...(configuracionTicket
-          ? { configuracion_ticket: configuracionTicket }
-          : {}),
+        configuracion_ticket: configuracionTicketFinal,
       };
 
       const endpoint = MODO_PRUEBA_TICKET
@@ -2686,7 +3178,14 @@ export default function POS() {
       }
 
       if (MODO_PRUEBA_TICKET) {
-        const ticketGenerado = data.ticket || '';
+        const ticketGeneradoOriginal = data.ticket || '';
+
+        const ticketGenerado = ajustarRfcVistaPreviaLocal({
+          ticket: ticketGeneradoOriginal,
+          rfc: rfcTicket,
+          mostrarRfc: mostrarRfcTicket,
+          configuracion: configuracionTicketFinal,
+        });
 
         if (!ticketGenerado.trim()) {
           throw new Error(
