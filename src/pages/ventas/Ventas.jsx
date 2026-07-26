@@ -38,6 +38,332 @@ const API_IMPRESION_LOCAL = CONFIGURACION_IMPRESION_LOCAL.url;
 const PRINTER_KEY = CONFIGURACION_IMPRESION_LOCAL.apiKey;
 const MODO_PRUEBA_TICKET = CONFIGURACION_IMPRESION_LOCAL.modoPrueba;
 
+const normalizarBooleanoTicket = (valor, valorDefault = true) => {
+  if (valor === undefined || valor === null) return valorDefault;
+  if (typeof valor === 'boolean') return valor;
+
+  const texto = String(valor).trim().toLowerCase();
+
+  if (['false', '0', 'no', 'n'].includes(texto)) return false;
+  if (['true', '1', 'si', 'sí', 's'].includes(texto)) return true;
+
+  return Boolean(valor);
+};
+
+const obtenerAnchoTicketLocal = (configuracion = {}) => {
+  const formato = String(
+    configuracion?.formato_ticket || '58mm_30'
+  ).toLowerCase();
+
+  return formato.includes('80') || formato.includes('48')
+    ? 48
+    : 30;
+};
+
+const longitudTextoTicketLocal = (valor = '') =>
+  Array.from(String(valor || '')).length;
+
+const cortarTextoTicketLocal = (
+  valor = '',
+  inicio = 0,
+  fin = undefined
+) =>
+  Array.from(String(valor || '')).slice(inicio, fin).join('');
+
+const dividirTokenLargoTicketLocal = (
+  token = '',
+  ancho = 30
+) => {
+  const texto = String(token || '');
+
+  if (!texto) return [''];
+
+  if (longitudTextoTicketLocal(texto) <= ancho) {
+    return [texto];
+  }
+
+  /*
+   * Para correos largos se intenta dividir después de @, conservando todos
+   * los caracteres y evitando que la API local los recorte.
+   */
+  const posicionArroba = texto.indexOf('@');
+
+  if (posicionArroba > 0) {
+    const usuarioCorreo = texto.slice(0, posicionArroba + 1);
+    const dominioCorreo = texto.slice(posicionArroba + 1);
+
+    if (
+      longitudTextoTicketLocal(usuarioCorreo) <= ancho &&
+      longitudTextoTicketLocal(dominioCorreo) <= ancho
+    ) {
+      return [usuarioCorreo, dominioCorreo];
+    }
+  }
+
+  const partes = [];
+  let restante = texto;
+
+  while (longitudTextoTicketLocal(restante) > ancho) {
+    const ventana = cortarTextoTicketLocal(
+      restante,
+      0,
+      ancho
+    );
+
+    let puntoCorte = -1;
+
+    /*
+     * Para dominios, URLs y códigos se busca un separador cercano al final
+     * de la línea antes de aplicar un corte rígido.
+     */
+    for (
+      let indice = ventana.length - 1;
+      indice >= 0;
+      indice -= 1
+    ) {
+      if (
+        ['/', '.', '-', '_', '@'].includes(ventana[indice])
+      ) {
+        puntoCorte = indice + 1;
+        break;
+      }
+    }
+
+    if (puntoCorte < Math.floor(ancho * 0.45)) {
+      puntoCorte = ancho;
+    }
+
+    partes.push(
+      cortarTextoTicketLocal(restante, 0, puntoCorte)
+    );
+
+    restante = cortarTextoTicketLocal(
+      restante,
+      puntoCorte
+    );
+  }
+
+  if (restante) partes.push(restante);
+
+  return partes;
+};
+
+const envolverLineaTicketLocal = (
+  linea = '',
+  ancho = 30
+) => {
+  const texto = String(linea ?? '')
+    .replace(/\r/g, '')
+    .trim();
+
+  if (!texto) return [''];
+
+  /*
+   * Ajusta separadores como "-----" al ancho físico exacto del ticket.
+   */
+  if (/^([-=_*])\1{2,}$/.test(texto)) {
+    return [texto[0].repeat(ancho)];
+  }
+
+  const tokens = texto
+    .split(/\s+/)
+    .flatMap((token) =>
+      dividirTokenLargoTicketLocal(token, ancho)
+    );
+
+  const lineas = [];
+  let actual = '';
+
+  for (const token of tokens) {
+    const candidato = actual
+      ? `${actual} ${token}`
+      : token;
+
+    if (
+      longitudTextoTicketLocal(candidato) <= ancho
+    ) {
+      actual = candidato;
+      continue;
+    }
+
+    if (actual) lineas.push(actual);
+    actual = token;
+  }
+
+  if (actual) lineas.push(actual);
+
+  return lineas.length ? lineas : [''];
+};
+
+const prepararLineasConfiguracionTicketLocal = (
+  valor,
+  ancho = 30
+) => {
+  const lineas = Array.isArray(valor)
+    ? valor
+    : String(valor ?? '')
+        .replace(/\r\n/g, '\n')
+        .split('\n');
+
+  return lineas.flatMap((linea) =>
+    envolverLineaTicketLocal(linea, ancho)
+  );
+};
+
+/*
+ * La API local antigua no agrega el RFC a /vista-previa-ticket.
+ * El sistema lo inserta únicamente en el texto mostrado en el modal.
+ */
+const ajustarRfcVistaPreviaLocal = ({
+  ticket = '',
+  rfc = '',
+  mostrarRfc = true,
+  configuracion = {},
+}) => {
+  const contenidoOriginal = String(ticket || '');
+  const rfcLimpio = String(rfc || '').trim();
+
+  if (!contenidoOriginal.trim()) return contenidoOriginal;
+
+  const saltoLinea = contenidoOriginal.includes('\r\n')
+    ? '\r\n'
+    : '\n';
+
+  let lineas = contenidoOriginal
+    .replace(/\r\n/g, '\n')
+    .split('\n');
+
+  const normalizarComparacion = (valor = '') =>
+    String(valor || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^\p{L}\p{N}]/gu, '')
+      .toUpperCase();
+
+  const rfcNormalizado = normalizarComparacion(rfcLimpio);
+
+  const esLineaRfc = (linea = '') => {
+    const texto = String(linea || '').trim();
+
+    if (/^RFC\s*:/i.test(texto)) return true;
+    if (!rfcNormalizado) return false;
+
+    return normalizarComparacion(texto).includes(
+      rfcNormalizado
+    );
+  };
+
+  if (!mostrarRfc || !rfcLimpio) {
+    return lineas
+      .filter((linea) => !esLineaRfc(linea))
+      .join(saltoLinea);
+  }
+
+  if (lineas.some((linea) => esLineaRfc(linea))) {
+    return contenidoOriginal;
+  }
+
+  const ancho = obtenerAnchoTicketLocal(configuracion);
+
+  const centrarLinea = (valor = '') => {
+    const texto = cortarTextoTicketLocal(
+      String(valor || '').trim(),
+      0,
+      ancho
+    );
+
+    const espacios = Math.max(
+      Math.floor(
+        (ancho - longitudTextoTicketLocal(texto)) / 2
+      ),
+      0
+    );
+
+    return `${' '.repeat(espacios)}${texto}`;
+  };
+
+  const direccionConfigurada = String(
+    configuracion?.direccion || ''
+  ).trim();
+
+  const telefonoConfigurado = String(
+    configuracion?.telefono || ''
+  ).trim();
+
+  const obtenerPrefijoComparable = (valor = '') =>
+    String(valor || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toUpperCase()
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 3)
+      .join('');
+
+  const prefijoDireccion = obtenerPrefijoComparable(
+    direccionConfigurada
+  );
+
+  const telefonoNormalizado = normalizarComparacion(
+    telefonoConfigurado
+  );
+
+  let indiceInsercion = -1;
+
+  if (prefijoDireccion) {
+    indiceInsercion = lineas.findIndex((linea) =>
+      normalizarComparacion(linea).includes(
+        prefijoDireccion
+      )
+    );
+  }
+
+  if (indiceInsercion < 0 && telefonoNormalizado) {
+    indiceInsercion = lineas.findIndex((linea) => {
+      const normalizada = normalizarComparacion(linea);
+
+      return (
+        normalizada.includes(telefonoNormalizado) ||
+        /^\s*TEL(?:EFONO)?[\s.:]/i.test(
+          String(linea || '')
+        )
+      );
+    });
+  }
+
+  if (indiceInsercion < 0) {
+    indiceInsercion = lineas.findIndex(
+      (linea, indice) =>
+        indice > 0 &&
+        /^\s*\d{1,2}[/-]\d{1,2}[/-]\d{2,4}/.test(
+          String(linea || '')
+        )
+    );
+  }
+
+  if (indiceInsercion < 0) {
+    indiceInsercion = lineas.findIndex(
+      (linea, indice) =>
+        indice > 0 && !String(linea || '').trim()
+    );
+  }
+
+  if (indiceInsercion < 0) {
+    indiceInsercion = lineas.length;
+  }
+
+  lineas.splice(
+    indiceInsercion,
+    0,
+    centrarLinea(`RFC: ${rfcLimpio}`)
+  );
+
+  return lineas.join(saltoLinea);
+};
+
 export default function Ventas() {
   const { usuario } = useAuth();
 
@@ -574,19 +900,123 @@ export default function Ventas() {
     const datosTicket = construirDatosReimpresion();
 
     if (!datosTicket?.venta) {
-      throw new Error('No se encontraron datos suficientes para reimprimir.');
+      throw new Error(
+        'No se encontraron datos suficientes para reimprimir.'
+      );
     }
 
-    const configuracionTicket =
+    const configuracionConsultada =
       await obtenerConfiguracionTicketParaImpresion(
         datosTicket.venta.id_sucursal
       );
 
+    const configuracionTicket =
+      configuracionConsultada || {};
+
+    const ventaTicket = datosTicket.venta || {};
+
+    /*
+     * Igual que en el POS, la configuración del ticket tiene prioridad sobre
+     * los datos generales almacenados en la tabla de sucursales.
+     */
+    const nombreSucursalTicket = String(
+      ventaTicket.nombre_sucursal ||
+      ventaTicket.sucursal ||
+      sucursalActual?.nombre ||
+      sucursalActual?.nombre_sucursal ||
+      ''
+    ).trim();
+
+    const direccionTicket = String(
+      configuracionTicket.direccion ||
+      ventaTicket.direccion_sucursal ||
+      sucursalActual?.direccion ||
+      sucursalActual?.domicilio ||
+      ''
+    ).trim();
+
+    const telefonoTicket = String(
+      configuracionTicket.telefono ||
+      ventaTicket.telefono_sucursal ||
+      sucursalActual?.telefono ||
+      sucursalActual?.telefono_contacto ||
+      ''
+    ).trim();
+
+    const rfcTicket = String(
+      configuracionTicket.rfc ||
+      ventaTicket.rfc ||
+      ventaTicket.rfc_sucursal ||
+      sucursalActual?.rfc ||
+      sucursalActual?.rfc_sucursal ||
+      ''
+    ).trim();
+
+    const mostrarRfcTicket = normalizarBooleanoTicket(
+      configuracionTicket.mostrar_rfc ??
+      ventaTicket.mostrar_rfc,
+      true
+    );
+
+    const anchoTicketLocal = obtenerAnchoTicketLocal(
+      configuracionTicket
+    );
+
+    /*
+     * El encabezado y el pie se dividen antes de enviarlos para evitar que la
+     * API local recorte correos, URLs o palabras largas. La misma preparación
+     * se utiliza para vista previa y para la impresión física.
+     */
+    const encabezadoTicketPreparado =
+      prepararLineasConfiguracionTicketLocal(
+        configuracionTicket.encabezado || [],
+        anchoTicketLocal
+      );
+
+    const pieTicketPreparado =
+      prepararLineasConfiguracionTicketLocal(
+        configuracionTicket.pie_ticket || [],
+        anchoTicketLocal
+      );
+
+    const configuracionTicketFinal = {
+      ...configuracionTicket,
+      encabezado: encabezadoTicketPreparado,
+      pie_ticket: pieTicketPreparado,
+      rfc: rfcTicket,
+      mostrar_rfc: mostrarRfcTicket,
+      direccion: direccionTicket,
+      telefono: telefonoTicket,
+    };
+
     return {
       ...datosTicket,
-      ...(configuracionTicket
-        ? { configuracion_ticket: configuracionTicket }
-        : {}),
+
+      /*
+       * Compatibilidad con las distintas versiones de la API local.
+       */
+      rfc: rfcTicket,
+      rfc_sucursal: rfcTicket,
+      mostrar_rfc: mostrarRfcTicket,
+
+      venta: {
+        ...ventaTicket,
+        sucursal: nombreSucursalTicket,
+        nombre_sucursal: nombreSucursalTicket,
+        direccion_sucursal: direccionTicket,
+        telefono_sucursal: telefonoTicket,
+        rfc: rfcTicket,
+        rfc_sucursal: rfcTicket,
+        mostrar_rfc: mostrarRfcTicket,
+      },
+
+      configuracion_ticket: configuracionTicketFinal,
+
+      /*
+       * Una reimpresión jamás debe abrir la caja registradora.
+       */
+      no_abrir_caja: true,
+      reimpresion: true,
     };
   };
 
@@ -630,7 +1060,26 @@ export default function Ventas() {
         datosTicket
       );
 
-      const ticket = String(data.ticket || '');
+      const ticketOriginal = String(data.ticket || '');
+
+      const configuracionTicket =
+        datosTicket.configuracion_ticket || {};
+
+      const ticket = ajustarRfcVistaPreviaLocal({
+        ticket: ticketOriginal,
+        rfc:
+          configuracionTicket.rfc ||
+          datosTicket.venta?.rfc ||
+          datosTicket.rfc ||
+          '',
+        mostrarRfc: normalizarBooleanoTicket(
+          configuracionTicket.mostrar_rfc ??
+          datosTicket.venta?.mostrar_rfc ??
+          datosTicket.mostrar_rfc,
+          true
+        ),
+        configuracion: configuracionTicket,
+      });
 
       if (!ticket.trim()) {
         throw new Error(
