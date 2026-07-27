@@ -630,127 +630,103 @@ export default function DoctorShaddaiRecetas() {
   };
 
   const buscarProductos = async (texto = '') => {
+    const criterio = String(texto || '').trim();
+
+    if (criterio.length < 2) {
+      setProductos([]);
+      return;
+    }
+
     try {
       setCargandoProductos(true);
 
       const { data } = await api.get('/inventario/stock-sucursales', {
         params: {
-          nombre: texto,
+          modo: 'sugerencias',
+          buscar: criterio,
         },
       });
 
-      const lista =
+      if (!data.ok) {
+        setProductos([]);
+        return;
+      }
+
+      const posiblesResultados =
         data.productos ||
-        data.inventario ||
-        data.stock ||
         data.resultados ||
-        data.data ||
         data.items ||
+        data.data ||
         [];
 
-      const normalizados = lista.map((item) => ({
-        id_producto:
-          item.id_producto ||
-          item.id ||
-          item.producto_id ||
-          item.id_inventario ||
-          item.id_producto_fk,
+      const lista = Array.isArray(posiblesResultados)
+        ? posiblesResultados
+        : [];
 
-        id_sucursal: item.id_sucursal || item.sucursal_id || item.idSucursal || null,
+      const productosNormalizados = lista.map((item) => ({
+        id_producto: item.id_producto,
 
         nombre:
-          item.nombre_producto ||
           item.nombre ||
           item.producto ||
-          item.descripcion_producto ||
           'Producto sin nombre',
 
         nombre_generico:
-          item.nombre_generico || item.generico || item.denominacion_generica || '',
+          item.nombre_generico ||
+          item.generico ||
+          '',
 
-        forma_farmaceutica: item.forma_farmaceutica || item.forma || item.tipo_forma || '',
+        forma_farmaceutica:
+          item.forma_farmaceutica ||
+          item.forma ||
+          '',
 
-        presentacion: item.presentacion || item.descripcion || '',
+        presentacion:
+          item.presentacion ||
+          item.descripcion ||
+          '',
 
-        codigo_barras: item.codigo_barras || item.codigo || item.codigo_barra || item.clave || '',
+        codigo_barras:
+          item.codigo_barras ||
+          item.codigo ||
+          '',
 
-        sucursal:
-          item.nombre_sucursal ||
-          item.sucursal ||
-          item.nombreSucursal ||
-          item.sucursal_nombre ||
-          'Sucursal',
+        laboratorio:
+          item.laboratorio ||
+          '',
 
-        stock: Number(
-          item.stock_disponible ??
-          item.stock ??
-          item.cantidad ??
-          item.existencia ??
-          item.total_stock ??
-          0
-        ),
+        categoria:
+          item.categoria ||
+          '',
 
         precio: Number(
           item.precio_venta ??
           item.precio ??
-          item.precio_publico ??
-          item.precio_unitario ??
           0
         ),
 
-        lote: item.lote || item.numero_lote || item.nombre_lote || '',
+        stock_total: 0,
+        stock: 0,
+        sucursales: [],
 
-        fecha_caducidad:
-          item.fecha_caducidad || item.caducidad || item.fecha_vencimiento || null,
+        stock_cargado: false,
+        cargando_stock: false,
 
         raw: item,
       }));
 
-      const productosAgrupados = Object.values(
-        normalizados.reduce((acc, item) => {
-          const key = item.id_producto || `${item.codigo_barras}-${item.nombre}`;
-
-          if (!acc[key]) {
-            acc[key] = {
-              id_producto: item.id_producto,
-              nombre: item.nombre,
-              nombre_generico: item.nombre_generico,
-              forma_farmaceutica: item.forma_farmaceutica,
-              presentacion: item.presentacion,
-              codigo_barras: item.codigo_barras,
-              precio: item.precio,
-              stock_total: 0,
-              stock: 0,
-              sucursales: [],
-              raw: item.raw,
-            };
-          }
-
-          acc[key].stock_total += Number(item.stock || 0);
-          acc[key].stock = acc[key].stock_total;
-
-          acc[key].sucursales.push({
-            id_sucursal: item.id_sucursal,
-            sucursal: item.sucursal,
-            stock: Number(item.stock || 0),
-            lote: item.lote,
-            fecha_caducidad: item.fecha_caducidad,
-          });
-
-          return acc;
-        }, {})
-      );
-
-      setProductos(productosAgrupados);
+      setProductos(productosNormalizados);
     } catch (error) {
       console.error('Error al buscar productos:', error);
+
+      setProductos([]);
 
       Swal.fire({
         icon: 'error',
         title: 'Error',
         text:
           error.response?.data?.mensaje ||
-          'No se pudieron consultar los productos del inventario.',
+          'No se pudieron buscar los productos.',
       });
     } finally {
       setCargandoProductos(false);
@@ -1628,6 +1604,246 @@ export default function DoctorShaddaiRecetas() {
     }, 250);
   };
 
+const obtenerStockCompletoProducto = async (producto) => {
+  if (!producto?.id_producto) {
+    throw new Error('El producto no tiene un identificador válido.');
+  }
+
+  const { data } = await api.get('/inventario/stock-sucursales', {
+    params: {
+      id_producto: producto.id_producto,
+    },
+  });
+
+  if (!data.ok) {
+    throw new Error(
+      data.mensaje ||
+      'No se pudo consultar el stock del producto.'
+    );
+  }
+
+  const sucursales = Array.isArray(data.sucursales)
+    ? data.sucursales.map((item) => ({
+        id_sucursal:
+          item.id_sucursal ||
+          item.sucursal_id ||
+          null,
+
+        sucursal:
+          item.sucursal ||
+          item.nombre_sucursal ||
+          'Sucursal',
+
+        stock: Number(
+          item.stock ??
+          item.stock_disponible ??
+          item.existencia ??
+          0
+        ),
+
+        stock_minimo: Number(
+          item.stock_minimo ??
+          0
+        ),
+
+        estado:
+          item.estado ||
+          null,
+
+        direccion:
+          item.direccion ||
+          item.direccion_sucursal ||
+          '',
+
+        lote:
+          item.lote ||
+          '',
+
+        fecha_caducidad:
+          item.fecha_caducidad ||
+          null,
+      }))
+    : [];
+
+  const stockTotal = sucursales.reduce(
+    (total, sucursal) => total + Number(sucursal.stock || 0),
+    0
+  );
+
+  return {
+    ...producto,
+
+    nombre:
+      data.producto?.nombre ||
+      producto.nombre,
+
+    codigo_barras:
+      data.producto?.codigo_barras ||
+      producto.codigo_barras,
+
+    presentacion:
+      data.producto?.presentacion ||
+      producto.presentacion,
+
+    laboratorio:
+      data.producto?.laboratorio ||
+      producto.laboratorio,
+
+    categoria:
+      data.producto?.categoria ||
+      producto.categoria,
+
+    precio: Number(
+      data.producto?.precio_venta ??
+      producto.precio ??
+      0
+    ),
+
+    stock_total: stockTotal,
+    stock: stockTotal,
+    sucursales,
+
+    stock_cargado: true,
+    cargando_stock: false,
+  };
+};
+
+  const verStockProducto = async (producto) => {
+    const claveProducto = String(
+      producto?.id_producto ||
+      producto?.codigo_barras ||
+      producto?.nombre ||
+      ''
+    );
+
+    if (!claveProducto) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Producto inválido',
+        text: 'No se pudo identificar el producto seleccionado.',
+      });
+
+      return;
+    }
+
+    if (productoStockAbierto === claveProducto) {
+      setProductoStockAbierto(null);
+      return;
+    }
+
+    if (producto.stock_cargado) {
+      setProductoStockAbierto(claveProducto);
+      return;
+    }
+
+    try {
+      setProductoStockAbierto(claveProducto);
+
+      setProductos((prev) =>
+        prev.map((item) =>
+          Number(item.id_producto) === Number(producto.id_producto)
+            ? {
+                ...item,
+                cargando_stock: true,
+              }
+            : item
+        )
+      );
+
+      const productoCompleto = await obtenerStockCompletoProducto(producto);
+
+      setProductos((prev) =>
+        prev.map((item) =>
+          Number(item.id_producto) === Number(producto.id_producto)
+            ? productoCompleto
+            : item
+        )
+      );
+    } catch (error) {
+      console.error('Error al consultar stock:', error);
+
+      setProductoStockAbierto(null);
+
+      setProductos((prev) =>
+        prev.map((item) =>
+          Number(item.id_producto) === Number(producto.id_producto)
+            ? {
+                ...item,
+                cargando_stock: false,
+              }
+            : item
+        )
+      );
+
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text:
+          error.response?.data?.mensaje ||
+          error.message ||
+          'No se pudo consultar el stock del producto.',
+      });
+    }
+  };
+
+  const agregarProductoConStock = async (producto) => {
+    if (productoYaAgregado(producto)) {
+      agregarProducto(producto);
+      return;
+    }
+
+    try {
+      let productoCompleto = producto;
+
+      if (!producto.stock_cargado) {
+        setProductos((prev) =>
+          prev.map((item) =>
+            Number(item.id_producto) === Number(producto.id_producto)
+              ? {
+                  ...item,
+                  cargando_stock: true,
+                }
+              : item
+          )
+        );
+
+        productoCompleto = await obtenerStockCompletoProducto(producto);
+
+        setProductos((prev) =>
+          prev.map((item) =>
+            Number(item.id_producto) === Number(producto.id_producto)
+              ? productoCompleto
+              : item
+          )
+        );
+      }
+
+      agregarProducto(productoCompleto);
+    } catch (error) {
+      console.error('Error al preparar producto:', error);
+
+      setProductos((prev) =>
+        prev.map((item) =>
+          Number(item.id_producto) === Number(producto.id_producto)
+            ? {
+                ...item,
+                cargando_stock: false,
+              }
+            : item
+        )
+      );
+
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text:
+          error.response?.data?.mensaje ||
+          error.message ||
+          'No se pudo obtener la disponibilidad del producto.',
+      });
+    }
+  };
+
   return (
     <>
       <style>
@@ -2278,54 +2494,71 @@ export default function DoctorShaddaiRecetas() {
 
                                   <div className="mt-2 flex flex-wrap items-center gap-2">
                                     <span
-                                      className={`rounded-full px-2.5 py-1 text-xs font-black ${
-                                        sinStock
-                                          ? 'bg-red-100 text-red-700'
-                                          : stockBajo
-                                            ? 'bg-amber-100 text-amber-700'
-                                            : 'bg-emerald-100 text-emerald-700'
-                                      }`}
+                                      className={`rounded-full px-2.5 py-1 text-xs font-black ${!producto.stock_cargado
+                                          ? 'bg-slate-100 text-slate-600'
+                                          : sinStock
+                                            ? 'bg-red-100 text-red-700'
+                                            : stockBajo
+                                              ? 'bg-amber-100 text-amber-700'
+                                              : 'bg-emerald-100 text-emerald-700'
+                                        }`}
                                     >
-                                      {sinStock
-                                        ? 'Sin stock'
-                                        : stockBajo
-                                          ? `Stock bajo: ${stockTotal}`
-                                          : `Disponible: ${stockTotal}`}
+                                      {!producto.stock_cargado
+                                        ? 'Stock por consultar'
+                                        : sinStock
+                                          ? 'Sin stock'
+                                          : stockBajo
+                                            ? `Stock bajo: ${stockTotal}`
+                                            : `Disponible: ${stockTotal}`}
                                     </span>
 
                                     <button
                                       type="button"
-                                      onClick={() =>
-                                        setProductoStockAbierto((actual) =>
-                                          actual === claveProducto ? null : claveProducto
-                                        )
-                                      }
-                                      className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-2.5 py-1 text-xs font-black text-sky-700 transition hover:bg-sky-100"
+                                      onClick={() => verStockProducto(producto)}
+                                      disabled={producto.cargando_stock}
+                                      className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-2.5 py-1 text-xs font-black text-sky-700 transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-60"
                                     >
-                                      <Eye size={14} />
-                                      {stockVisible ? 'Ocultar stock' : 'Ver stock'}
+                                      {producto.cargando_stock ? (
+                                        <Loader2 size={14} className="animate-spin" />
+                                      ) : (
+                                        <Eye size={14} />
+                                      )}
+
+                                      {producto.cargando_stock
+                                        ? 'Consultando...'
+                                        : stockVisible
+                                          ? 'Ocultar stock'
+                                          : 'Ver stock'}
                                     </button>
                                   </div>
                                 </div>
 
                                 <button
                                   type="button"
-                                  onClick={() => agregarProducto(producto)}
-                                  disabled={agregado}
-                                  className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-xl px-3.5 py-2 text-xs font-black transition ${
-                                    agregado
+                                  onClick={() => agregarProductoConStock(producto)}
+                                  disabled={agregado || producto.cargando_stock}
+                                  className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-xl px-3.5 py-2 text-xs font-black transition ${agregado
                                       ? 'cursor-not-allowed bg-slate-200 text-slate-500'
-                                      : sinStock
-                                        ? 'bg-amber-500 text-white hover:bg-amber-600'
-                                        : 'bg-sky-700 text-white hover:bg-sky-800'
-                                  }`}
+                                      : producto.cargando_stock
+                                        ? 'cursor-wait bg-slate-200 text-slate-600'
+                                        : producto.stock_cargado && sinStock
+                                          ? 'bg-amber-500 text-white hover:bg-amber-600'
+                                          : 'bg-sky-700 text-white hover:bg-sky-800'
+                                    }`}
                                 >
-                                  <Plus size={16} />
+                                  {producto.cargando_stock ? (
+                                    <Loader2 size={16} className="animate-spin" />
+                                  ) : (
+                                    <Plus size={16} />
+                                  )}
+
                                   {agregado
                                     ? 'Agregado'
-                                    : sinStock
-                                      ? 'Recetar sin stock'
-                                      : 'Agregar'}
+                                    : producto.cargando_stock
+                                      ? 'Consultando...'
+                                      : producto.stock_cargado && sinStock
+                                        ? 'Recetar sin stock'
+                                        : 'Agregar'}
                                 </button>
                               </div>
 
@@ -2335,9 +2568,14 @@ export default function DoctorShaddaiRecetas() {
                                     Disponibilidad por sucursal
                                   </p>
 
-                                  {(producto.sucursales || []).length === 0 ? (
+                                  {producto.cargando_stock ? (
+                                    <div className="flex items-center gap-2 rounded-xl bg-white px-3 py-3 text-xs font-semibold text-slate-600">
+                                      <Loader2 size={15} className="animate-spin text-sky-600" />
+                                      Consultando existencias...
+                                    </div>
+                                  ) : (producto.sucursales || []).length === 0 ? (
                                     <p className="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-500">
-                                      No se recibió detalle de sucursales para este producto.
+                                      No se encontró disponibilidad registrada en las sucursales.
                                     </p>
                                   ) : (
                                     <div className="grid gap-2 sm:grid-cols-2">
@@ -2362,11 +2600,10 @@ export default function DoctorShaddaiRecetas() {
                                             </div>
 
                                             <span
-                                              className={`shrink-0 rounded-full px-2 py-1 text-xs font-black ${
-                                                stockSucursal > 0
+                                              className={`shrink-0 rounded-full px-2 py-1 text-xs font-black ${stockSucursal > 0
                                                   ? 'bg-emerald-100 text-emerald-700'
                                                   : 'bg-red-100 text-red-700'
-                                              }`}
+                                                }`}
                                             >
                                               {stockSucursal} disp.
                                             </span>
