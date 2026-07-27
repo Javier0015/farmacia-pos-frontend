@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import Swal from 'sweetalert2';
 
@@ -206,6 +206,9 @@ export default function DoctorShaddaiRecetas() {
   const [busqueda, setBusqueda] = useState('');
   const [productos, setProductos] = useState([]);
   const [cargandoProductos, setCargandoProductos] = useState(false);
+  const [mostrarResultadosProductos, setMostrarResultadosProductos] = useState(false);
+  const [productoStockAbierto, setProductoStockAbierto] = useState(null);
+  const contenedorBusquedaProductosRef = useRef(null);
 
   const [receta, setReceta] = useState([]);
   const [enviando, setEnviando] = useState(false);
@@ -858,16 +861,48 @@ export default function DoctorShaddaiRecetas() {
   }, []);
 
   useEffect(() => {
+    const texto = busqueda.trim();
+
     const timer = setTimeout(() => {
-      if (busqueda.trim().length >= 2) {
-        buscarProductos(busqueda.trim());
+      if (texto.length >= 2) {
+        setMostrarResultadosProductos(true);
+        buscarProductos(texto);
       } else {
         setProductos([]);
+        setMostrarResultadosProductos(false);
+        setProductoStockAbierto(null);
       }
     }, 450);
 
     return () => clearTimeout(timer);
   }, [busqueda]);
+
+  useEffect(() => {
+    const manejarClickFuera = (event) => {
+      if (
+        contenedorBusquedaProductosRef.current &&
+        !contenedorBusquedaProductosRef.current.contains(event.target)
+      ) {
+        setMostrarResultadosProductos(false);
+        setProductoStockAbierto(null);
+      }
+    };
+
+    const manejarEscape = (event) => {
+      if (event.key === 'Escape') {
+        setMostrarResultadosProductos(false);
+        setProductoStockAbierto(null);
+      }
+    };
+
+    document.addEventListener('mousedown', manejarClickFuera);
+    document.addEventListener('keydown', manejarEscape);
+
+    return () => {
+      document.removeEventListener('mousedown', manejarClickFuera);
+      document.removeEventListener('keydown', manejarEscape);
+    };
+  }, []);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -986,6 +1021,10 @@ export default function DoctorShaddaiRecetas() {
     };
 
     setReceta((prev) => [...prev, nuevoItem]);
+    setBusqueda('');
+    setProductos([]);
+    setMostrarResultadosProductos(false);
+    setProductoStockAbierto(null);
   };
 
   const manejarCambioMedicamentoLibre = (event) => {
@@ -2125,25 +2164,227 @@ export default function DoctorShaddaiRecetas() {
                 </p>
               </div>
 
-              <div className="relative">
-                <Search className="absolute left-4 top-3.5 text-slate-400" size={20} />
+              <div ref={contenedorBusquedaProductosRef} className="relative z-40">
+                <Search
+                  className="pointer-events-none absolute left-4 top-1/2 z-10 -translate-y-1/2 text-slate-400"
+                  size={20}
+                />
 
                 <input
                   type="text"
                   value={busqueda}
-                  onChange={(e) => setBusqueda(e.target.value)}
+                  onChange={(event) => {
+                    const valor = event.target.value;
+                    setBusqueda(valor);
+                    setMostrarResultadosProductos(valor.trim().length >= 2);
+                    setProductoStockAbierto(null);
+                  }}
+                  onFocus={() => {
+                    if (busqueda.trim().length >= 2) {
+                      setMostrarResultadosProductos(true);
+                    }
+                  }}
                   disabled={!expedienteSeleccionado?.id_expediente}
-                  className="w-full rounded-2xl border border-slate-200 py-3 pl-12 pr-4 text-sm outline-none focus:ring-2 focus:ring-sky-500 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+                  autoComplete="off"
+                  className="w-full rounded-2xl border border-slate-200 py-3 pl-12 pr-12 text-sm outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-500 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
                   placeholder={
                     expedienteSeleccionado?.id_expediente
                       ? 'Buscar por nombre, código o medicamento...'
                       : 'Selecciona un expediente antes de buscar productos'
                   }
                 />
+
+                {busqueda && expedienteSeleccionado?.id_expediente && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBusqueda('');
+                      setProductos([]);
+                      setMostrarResultadosProductos(false);
+                      setProductoStockAbierto(null);
+                    }}
+                    className="absolute right-3 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                    aria-label="Limpiar búsqueda"
+                  >
+                    <X size={18} />
+                  </button>
+                )}
+
+                {mostrarResultadosProductos && busqueda.trim().length >= 2 && (
+                  <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/15">
+                    <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-4 py-2.5">
+                      <p className="text-xs font-black uppercase tracking-wide text-slate-500">
+                        Resultados del inventario
+                      </p>
+
+                      {!cargandoProductos && productos.length > 0 && (
+                        <span className="rounded-full bg-sky-100 px-2.5 py-1 text-xs font-black text-sky-700">
+                          {productos.length} resultado(s)
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="max-h-[430px] overflow-y-auto overscroll-contain">
+                      {cargandoProductos ? (
+                        <div className="flex items-center justify-center gap-2 px-5 py-8 text-sm font-bold text-slate-600">
+                          <Loader2 size={20} className="animate-spin text-sky-600" />
+                          Buscando productos...
+                        </div>
+                      ) : productos.length === 0 ? (
+                        <div className="px-5 py-8 text-center">
+                          <p className="text-sm font-bold text-slate-700">
+                            No se encontraron productos
+                          </p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            Puedes capturarlo mediante la opción de medicamento libre.
+                          </p>
+                        </div>
+                      ) : (
+                        productos.map((producto) => {
+                          const agregado = productoYaAgregado(producto);
+                          const stockTotal = Number(
+                            producto.stock_total || producto.stock || 0
+                          );
+                          const sinStock = stockTotal <= 0;
+                          const stockBajo = stockTotal > 0 && stockTotal <= 5;
+                          const claveProducto = String(
+                            producto.id_producto ||
+                            producto.codigo_barras ||
+                            producto.nombre
+                          );
+                          const stockVisible = productoStockAbierto === claveProducto;
+
+                          return (
+                            <div
+                              key={claveProducto}
+                              className="border-b border-slate-100 last:border-b-0"
+                            >
+                              <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-start sm:justify-between">
+                                <div className="min-w-0 flex-1">
+                                  <p className="break-words text-sm font-black leading-snug text-slate-800">
+                                    {producto.nombre}
+                                  </p>
+
+                                  <p className="mt-1 break-words text-xs font-semibold leading-relaxed text-slate-500">
+                                    {[
+                                      producto.codigo_barras,
+                                      producto.nombre_generico,
+                                      producto.forma_farmaceutica,
+                                      producto.presentacion,
+                                    ]
+                                      .filter(Boolean)
+                                      .join(' · ') || 'Producto de inventario'}
+                                  </p>
+
+                                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                                    <span
+                                      className={`rounded-full px-2.5 py-1 text-xs font-black ${
+                                        sinStock
+                                          ? 'bg-red-100 text-red-700'
+                                          : stockBajo
+                                            ? 'bg-amber-100 text-amber-700'
+                                            : 'bg-emerald-100 text-emerald-700'
+                                      }`}
+                                    >
+                                      {sinStock
+                                        ? 'Sin stock'
+                                        : stockBajo
+                                          ? `Stock bajo: ${stockTotal}`
+                                          : `Disponible: ${stockTotal}`}
+                                    </span>
+
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setProductoStockAbierto((actual) =>
+                                          actual === claveProducto ? null : claveProducto
+                                        )
+                                      }
+                                      className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-2.5 py-1 text-xs font-black text-sky-700 transition hover:bg-sky-100"
+                                    >
+                                      <Eye size={14} />
+                                      {stockVisible ? 'Ocultar stock' : 'Ver stock'}
+                                    </button>
+                                  </div>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => agregarProducto(producto)}
+                                  disabled={agregado}
+                                  className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-xl px-3.5 py-2 text-xs font-black transition ${
+                                    agregado
+                                      ? 'cursor-not-allowed bg-slate-200 text-slate-500'
+                                      : sinStock
+                                        ? 'bg-amber-500 text-white hover:bg-amber-600'
+                                        : 'bg-sky-700 text-white hover:bg-sky-800'
+                                  }`}
+                                >
+                                  <Plus size={16} />
+                                  {agregado
+                                    ? 'Agregado'
+                                    : sinStock
+                                      ? 'Recetar sin stock'
+                                      : 'Agregar'}
+                                </button>
+                              </div>
+
+                              {stockVisible && (
+                                <div className="border-t border-slate-100 bg-slate-50 px-4 py-3">
+                                  <p className="mb-2 text-xs font-black uppercase tracking-wide text-slate-500">
+                                    Disponibilidad por sucursal
+                                  </p>
+
+                                  {(producto.sucursales || []).length === 0 ? (
+                                    <p className="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-500">
+                                      No se recibió detalle de sucursales para este producto.
+                                    </p>
+                                  ) : (
+                                    <div className="grid gap-2 sm:grid-cols-2">
+                                      {(producto.sucursales || []).map((sucursal, index) => {
+                                        const stockSucursal = Number(sucursal.stock || 0);
+
+                                        return (
+                                          <div
+                                            key={`${claveProducto}-${sucursal.id_sucursal || index}`}
+                                            className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-white px-3 py-2"
+                                          >
+                                            <div className="min-w-0">
+                                              <p className="truncate text-xs font-bold text-slate-700">
+                                                {sucursal.sucursal || 'Sucursal'}
+                                              </p>
+
+                                              {sucursal.fecha_caducidad && (
+                                                <p className="mt-0.5 text-[11px] text-slate-400">
+                                                  Caducidad: {formatearFecha(sucursal.fecha_caducidad)}
+                                                </p>
+                                              )}
+                                            </div>
+
+                                            <span
+                                              className={`shrink-0 rounded-full px-2 py-1 text-xs font-black ${
+                                                stockSucursal > 0
+                                                  ? 'bg-emerald-100 text-emerald-700'
+                                                  : 'bg-red-100 text-red-700'
+                                              }`}
+                                            >
+                                              {stockSucursal} disp.
+                                            </span>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
-
-
-
 
               <div className="mt-5 rounded-2xl border border-dashed border-violet-300 bg-violet-50 p-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -2319,124 +2560,15 @@ export default function DoctorShaddaiRecetas() {
                 )}
               </div>
 
-              <div className="mt-4 max-h-[420px] space-y-3 overflow-y-auto pr-1">
-                {!expedienteSeleccionado?.id_expediente ? (
-                  <div className="rounded-2xl bg-amber-50 p-5 text-sm font-semibold text-amber-700">
-                    Selecciona un expediente clínico antes de buscar productos.
-                  </div>
-                ) : cargandoProductos ? (
-                  <div className="flex items-center justify-center gap-2 rounded-2xl bg-slate-50 p-5 text-sm font-bold text-slate-600">
-                    <Loader2 size={20} className="animate-spin" />
-                    Buscando productos...
-                  </div>
-                ) : busqueda.trim().length < 2 ? (
-                  <div className="rounded-2xl bg-slate-50 p-5 text-sm text-slate-500">
-                    Escribe al menos 2 caracteres para buscar productos.
-                  </div>
-                ) : productos.length === 0 ? (
-                  <div className="rounded-2xl bg-slate-50 p-5 text-sm text-slate-500">
-                    No se encontraron productos con esa búsqueda.
-                  </div>
-                ) : (
-                  productos.map((producto) => {
-                    const agregado = productoYaAgregado(producto);
-                    const stockTotal = Number(producto.stock_total || producto.stock || 0);
-                    const sinStock = stockTotal <= 0;
-
-                    return (
-                      <div
-                        key={producto.id_producto || producto.codigo_barras || producto.nombre}
-                        className="rounded-2xl border border-slate-100 bg-slate-50 p-4"
-                      >
-                        <div className="flex flex-col gap-4">
-                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                            <div className="min-w-0">
-                              <h3 className="font-bold text-slate-800">{producto.nombre}</h3>
-
-                              <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                                <span
-                                  className={`rounded-full px-3 py-1 font-semibold ${stockTotal > 0
-                                    ? 'bg-emerald-100 text-emerald-700'
-                                    : 'bg-red-100 text-red-700'
-                                    }`}
-                                >
-                                  Stock total: {stockTotal}
-                                </span>
-
-                                {producto.codigo_barras && (
-                                  <span className="rounded-full bg-white px-3 py-1 font-semibold text-slate-600">
-                                    Código: {producto.codigo_barras}
-                                  </span>
-                                )}
-
-                                {producto.presentacion && (
-                                  <span className="rounded-full bg-white px-3 py-1 font-semibold text-slate-600">
-                                    {producto.presentacion}
-                                  </span>
-                                )}
-                              </div>
-
-                              {sinStock && (
-                                <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-red-100 px-3 py-1 text-xs font-bold text-red-700">
-                                  <AlertTriangle size={14} />
-                                  Sin disponibilidad
-                                </div>
-                              )}
-                            </div>
-
-                            <button
-                              type="button"
-                              onClick={() => agregarProducto(producto)}
-                              disabled={agregado}
-                              className={`inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2 text-sm font-bold transition ${agregado
-                                ? 'bg-slate-200 text-slate-500'
-                                : sinStock
-                                  ? 'bg-amber-500 text-white hover:bg-amber-600'
-                                  : 'bg-sky-700 text-white hover:bg-sky-800'
-                                }`}
-                            >
-                              <Plus size={17} />
-                              {agregado
-                                ? 'Agregado'
-                                : sinStock
-                                  ? 'Recetar sin stock'
-                                  : 'Agregar'}
-                            </button>
-                          </div>
-
-                          <div className="rounded-2xl border border-slate-100 bg-white p-3">
-                            <p className="mb-2 text-xs font-black uppercase tracking-wide text-slate-500">
-                              Disponibilidad por sucursal
-                            </p>
-
-                            <div className="grid gap-2 sm:grid-cols-2">
-                              {(producto.sucursales || []).map((sucursal) => (
-                                <div
-                                  key={`${producto.id_producto}-${sucursal.id_sucursal}`}
-                                  className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2 text-xs"
-                                >
-                                  <span className="font-semibold text-slate-700">
-                                    {sucursal.sucursal}
-                                  </span>
-
-                                  <span
-                                    className={`rounded-full px-2 py-1 font-bold ${Number(sucursal.stock || 0) > 0
-                                      ? 'bg-emerald-100 text-emerald-700'
-                                      : 'bg-red-100 text-red-700'
-                                      }`}
-                                  >
-                                    {Number(sucursal.stock || 0)} disp.
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
+              {!expedienteSeleccionado?.id_expediente ? (
+                <div className="mt-4 rounded-2xl bg-amber-50 p-5 text-sm font-semibold text-amber-700">
+                  Selecciona un expediente clínico antes de buscar productos.
+                </div>
+              ) : busqueda.trim().length < 2 ? (
+                <div className="mt-4 rounded-2xl bg-slate-50 p-5 text-sm text-slate-500">
+                  Escribe al menos 2 caracteres para buscar productos.
+                </div>
+              ) : null}
             </div>
 
             <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm">
