@@ -291,6 +291,7 @@ export default function POS() {
   const [servicioSeleccionado, setServicioSeleccionado] = useState(null);
   const [detalleServicio, setDetalleServicio] = useState([]);
   const [cargandoDetalleServicio, setCargandoDetalleServicio] = useState(false);
+  const [cancelandoServicio, setCancelandoServicio] = useState(false);
 
   const sucursalActual = useMemo(() => {
     return sucursales.find((s) => Number(s.id_sucursal) === Number(idSucursal));
@@ -1513,6 +1514,165 @@ export default function POS() {
       });
     } finally {
       setCargandoDetalleServicio(false);
+    }
+  };
+
+  const cancelarServicioClinicoPendiente = async (solicitud) => {
+    const idSolicitud = Number(
+      solicitud?.id_solicitud_servicio ||
+      solicitud?.id_solicitud ||
+      servicioSeleccionado?.id_solicitud_servicio ||
+      servicioSeleccionado?.id_solicitud ||
+      0
+    );
+
+    if (!Number.isInteger(idSolicitud) || idSolicitud <= 0) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Servicio inválido',
+        text: 'No se pudo identificar la solicitud del servicio clínico.',
+      });
+      return;
+    }
+
+    const folioServicio =
+      solicitud?.folio_servicio ||
+      servicioSeleccionado?.folio_servicio ||
+      `SERV-${idSolicitud}`;
+
+    const nombrePaciente =
+      solicitud?.nombre_paciente ||
+      servicioSeleccionado?.nombre_paciente ||
+      'Paciente sin nombre';
+
+    const tieneServiciosEnCarrito = carrito.some(
+      (item) =>
+        item.tipo_item === 'SERVICIO' &&
+        Number(item.id_solicitud_servicio || 0) === idSolicitud
+    );
+
+    const confirmacion = await Swal.fire({
+      icon: 'warning',
+      title: '¿Cancelar servicio clínico?',
+      html: `
+        <div style="text-align:left; line-height:1.55">
+          <p>La solicitud dejará de aparecer como pendiente en caja.</p>
+          <p style="margin-top:8px"><b>Folio:</b> ${escaparHtmlSeguro(folioServicio)}</p>
+          <p><b>Paciente:</b> ${escaparHtmlSeguro(nombrePaciente)}</p>
+          ${
+            tieneServiciosEnCarrito
+              ? '<p style="margin-top:8px; color:#b45309"><b>Los servicios asociados también se retirarán del carrito.</b></p>'
+              : ''
+          }
+          <p style="margin-top:8px">No se generará venta ni movimiento de caja.</p>
+        </div>
+      `,
+      input: 'textarea',
+      inputLabel: 'Motivo de cancelación',
+      inputPlaceholder: 'Escribe el motivo por el que se cancela el servicio...',
+      inputAttributes: {
+        'aria-label': 'Motivo de cancelación del servicio clínico',
+      },
+      showCancelButton: true,
+      confirmButtonText: 'Sí, cancelar servicio',
+      cancelButtonText: 'Regresar',
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#64748b',
+      reverseButtons: true,
+      focusCancel: true,
+      preConfirm: (motivo) => {
+        const motivoLimpio = String(motivo || '').trim();
+
+        if (!motivoLimpio) {
+          Swal.showValidationMessage('Escribe el motivo de la cancelación.');
+          return false;
+        }
+
+        return motivoLimpio;
+      },
+    });
+
+    if (!confirmacion.isConfirmed) return;
+
+    /*
+     * La sesión abierta es la fuente principal para conocer la caja.
+     * Como respaldo se usan el estado idCaja y la caja seleccionada.
+     */
+    const idCajaCancelacion = Number(
+      sesionAbierta?.id_caja ||
+      idCaja ||
+      cajaActual?.id_caja ||
+      0
+    );
+
+    if (
+      !Number.isInteger(idCajaCancelacion) ||
+      idCajaCancelacion <= 0
+    ) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Caja no identificada',
+        text:
+          'No se pudo identificar la caja de la sesión abierta. Actualiza la sesión de caja e intenta nuevamente.',
+      });
+      return;
+    }
+
+    try {
+      setCancelandoServicio(true);
+
+      const { data } = await api.patch(
+        `/ventas/servicios-clinicos/${idSolicitud}/cancelar-pendiente`,
+        {
+          motivo: confirmacion.value,
+          id_sucursal: Number(idSucursal),
+          id_caja: idCajaCancelacion,
+        }
+      );
+
+      if (!data?.ok) {
+        throw new Error(
+          data?.mensaje || 'No se pudo cancelar el servicio clínico.'
+        );
+      }
+
+      setCarrito((prev) =>
+        prev.filter(
+          (item) =>
+            !(
+              item.tipo_item === 'SERVICIO' &&
+              Number(item.id_solicitud_servicio || 0) === idSolicitud
+            )
+        )
+      );
+
+      setServicioSeleccionado(null);
+      setDetalleServicio([]);
+
+      await cargarServiciosPendientes();
+
+      await Swal.fire({
+        icon: 'success',
+        title: 'Servicio cancelado',
+        text:
+          data?.mensaje ||
+          'La solicitud fue cancelada y retirada de los pendientes de caja.',
+        timer: 1700,
+        showConfirmButton: false,
+      });
+    } catch (error) {
+      console.error('Error al cancelar servicio clínico pendiente:', error);
+
+      Swal.fire({
+        icon: 'error',
+        title: 'No se pudo cancelar',
+        text:
+          error.response?.data?.mensaje ||
+          error.message ||
+          'No se pudo cancelar el servicio clínico.',
+      });
+    } finally {
+      setCancelandoServicio(false);
     }
   };
 
@@ -3860,6 +4020,8 @@ export default function POS() {
           servicioSeleccionado={servicioSeleccionado}
           detalleServicio={detalleServicio}
           cargandoDetalleServicio={cargandoDetalleServicio}
+          cancelandoServicio={cancelandoServicio}
+          cancelarServicioClinicoPendiente={cancelarServicioClinicoPendiente}
           onClose={cerrarModalServicios}
           cargarServiciosPendientes={cargarServiciosPendientes}
           verDetalleServicioPOS={verDetalleServicioPOS}
@@ -5098,6 +5260,8 @@ function ModalServiciosPendientes({
   servicioSeleccionado,
   detalleServicio,
   cargandoDetalleServicio,
+  cancelandoServicio,
+  cancelarServicioClinicoPendiente,
   onClose,
   cargarServiciosPendientes,
   verDetalleServicioPOS,
@@ -5129,6 +5293,21 @@ function ModalServiciosPendientes({
     );
   };
 
+  const idSolicitudSeleccionada = Number(
+    servicioSeleccionado?.id_solicitud_servicio ||
+    servicioSeleccionado?.id_solicitud ||
+    0
+  );
+
+  /*
+   * El modal solo recibe solicitudes PENDIENTE_CAJERO. El backend vuelve a
+   * validar el estatus antes de cancelar para evitar condiciones de carrera.
+   */
+  const puedeCancelarServicio =
+    Boolean(servicioSeleccionado) &&
+    Number.isInteger(idSolicitudSeleccionada) &&
+    idSolicitudSeleccionada > 0;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
       <div className="max-h-[92vh] w-full max-w-6xl overflow-hidden rounded-3xl bg-white shadow-2xl flex flex-col">
@@ -5140,7 +5319,8 @@ function ModalServiciosPendientes({
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200"
+            disabled={cancelandoServicio}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <X size={20} />
           </button>
@@ -5153,7 +5333,8 @@ function ModalServiciosPendientes({
               <button
                 type="button"
                 onClick={cargarServiciosPendientes}
-                className="inline-flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-200"
+                disabled={cargandoServicios || cancelandoServicio}
+                className="inline-flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <RefreshCw size={14} />
                 Actualizar
@@ -5176,7 +5357,8 @@ function ModalServiciosPendientes({
                     key={servicio.id_solicitud_servicio || servicio.id_solicitud || servicio.folio_servicio}
                     type="button"
                     onClick={() => verDetalleServicioPOS(servicio)}
-                    className={`w-full rounded-2xl border p-4 text-left transition ${Number(servicioSeleccionado?.id_solicitud_servicio) === Number(servicio.id_solicitud_servicio)
+                    disabled={cancelandoServicio}
+                    className={`w-full rounded-2xl border p-4 text-left transition disabled:cursor-not-allowed disabled:opacity-60 ${Number(servicioSeleccionado?.id_solicitud_servicio) === Number(servicio.id_solicitud_servicio)
                       ? 'border-emerald-300 bg-emerald-50'
                       : 'border-slate-100 bg-white hover:border-emerald-200 hover:bg-slate-50'
                       }`}
@@ -5305,7 +5487,7 @@ function ModalServiciosPendientes({
                               <button
                                 type="button"
                                 onClick={() => agregarDetalleServicioAlCarrito(servicio)}
-                                disabled={agregado}
+                                disabled={agregado || cancelandoServicio}
                                 className={`inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-80 ${agregado
                                   ? 'bg-emerald-100 text-emerald-700'
                                   : 'bg-emerald-600 text-white hover:bg-emerald-700'
@@ -5322,11 +5504,35 @@ function ModalServiciosPendientes({
                   )}
                 </div>
 
-                <div className="flex flex-col gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
+                <div className="flex flex-col gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:items-center sm:justify-end">
+                  {puedeCancelarServicio && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        cancelarServicioClinicoPendiente(
+                          servicioSeleccionado
+                        )
+                      }
+                      disabled={cancelandoServicio}
+                      className="inline-flex items-center justify-center gap-2 rounded-2xl bg-red-600 px-5 py-3 text-sm font-black text-white shadow-lg shadow-red-900/20 transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {cancelandoServicio ? (
+                        <Loader2 size={18} className="animate-spin" />
+                      ) : (
+                        <Trash2 size={18} />
+                      )}
+
+                      {cancelandoServicio
+                        ? 'Cancelando servicio...'
+                        : 'Cancelar servicio'}
+                    </button>
+                  )}
+
                   <button
                     type="button"
                     onClick={onClose}
-                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-100 px-5 py-3 text-sm font-bold text-slate-700 hover:bg-slate-200"
+                    disabled={cancelandoServicio}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-100 px-5 py-3 text-sm font-bold text-slate-700 hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Cerrar
                   </button>
