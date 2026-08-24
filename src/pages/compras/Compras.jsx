@@ -104,25 +104,42 @@ export default function Compras() {
     );
   }, [sucursales, idSucursalFiltro]);
 
+  // Helpers para manejar importes monetarios sin errores de precisión
+  const redondearMoneda = (valor) => {
+    return Math.round((Number(valor || 0) + Number.EPSILON) * 100) / 100;
+  };
+
+  const aCentavos = (valor) => {
+    return Math.round((Number(valor || 0) + Number.EPSILON) * 100);
+  };
+
   const resumenCompra = useMemo(() => {
-    const subtotal = items.reduce((acc, item) => {
-      const cantidad = Number(item.cantidad || 0);
-      const precio = Number(item.precio_compra || 0);
-      const descuentoItem = Number(item.descuento || 0);
-      return acc + Math.max(cantidad * precio - descuentoItem, 0);
-    }, 0);
+    const subtotal = redondearMoneda(
+      items.reduce((acc, item) => {
+        const cantidad = Number(item.cantidad || 0);
+        const precio = Number(item.precio_compra || 0);
+        const descuentoItem = Number(item.descuento || 0);
 
-    const descuento = Number(formCompra.descuento || 0);
-    const impuesto = Number(formCompra.impuesto || 0);
-    const totalManual = Number(formCompra.total_manual || 0);
+        const subtotalItem = redondearMoneda(
+          cantidad * precio - descuentoItem
+        );
 
-    const total =
+        return acc + Math.max(subtotalItem, 0);
+      }, 0)
+    );
+
+    const descuento = redondearMoneda(formCompra.descuento);
+    const impuesto = redondearMoneda(formCompra.impuesto);
+    const totalManual = redondearMoneda(formCompra.total_manual);
+
+    const total = redondearMoneda(
       items.length === 0
         ? Math.max(totalManual - descuento + impuesto, 0)
-        : Math.max(subtotal - descuento + impuesto, 0);
+        : Math.max(subtotal - descuento + impuesto, 0)
+    );
 
-    const montoPagado = Number(formCompra.monto_pagado || 0);
-    const saldo = Math.max(total - montoPagado, 0);
+    const montoPagado = redondearMoneda(formCompra.monto_pagado);
+    const saldo = redondearMoneda(Math.max(total - montoPagado, 0));
 
     return {
       subtotal,
@@ -646,16 +663,21 @@ export default function Compras() {
       return false;
     }
 
-    if (Number(formCompra.monto_pagado || 0) > resumenCompra.total) {
+    const totalCentavos = aCentavos(resumenCompra.total);
+    const pagadoCentavos = aCentavos(formCompra.monto_pagado);
+
+    if (pagadoCentavos > totalCentavos) {
       Swal.fire({
         icon: 'warning',
         title: 'Pago mayor al total',
         html: `
         <p>El monto pagado no puede ser mayor al total de la compra.</p>
         <div style="margin-top:12px;text-align:left;background:#f8fafc;border-radius:14px;padding:12px">
-          <b>Total de la compra:</b> ${formatoMoneda(resumenCompra.total)}<br/>
-          <b>Monto capturado:</b> ${formatoMoneda(formCompra.monto_pagado)}<br/>
-          <b>Diferencia:</b> ${formatoMoneda(Number(formCompra.monto_pagado || 0) - resumenCompra.total)}
+          <b>Total de la compra:</b> ${formatoMoneda(totalCentavos / 100)}<br/>
+          <b>Monto capturado:</b> ${formatoMoneda(pagadoCentavos / 100)}<br/>
+          <b>Diferencia:</b> ${formatoMoneda(
+            (pagadoCentavos - totalCentavos) / 100
+          )}
         </div>
         <p style="margin-top:12px;color:#64748b;font-size:13px">
           Corrige el monto pagado o revisa el total del ticket.
@@ -697,17 +719,17 @@ export default function Compras() {
         id_sucursal: Number(formCompra.id_sucursal),
         id_proveedor: Number(formCompra.id_proveedor),
         metodo_pago: formCompra.metodo_pago,
-        monto_pagado: Number(formCompra.monto_pagado || 0),
+        monto_pagado: redondearMoneda(formCompra.monto_pagado),
         id_sesion: formCompra.id_sesion ? Number(formCompra.id_sesion) : null,
-        impuesto: Number(formCompra.impuesto || 0),
-        descuento: Number(formCompra.descuento || 0),
+        impuesto: redondearMoneda(formCompra.impuesto),
+        descuento: redondearMoneda(formCompra.descuento),
         observaciones: formCompra.observaciones || null,
-        total_manual: Number(formCompra.total_manual || 0),
+        total_manual: redondearMoneda(formCompra.total_manual),
         productos: productosValidos.map((item) => ({
           id_producto: Number(item.id_producto),
           cantidad: Number(item.cantidad),
-          precio_compra: Number(item.precio_compra || 0),
-          descuento: Number(item.descuento || 0),
+          precio_compra: redondearMoneda(item.precio_compra),
+          descuento: redondearMoneda(item.descuento),
           lote: item.lote || null,
           fecha_caducidad: item.fecha_caducidad || null,
           ubicacion: item.ubicacion || null,

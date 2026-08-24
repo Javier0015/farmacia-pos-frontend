@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 
 import api from '../../api/axios';
+import { useAuth } from '../../context/AuthContext';
 import logoFarmacia from '../../assets/logoShaddai.png';
 import ModalSolicitudLaboratorio from '../../components/doctores/ModalSolicitudLaboratorio';
 import ModalNotaMedica from '../../components/doctores/ModalNotaMedica';
@@ -185,6 +186,7 @@ const obtenerNombreCompletoPaciente = (expediente = {}) => {
 
 export default function DoctorShaddaiRecetas() {
   const navigate = useNavigate();
+  const { usuario } = useAuth();
 
   const [searchParams] = useSearchParams();
 
@@ -285,6 +287,130 @@ export default function DoctorShaddaiRecetas() {
 
   const [modalCertificadoAbierto, setModalCertificadoAbierto] = useState(false);
 
+  const obtenerIdSucursalDesdeUsuario = (usuarioActual) => {
+    if (!usuarioActual) return null;
+
+    const candidatosDirectos = [
+      usuarioActual.id_sucursal,
+      usuarioActual.sucursal_id,
+      usuarioActual.idSucursal,
+      usuarioActual.sucursal?.id_sucursal,
+      usuarioActual.sucursal?.id,
+      usuarioActual.sucursal_actual?.id_sucursal,
+      usuarioActual.sucursal_actual?.id,
+    ];
+
+    for (const candidato of candidatosDirectos) {
+      const numero = Number(candidato);
+
+      if (Number.isInteger(numero) && numero > 0) {
+        return numero;
+      }
+    }
+
+    const sucursalesAsignadas =
+      usuarioActual.sucursales ||
+      usuarioActual.sucursales_asignadas ||
+      usuarioActual.sucursalesAsignadas ||
+      usuarioActual.sucursales_ids ||
+      [];
+
+    if (Array.isArray(sucursalesAsignadas)) {
+      for (const sucursal of sucursalesAsignadas) {
+        const candidato =
+          typeof sucursal === 'object' && sucursal !== null
+            ? sucursal.id_sucursal || sucursal.sucursal_id || sucursal.id
+            : sucursal;
+
+        const numero = Number(candidato);
+
+        if (Number.isInteger(numero) && numero > 0) {
+          return numero;
+        }
+      }
+    }
+
+    return null;
+  };
+
+  const obtenerNombreSucursalDesdeUsuario = (usuarioActual) => {
+    if (!usuarioActual) return '';
+
+    const nombresDirectos = [
+      usuarioActual.nombre_sucursal,
+      usuarioActual.sucursal_nombre,
+      usuarioActual.sucursal?.nombre,
+      usuarioActual.sucursal?.nombre_sucursal,
+      usuarioActual.sucursal_actual?.nombre,
+      usuarioActual.sucursal_actual?.nombre_sucursal,
+    ];
+
+    const nombreDirecto = nombresDirectos.find(
+      (valor) => String(valor || '').trim().length > 0
+    );
+
+    if (nombreDirecto) {
+      return String(nombreDirecto).trim();
+    }
+
+    const sucursalesAsignadas =
+      usuarioActual.sucursales ||
+      usuarioActual.sucursales_asignadas ||
+      usuarioActual.sucursalesAsignadas ||
+      [];
+
+    if (Array.isArray(sucursalesAsignadas)) {
+      const idUsuario = obtenerIdSucursalDesdeUsuario(usuarioActual);
+
+      const sucursalActual = sucursalesAsignadas.find((sucursal) => {
+        if (!sucursal || typeof sucursal !== 'object') return false;
+
+        const id = Number(
+          sucursal.id_sucursal || sucursal.sucursal_id || sucursal.id
+        );
+
+        return idUsuario && id === Number(idUsuario);
+      });
+
+      const nombre =
+        sucursalActual?.nombre ||
+        sucursalActual?.nombre_sucursal ||
+        sucursalActual?.sucursal;
+
+      if (nombre) {
+        return String(nombre).trim();
+      }
+    }
+
+    return '';
+  };
+
+  // La sucursal actual pertenece al usuario autenticado. El expediente
+  // identifica al paciente, pero no necesariamente incluye una sucursal.
+  const idSucursalActual = useMemo(() => {
+    const valor =
+      obtenerIdSucursalDesdeUsuario(usuario) ??
+      expedienteSeleccionado?.id_sucursal ??
+      perfilDoctor?.id_sucursal ??
+      perfilDoctor?.sucursal_id ??
+      perfilDoctor?.idSucursal ??
+      null;
+
+    const numero = Number(valor);
+
+    return Number.isInteger(numero) && numero > 0 ? numero : null;
+  }, [usuario, expedienteSeleccionado?.id_sucursal, perfilDoctor]);
+
+  const nombreSucursalActual = useMemo(() => {
+    return (
+      obtenerNombreSucursalDesdeUsuario(usuario) ||
+      expedienteSeleccionado?.nombre_sucursal ||
+      expedienteSeleccionado?.sucursal ||
+      perfilDoctor?.nombre_sucursal ||
+      perfilDoctor?.sucursal ||
+      'Sucursal actual'
+    );
+  }, [usuario, expedienteSeleccionado, perfilDoctor]);
 
   const formatearFecha = (fecha) => {
     if (!fecha) return 'N/A';
@@ -977,13 +1103,13 @@ export default function DoctorShaddaiRecetas() {
       disponible_inventario: stockTotal > 0,
 
       id_producto: producto.id_producto,
-      id_sucursal: null,
+      id_sucursal: producto.id_sucursal || idSucursalActual,
       nombre: producto.nombre,
       nombre_generico: producto.nombre_generico || '',
       forma_farmaceutica: producto.forma_farmaceutica || '',
       presentacion: producto.presentacion || '',
       codigo_barras: producto.codigo_barras || null,
-      sucursal: null,
+      sucursal: producto.sucursal || nombreSucursalActual,
       stock: stockTotal,
       precio: Number(producto.precio || 0),
       lote: null,
@@ -1257,9 +1383,7 @@ export default function DoctorShaddaiRecetas() {
       // Este es el importante para documentos_clinicos
       id_fila: idFilaUrl ? Number(idFilaUrl) : null,
 
-      id_sucursal:
-        expedienteSeleccionado?.id_sucursal ||
-        null,
+      id_sucursal: idSucursalActual,
 
       id_nota: notaMedicaActual?.id_nota || null,
       tipo_atencion: tipoAtencionActual.value,
@@ -1284,13 +1408,17 @@ export default function DoctorShaddaiRecetas() {
 
         // Los medicamentos libres no se relacionan con el catálogo ni inventario.
         id_producto: item.producto_libre ? null : item.id_producto,
-        id_sucursal: null,
+        id_sucursal: item.producto_libre
+          ? null
+          : item.id_sucursal || idSucursalActual,
         nombre: String(item.nombre || '').trim(),
         nombre_generico: String(item.nombre_generico || '').trim() || null,
         forma_farmaceutica: String(item.forma_farmaceutica || '').trim() || null,
         presentacion: String(item.presentacion || '').trim() || null,
         codigo_barras: item.producto_libre ? null : item.codigo_barras || null,
-        sucursal: null,
+        sucursal: item.producto_libre
+          ? null
+          : item.sucursal || nombreSucursalActual,
         stock: Number(item.stock || 0),
         precio: item.producto_libre ? 0 : Number(item.precio || 0),
         lote: null,
@@ -1609,9 +1737,16 @@ const obtenerStockCompletoProducto = async (producto) => {
     throw new Error('El producto no tiene un identificador válido.');
   }
 
+  if (!idSucursalActual) {
+    throw new Error(
+      'No se pudo identificar la sucursal actual de la cuenta del doctor. Verifica que el usuario tenga una sucursal asignada.'
+    );
+  }
+
   const { data } = await api.get('/inventario/stock-sucursales', {
     params: {
       id_producto: producto.id_producto,
+      id_sucursal: idSucursalActual,
     },
   });
 
@@ -1622,56 +1757,99 @@ const obtenerStockCompletoProducto = async (producto) => {
     );
   }
 
-  const sucursales = Array.isArray(data.sucursales)
-    ? data.sucursales.map((item) => ({
-        id_sucursal:
-          item.id_sucursal ||
-          item.sucursal_id ||
-          null,
+  const listaRecibida =
+    data.sucursales ||
+    data.inventario ||
+    data.stock ||
+    data.resultados ||
+    [];
 
-        sucursal:
-          item.sucursal ||
-          item.nombre_sucursal ||
-          'Sucursal',
+  const listaSucursales = Array.isArray(listaRecibida)
+    ? listaRecibida
+    : listaRecibida
+      ? [listaRecibida]
+      : [];
 
-        stock: Number(
-          item.stock ??
-          item.stock_disponible ??
-          item.existencia ??
-          0
-        ),
+  const sucursalesNormalizadas = listaSucursales.map((item) => ({
+    id_sucursal:
+      item.id_sucursal ||
+      item.sucursal_id ||
+      item.idSucursal ||
+      null,
 
-        stock_minimo: Number(
-          item.stock_minimo ??
-          0
-        ),
+    sucursal:
+      item.sucursal ||
+      item.nombre_sucursal ||
+      item.nombreSucursal ||
+      nombreSucursalActual,
 
-        estado:
-          item.estado ||
-          null,
+    stock: Number(
+      item.stock ??
+      item.stock_disponible ??
+      item.existencia ??
+      item.cantidad ??
+      0
+    ),
 
-        direccion:
-          item.direccion ||
-          item.direccion_sucursal ||
-          '',
+    stock_minimo: Number(
+      item.stock_minimo ??
+      0
+    ),
 
-        lote:
-          item.lote ||
-          '',
+    estado: item.estado || null,
 
-        fecha_caducidad:
-          item.fecha_caducidad ||
-          null,
-      }))
-    : [];
+    direccion:
+      item.direccion ||
+      item.direccion_sucursal ||
+      '',
 
-  const stockTotal = sucursales.reduce(
-    (total, sucursal) => total + Number(sucursal.stock || 0),
-    0
+    lote:
+      item.lote ||
+      item.numero_lote ||
+      '',
+
+    fecha_caducidad:
+      item.fecha_caducidad ||
+      item.caducidad ||
+      item.fecha_vencimiento ||
+      null,
+  }));
+
+  // Aunque el endpoint llegara a devolver varias sucursales, el frontend
+  // conserva exclusivamente la sucursal en la que se está atendiendo.
+  let sucursalActual = sucursalesNormalizadas.find(
+    (item) => Number(item.id_sucursal) === Number(idSucursalActual)
   );
+
+  // Algunos endpoints, cuando reciben id_sucursal, devuelven un único registro
+  // sin repetir el identificador. En ese caso ese único resultado es el local.
+  if (!sucursalActual && sucursalesNormalizadas.length === 1) {
+    sucursalActual = {
+      ...sucursalesNormalizadas[0],
+      id_sucursal: idSucursalActual,
+    };
+  }
+
+  const stockSucursalActual = Number(sucursalActual?.stock || 0);
+  const nombreSucursal =
+    sucursalActual?.sucursal ||
+    nombreSucursalActual;
+
+  const disponibilidadLocal = sucursalActual
+    ? [
+        {
+          ...sucursalActual,
+          id_sucursal: idSucursalActual,
+          sucursal: nombreSucursal,
+        },
+      ]
+    : [];
 
   return {
     ...producto,
+
+    id_sucursal: idSucursalActual,
+    sucursal: nombreSucursal,
 
     nombre:
       data.producto?.nombre ||
@@ -1699,9 +1877,11 @@ const obtenerStockCompletoProducto = async (producto) => {
       0
     ),
 
-    stock_total: stockTotal,
-    stock: stockTotal,
-    sucursales,
+    // stock y stock_total representan únicamente la existencia local.
+    stock_total: stockSucursalActual,
+    stock: stockSucursalActual,
+    stock_sucursal_actual: stockSucursalActual,
+    sucursales: disponibilidadLocal,
 
     stock_cargado: true,
     cargando_stock: false,
@@ -2504,7 +2684,7 @@ const obtenerStockCompletoProducto = async (producto) => {
                                         }`}
                                     >
                                       {!producto.stock_cargado
-                                        ? 'Stock por consultar'
+                                        ? 'Stock local por consultar'
                                         : sinStock
                                           ? 'Sin stock'
                                           : stockBajo
@@ -2528,7 +2708,7 @@ const obtenerStockCompletoProducto = async (producto) => {
                                         ? 'Consultando...'
                                         : stockVisible
                                           ? 'Ocultar stock'
-                                          : 'Ver stock'}
+                                          : 'Ver stock local'}
                                     </button>
                                   </div>
                                 </div>
@@ -2565,7 +2745,7 @@ const obtenerStockCompletoProducto = async (producto) => {
                               {stockVisible && (
                                 <div className="border-t border-slate-100 bg-slate-50 px-4 py-3">
                                   <p className="mb-2 text-xs font-black uppercase tracking-wide text-slate-500">
-                                    Disponibilidad por sucursal
+                                    Disponibilidad en esta sucursal
                                   </p>
 
                                   {producto.cargando_stock ? (
@@ -2575,7 +2755,7 @@ const obtenerStockCompletoProducto = async (producto) => {
                                     </div>
                                   ) : (producto.sucursales || []).length === 0 ? (
                                     <p className="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-500">
-                                      No se encontró disponibilidad registrada en las sucursales.
+                                      No se encontró disponibilidad registrada en la sucursal actual.
                                     </p>
                                   ) : (
                                     <div className="grid gap-2 sm:grid-cols-2">
@@ -2884,7 +3064,7 @@ const obtenerStockCompletoProducto = async (producto) => {
                             </div>
                           ) : (
                             <p className="mt-1 text-xs text-slate-500">
-                              Stock total actual en farmacia: {item.stock}
+                              Stock actual en esta sucursal: {item.stock}
                             </p>
                           )}
 
@@ -2904,14 +3084,12 @@ const obtenerStockCompletoProducto = async (producto) => {
 
                           {!item.producto_libre && item.disponibilidad_sucursales?.length > 0 && (
                             <div className="mt-2 flex flex-wrap gap-2">
-                              {item.disponibilidad_sucursales.map((sucursal) => (
-                                <span
-                                  key={`${item.id_item || item.id_producto || item.nombre}-${sucursal.id_sucursal}`}
-                                  className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600"
-                                >
-                                  {sucursal.sucursal}: {sucursal.stock}
-                                </span>
-                              ))}
+                              <span
+                                className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600"
+                              >
+                                {item.disponibilidad_sucursales[0]?.sucursal || 'Sucursal actual'}:{' '}
+                                {item.disponibilidad_sucursales[0]?.stock || 0}
+                              </span>
                             </div>
                           )}
                         </div>
