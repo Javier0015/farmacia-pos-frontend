@@ -97,6 +97,17 @@ const movimientosConLoteExistente = [
 
 const movimientosBajaTotalLote = ['CADUCIDAD'];
 
+// Movimientos que solo puede realizar SUPER_ADMIN.
+// Para los demás roles, el modal únicamente permite ENTRADA.
+const movimientosRestringidos = [
+  'SALIDA',
+  'AJUSTE_POSITIVO',
+  'AJUSTE_NEGATIVO',
+  'MERMA',
+  'CADUCIDAD',
+  'DEVOLUCION_PROVEEDOR',
+];
+
 const movimientosPermitenNuevoLote = [
   'ENTRADA',
   'AJUSTE_POSITIVO',
@@ -322,6 +333,14 @@ export default function Inventario() {
 
   const puedeCambiarSucursal = esSuperAdmin(usuario);
   const puedeGestionarInventario = esSuperAdmin(usuario);
+
+  const tiposMovimientoPermitidos = useMemo(() => {
+    if (puedeGestionarInventario) return tiposMovimiento;
+
+    return tiposMovimiento.filter(
+      (tipo) => !movimientosRestringidos.includes(tipo.value)
+    );
+  }, [puedeGestionarInventario]);
 
   const [sucursales, setSucursales] = useState([]);
   const [productos, setProductos] = useState([]);
@@ -957,6 +976,18 @@ export default function Inventario() {
   };
 
   const abrirMovimiento = async (item = null, tipo = 'ENTRADA') => {
+    if (
+      !puedeGestionarInventario &&
+      movimientosRestringidos.includes(tipo)
+    ) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Movimiento no permitido',
+        text: 'Solo un SUPER_ADMIN puede realizar salidas o ajustes de inventario.',
+      });
+      return;
+    }
+
     if (!idSucursal) {
       Swal.fire({
         icon: 'warning',
@@ -987,6 +1018,15 @@ export default function Inventario() {
   };
 
   const abrirBajaLote = async (loteItem, tipo = 'CADUCIDAD') => {
+    if (!puedeGestionarInventario) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Acción no permitida',
+        text: 'Solo un SUPER_ADMIN puede dar de baja productos del inventario.',
+      });
+      return;
+    }
+
     if (!idSucursal) return;
 
     const productoInventario = inventario.find(
@@ -1207,6 +1247,14 @@ export default function Inventario() {
   const handleMovimientoChange = (e) => {
     const { name, value } = e.target;
 
+    if (
+      name === 'tipo_movimiento' &&
+      !puedeGestionarInventario &&
+      movimientosRestringidos.includes(value)
+    ) {
+      return;
+    }
+
     setFormMovimiento((prev) => {
       const cambios = {
         ...prev,
@@ -1336,6 +1384,18 @@ export default function Inventario() {
   const guardarMovimiento = async (e) => {
     e.preventDefault();
 
+    if (
+      !puedeGestionarInventario &&
+      movimientosRestringidos.includes(formMovimiento.tipo_movimiento)
+    ) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Movimiento no permitido',
+        text: 'Tu usuario no tiene permiso para realizar salidas o ajustes de inventario.',
+      });
+      return;
+    }
+
     if (!formMovimiento.id_producto) {
       Swal.fire({
         icon: 'warning',
@@ -1428,6 +1488,15 @@ export default function Inventario() {
   };
 
   const darBajaCaducidad = async (item) => {
+    if (!puedeGestionarInventario) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Acción no permitida',
+        text: 'Solo un SUPER_ADMIN puede dar de baja productos del inventario.',
+      });
+      return;
+    }
+
     const confirmacion = await Swal.fire({
       icon: 'warning',
       title: '¿Dar de baja este lote?',
@@ -3221,7 +3290,7 @@ export default function Inventario() {
                     onChange={handleMovimientoChange}
                     className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
                   >
-                    {tiposMovimiento.map((tipo) => (
+                    {tiposMovimientoPermitidos.map((tipo) => (
                       <option key={tipo.value} value={tipo.value}>
                         {tipo.label}
                       </option>
@@ -3976,12 +4045,18 @@ export default function Inventario() {
                           </td>
 
                           <td className="px-4 py-3 text-center">
-                            <button
-                              onClick={() => abrirBajaLote(item, 'CADUCIDAD')}
-                              className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-red-50 text-red-700 hover:bg-red-100 font-bold transition"
-                            >
-                              Dar de baja
-                            </button>
+                            {puedeGestionarInventario ? (
+                              <button
+                                onClick={() => abrirBajaLote(item, 'CADUCIDAD')}
+                                className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-red-50 text-red-700 hover:bg-red-100 font-bold transition"
+                              >
+                                Dar de baja
+                              </button>
+                            ) : (
+                              <span className="inline-flex items-center justify-center px-3 py-1 rounded-full bg-slate-100 text-slate-500 text-xs font-bold">
+                                Solo lectura
+                              </span>
+                            )}
                           </td>
                         </tr>
                       ))}
