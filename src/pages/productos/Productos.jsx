@@ -416,7 +416,7 @@ export default function Productos() {
     const confirmacion = await Swal.fire({
       icon: 'warning',
       title: '¿Desactivar producto?',
-      text: `Se desactivará: ${producto.nombre}`,
+      text: `Se desactivará: ${producto.nombre}, aún se mostrará, después de una semana el producto se eliminara de manera permanente.`,
       showCancelButton: true,
       confirmButtonText: 'Sí, desactivar',
       cancelButtonText: 'Cancelar',

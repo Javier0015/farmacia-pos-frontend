@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import api from '../../api/axios';
 import { useAuth } from '../../context/AuthContext';
+import Select from 'react-select';
 import {
   esSuperAdmin,
   obtenerSucursalInicial,
@@ -676,8 +677,8 @@ export default function Compras() {
           <b>Total de la compra:</b> ${formatoMoneda(totalCentavos / 100)}<br/>
           <b>Monto capturado:</b> ${formatoMoneda(pagadoCentavos / 100)}<br/>
           <b>Diferencia:</b> ${formatoMoneda(
-            (pagadoCentavos - totalCentavos) / 100
-          )}
+          (pagadoCentavos - totalCentavos) / 100
+        )}
         </div>
         <p style="margin-top:12px;color:#64748b;font-size:13px">
           Corrige el monto pagado o revisa el total del ticket.
@@ -1814,18 +1815,84 @@ export default function Compras() {
                           <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
                             <div className="md:col-span-4 min-w-0">
                               <label className="block text-sm font-bold text-slate-700 mb-2">Producto *</label>
-                              <select
-                                value={item.id_producto}
-                                onChange={(e) => actualizarItem(index, 'id_producto', e.target.value)}
-                                className="w-full min-w-0 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
-                              >
-                                <option value="">Selecciona producto</option>
-                                {productos.map((producto) => (
-                                  <option key={producto.id_producto} value={producto.id_producto}>
-                                    {producto.nombre}
-                                  </option>
-                                ))}
-                              </select>
+                              <Select
+                                value={
+                                  productos
+                                    .map((producto) => ({
+                                      value: producto.id_producto,
+                                      label: producto.nombre,
+                                    }))
+                                    .find(
+                                      (opcion) =>
+                                        Number(opcion.value) === Number(item.id_producto)
+                                    ) || null
+                                }
+                                onChange={(opcion) =>
+                                  actualizarItem(
+                                    index,
+                                    'id_producto',
+                                    opcion ? opcion.value : ''
+                                  )
+                                }
+                                options={productos.map((producto) => ({
+                                  value: producto.id_producto,
+                                  label: producto.nombre,
+                                }))}
+                                placeholder="Buscar producto..."
+                                noOptionsMessage={() => 'No se encontraron productos'}
+                                isSearchable
+                                isClearable
+                                menuPortalTarget={document.body}
+                                styles={{
+                                  control: (base, state) => ({
+                                    ...base,
+                                    minHeight: '50px',
+                                    borderRadius: '16px',
+                                    borderColor: state.isFocused ? '#0ea5e9' : '#e2e8f0',
+                                    boxShadow: state.isFocused
+                                      ? '0 0 0 2px rgba(14, 165, 233, 0.25)'
+                                      : 'none',
+                                    '&:hover': {
+                                      borderColor: '#0ea5e9',
+                                    },
+                                  }),
+
+                                  valueContainer: (base) => ({
+                                    ...base,
+                                    paddingLeft: '16px',
+                                    paddingRight: '16px',
+                                  }),
+
+                                  placeholder: (base) => ({
+                                    ...base,
+                                    color: '#94a3b8',
+                                  }),
+
+                                  menu: (base) => ({
+                                    ...base,
+                                    borderRadius: '16px',
+                                    overflow: 'hidden',
+                                    zIndex: 9999,
+                                  }),
+
+                                  menuPortal: (base) => ({
+                                    ...base,
+                                    zIndex: 99999,
+                                  }),
+
+                                  option: (base, state) => ({
+                                    ...base,
+                                    padding: '12px 16px',
+                                    cursor: 'pointer',
+                                    backgroundColor: state.isSelected
+                                      ? '#0369a1'
+                                      : state.isFocused
+                                        ? '#e0f2fe'
+                                        : 'white',
+                                    color: state.isSelected ? 'white' : '#1e293b',
+                                  }),
+                                }}
+                              />
                             </div>
 
                             <div className="md:col-span-2 min-w-0">

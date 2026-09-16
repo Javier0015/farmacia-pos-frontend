@@ -1788,8 +1788,8 @@ export default function Caja() {
               onChange={(e) => setIdCaja(e.target.value)}
               disabled={!puedeCambiarCaja || cajas.length === 0}
               className={`w-full min-w-0 px-4 py-3 rounded-2xl border focus:outline-none focus:ring-2 focus:ring-sky-500 ${puedeCambiarCaja
-                  ? 'border-slate-200 bg-white'
-                  : 'border-slate-200 bg-slate-50 text-slate-700 font-semibold cursor-not-allowed'
+                ? 'border-slate-200 bg-white'
+                : 'border-slate-200 bg-slate-50 text-slate-700 font-semibold cursor-not-allowed'
                 }`}
             >
               <option value="">
@@ -2587,31 +2587,36 @@ export default function Caja() {
           />
 
           <div className="relative bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden my-auto">
+
+            {/* HEADER */}
             <div className="px-4 sm:px-6 py-5 border-b border-slate-100 flex items-start justify-between gap-4">
               <div className="min-w-0">
-                <h2 className="text-lg sm:text-xl font-bold text-slate-800">
+                <h2 className="text-xl sm:text-2xl font-bold text-slate-800">
                   Movimientos de caja
                 </h2>
-                <p className="text-sm text-slate-500">
+
+                <p className="text-base sm:text-lg text-slate-500 mt-1">
                   Sesión #{sesionAbierta?.id_sesion}
                 </p>
               </div>
 
               <button
                 onClick={() => setModalMovimientos(false)}
-                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center shrink-0"
+                className="w-11 h-11 rounded-2xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center shrink-0"
               >
-                <X size={20} />
+                <X size={22} />
               </button>
             </div>
 
             <div className="p-4 md:p-6 overflow-y-auto max-h-[75vh]">
               {movimientos.length === 0 ? (
-                <div className="text-center py-10 text-slate-500">
+                <div className="text-center py-10 text-slate-500 text-lg font-semibold">
                   No hay movimientos registrados.
                 </div>
               ) : (
                 <div>
+
+                  {/* MÓVIL */}
                   <div className="md:hidden space-y-3">
                     {movimientos.map((mov) => (
                       <div
@@ -2619,45 +2624,54 @@ export default function Caja() {
                         className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm"
                       >
                         <div className="flex items-start justify-between gap-3">
+
                           <div className="min-w-0">
                             <span
-                              className={`inline-flex text-xs font-bold px-3 py-1 rounded-full ${claseMovimiento(
+                              className={`inline-flex text-sm font-bold px-3 py-1.5 rounded-full ${claseMovimiento(
                                 mov.tipo_movimiento
                               )}`}
                             >
                               {mov.tipo_movimiento}
                             </span>
 
-                            <p className="mt-3 font-bold text-slate-800 break-words">
+                            <p className="mt-3 text-lg font-bold text-slate-800 break-words">
                               {mov.concepto}
                             </p>
 
-                            <p className="mt-1 text-xs text-slate-500">
+                            <p className="mt-1 text-sm text-slate-500">
                               {formatoFecha(mov.fecha_movimiento)}
                             </p>
                           </div>
 
                           <div className="text-right shrink-0">
-                            <p className="text-lg font-bold text-slate-800">
+                            <p className="text-xl font-bold text-slate-800">
                               {formatoMoneda(mov.monto)}
                             </p>
-                            <p className="text-xs text-slate-500">
+
+                            <p className="text-sm text-slate-500 mt-1">
                               {mov.metodo_pago}
                             </p>
                           </div>
                         </div>
 
                         <div className="mt-4 grid grid-cols-1 gap-3">
+
                           <div className="rounded-xl bg-slate-50 p-3">
-                            <p className="text-xs text-slate-500">Referencia</p>
-                            <p className="text-sm font-semibold text-slate-700 break-words">
+                            <p className="text-sm text-slate-500 font-semibold">
+                              Referencia
+                            </p>
+
+                            <p className="text-base font-semibold text-slate-700 break-words mt-1">
                               {mov.referencia || '—'}
                             </p>
                           </div>
 
                           <div className="rounded-xl bg-slate-50 p-3">
-                            <p className="text-xs text-slate-500">Usuario</p>
-                            <p className="text-sm font-semibold text-slate-700 break-words">
+                            <p className="text-sm text-slate-500 font-semibold">
+                              Usuario
+                            </p>
+
+                            <p className="text-base font-semibold text-slate-700 break-words mt-1">
                               {mov.usuario || '—'}
                             </p>
                           </div>
@@ -2666,29 +2680,37 @@ export default function Caja() {
                     ))}
                   </div>
 
+                  {/* DESKTOP */}
                   <div className="hidden md:block overflow-x-auto">
                     <table className="w-full min-w-[1000px]">
+
                       <thead className="bg-slate-50 border-b border-slate-100">
                         <tr>
-                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+                          <th className="px-4 py-4 text-left text-sm font-bold text-slate-500 uppercase">
                             Fecha
                           </th>
-                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+
+                          <th className="px-4 py-4 text-left text-sm font-bold text-slate-500 uppercase">
                             Tipo
                           </th>
-                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+
+                          <th className="px-4 py-4 text-left text-sm font-bold text-slate-500 uppercase">
                             Concepto
                           </th>
-                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+
+                          <th className="px-4 py-4 text-left text-sm font-bold text-slate-500 uppercase">
                             Método
                           </th>
-                          <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase">
+
+                          <th className="px-4 py-4 text-right text-sm font-bold text-slate-500 uppercase">
                             Monto
                           </th>
-                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+
+                          <th className="px-4 py-4 text-left text-sm font-bold text-slate-500 uppercase">
                             Referencia
                           </th>
-                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">
+
+                          <th className="px-4 py-4 text-left text-sm font-bold text-slate-500 uppercase">
                             Usuario
                           </th>
                         </tr>
@@ -2696,14 +2718,18 @@ export default function Caja() {
 
                       <tbody className="divide-y divide-slate-100">
                         {movimientos.map((mov) => (
-                          <tr key={mov.id_movimiento}>
-                            <td className="px-4 py-3 text-sm text-slate-600">
+                          <tr
+                            key={mov.id_movimiento}
+                            className="hover:bg-slate-50 transition"
+                          >
+
+                            <td className="px-4 py-4 text-base text-slate-600">
                               {formatoFecha(mov.fecha_movimiento)}
                             </td>
 
-                            <td className="px-4 py-3">
+                            <td className="px-4 py-4">
                               <span
-                                className={`text-xs font-bold px-3 py-1 rounded-full ${claseMovimiento(
+                                className={`text-sm font-bold px-3 py-1.5 rounded-full ${claseMovimiento(
                                   mov.tipo_movimiento
                                 )}`}
                               >
@@ -2711,30 +2737,32 @@ export default function Caja() {
                               </span>
                             </td>
 
-                            <td className="px-4 py-3 font-semibold text-slate-800">
+                            <td className="px-4 py-4 text-base font-semibold text-slate-800">
                               {mov.concepto}
                             </td>
 
-                            <td className="px-4 py-3 text-slate-600">
+                            <td className="px-4 py-4 text-base text-slate-600">
                               {mov.metodo_pago}
                             </td>
 
-                            <td className="px-4 py-3 text-right font-bold text-slate-800">
+                            <td className="px-4 py-4 text-right text-lg font-bold text-slate-800">
                               {formatoMoneda(mov.monto)}
                             </td>
 
-                            <td className="px-4 py-3 text-slate-600">
+                            <td className="px-4 py-4 text-base text-slate-600">
                               {mov.referencia || '—'}
                             </td>
 
-                            <td className="px-4 py-3 text-slate-600">
+                            <td className="px-4 py-4 text-base text-slate-600">
                               {mov.usuario || '—'}
                             </td>
+
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
+
                 </div>
               )}
             </div>

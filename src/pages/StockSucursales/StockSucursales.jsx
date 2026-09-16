@@ -14,6 +14,7 @@ import {
   Layers3,
   Building2,
   ShieldCheck,
+  CalendarDays,
 } from 'lucide-react';
 
 export default function StockSucursales() {
@@ -281,6 +282,51 @@ export default function StockSucursales() {
       icono: CheckCircle2,
       barra: 'bg-emerald-500',
     };
+  };
+
+  const formatearFechaCaducidad = (fecha) => {
+    if (!fecha) return 'Sin caducidad';
+
+    const fechaTexto = String(fecha).substring(0, 10);
+    const [anio, mes, dia] = fechaTexto.split('-');
+
+    if (!anio || !mes || !dia) return fechaTexto;
+
+    return `${dia}/${mes}/${anio}`;
+  };
+
+  const obtenerEstadoCaducidad = (estado) => {
+    switch (estado) {
+      case 'CADUCADO':
+        return {
+          texto: 'Caducado',
+          clase: 'bg-red-50 text-red-700 border-red-200',
+        };
+
+      case 'CRITICO':
+        return {
+          texto: 'Caduca pronto',
+          clase: 'bg-orange-50 text-orange-700 border-orange-200',
+        };
+
+      case 'POR_CADUCAR':
+        return {
+          texto: 'Próximo a caducar',
+          clase: 'bg-amber-50 text-amber-700 border-amber-200',
+        };
+
+      case 'VIGENTE':
+        return {
+          texto: 'Vigente',
+          clase: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+        };
+
+      default:
+        return {
+          texto: 'Sin caducidad',
+          clase: 'bg-slate-50 text-slate-600 border-slate-200',
+        };
+    }
   };
 
   const porcentajeDisponibilidad =
@@ -712,6 +758,9 @@ export default function StockSucursales() {
                   <th className="px-5 py-4 text-center font-black uppercase text-xs">
                     Stock
                   </th>
+                  <th className="px-5 py-4 text-left font-black uppercase text-xs">
+                    Lotes / caducidad
+                  </th>
                   <th className="px-5 py-4 text-center font-black uppercase text-xs">
                     Estado
                   </th>
@@ -769,6 +818,68 @@ export default function StockSucursales() {
                         </div>
                       </td>
 
+                      <td className="px-5 py-4">
+                        {Array.isArray(item.lotes) && item.lotes.length > 0 ? (
+                          <div className="space-y-2 min-w-[300px]">
+                            {item.lotes.map((lote) => {
+                              const estadoCaducidad = obtenerEstadoCaducidad(
+                                lote.estado_caducidad
+                              );
+
+                              return (
+                                <div
+                                  key={lote.id_lote}
+                                  className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2"
+                                >
+                                  <div className="flex items-center justify-between gap-3">
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-black text-slate-800 truncate">
+                                        Lote: {lote.lote || 'SIN-LOTE'}
+                                      </p>
+
+                                      <div className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+                                        <CalendarDays size={14} />
+                                        {formatearFechaCaducidad(lote.fecha_caducidad)}
+                                      </div>
+                                    </div>
+
+                                    <div className="text-right shrink-0">
+                                      <p className="text-lg font-black text-slate-900">
+                                        {Number(lote.stock || 0)}
+                                      </p>
+                                      <p className="text-[10px] font-bold text-slate-400">
+                                        piezas
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                                    <span
+                                      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-black ${estadoCaducidad.clase}`}
+                                    >
+                                      {estadoCaducidad.texto}
+                                    </span>
+
+                                    {lote.dias_para_caducar !== null &&
+                                      lote.dias_para_caducar !== undefined && (
+                                        <span className="text-[10px] font-bold text-slate-400">
+                                          {Number(lote.dias_para_caducar) < 0
+                                            ? `${Math.abs(Number(lote.dias_para_caducar))} día(s) vencido`
+                                            : `${Number(lote.dias_para_caducar)} día(s) restante(s)`}
+                                        </span>
+                                      )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <span className="text-xs font-semibold text-slate-400">
+                            Sin lotes con existencia
+                          </span>
+                        )}
+                      </td>
+
                       <td className="px-5 py-4 text-center">
                         <span
                           className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-black ${estado.clase}`}
@@ -817,6 +928,71 @@ export default function StockSucursales() {
                       {stock}
                     </span>
                   </div>
+
+                  {Array.isArray(item.lotes) && item.lotes.length > 0 && (
+                    <div className="mt-4 border-t border-slate-200 pt-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <CalendarDays size={16} className="text-sky-600" />
+                        <p className="text-xs font-black uppercase text-slate-500">
+                          Lotes y caducidad
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        {item.lotes.map((lote) => {
+                          const estadoCaducidad = obtenerEstadoCaducidad(
+                            lote.estado_caducidad
+                          );
+
+                          return (
+                            <div
+                              key={lote.id_lote}
+                              className="rounded-2xl bg-white border border-slate-100 p-3"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="font-black text-sm text-slate-800">
+                                    {lote.lote || 'SIN-LOTE'}
+                                  </p>
+
+                                  <p className="mt-1 text-xs text-slate-500 flex items-center gap-1.5">
+                                    <CalendarDays size={13} />
+                                    {formatearFechaCaducidad(lote.fecha_caducidad)}
+                                  </p>
+                                </div>
+
+                                <div className="text-right shrink-0">
+                                  <p className="font-black text-lg text-slate-900">
+                                    {Number(lote.stock || 0)}
+                                  </p>
+                                  <p className="text-[10px] font-bold text-slate-400">
+                                    piezas
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="mt-2 flex flex-wrap items-center gap-2">
+                                <span
+                                  className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-black ${estadoCaducidad.clase}`}
+                                >
+                                  {estadoCaducidad.texto}
+                                </span>
+
+                                {lote.dias_para_caducar !== null &&
+                                  lote.dias_para_caducar !== undefined && (
+                                    <span className="text-[10px] font-bold text-slate-400">
+                                      {Number(lote.dias_para_caducar) < 0
+                                        ? `${Math.abs(Number(lote.dias_para_caducar))} día(s) vencido`
+                                        : `${Number(lote.dias_para_caducar)} día(s) restante(s)`}
+                                    </span>
+                                  )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="mt-4 flex items-center justify-between gap-3">
                     <span

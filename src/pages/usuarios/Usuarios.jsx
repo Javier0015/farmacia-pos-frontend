@@ -360,7 +360,7 @@ export default function Usuarios() {
     const confirmacion = await Swal.fire({
       icon: 'warning',
       title: '¿Desactivar usuario?',
-      text: `Se desactivará: ${usuario.nombre}`,
+      text: `Se desactivará: ${usuario.nombre}, aún aparecerá, después de un día se eliminara permanentemente.`,
       showCancelButton: true,
       confirmButtonText: 'Sí, desactivar',
       cancelButtonText: 'Cancelar',
